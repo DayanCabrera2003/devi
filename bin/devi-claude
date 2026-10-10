@@ -32,13 +32,18 @@ export DEVI_SESSION="$SESSION_NAME"
 export DEVI_HUB_URL="${DEVI_HUB_URL:-http://localhost:4747}"
 export DEVI_ROOT="$ROOT"
 
-# Las configs llevan __DEVI_ROOT__; se resuelven a rutas absolutas en un directorio temporal.
+# Los development channels solo reconocen servidores MCP configurados (no los de --mcp-config),
+# así que registramos "devi" en el scope local de la carpeta actual si aún no está.
+if ! claude mcp get devi >/dev/null 2>&1; then
+  claude mcp add devi --scope local -- bun "$ROOT/src/mcp/devi-channel.ts" >/dev/null
+fi
+
+# La config de hooks lleva __DEVI_ROOT__; se resuelve a rutas absolutas en un directorio temporal.
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/devi.XXXXXX")"
-sed "s|__DEVI_ROOT__|$ROOT|g" "$ROOT/config/devi.mcp.json" > "$TMP/mcp.json"
 sed "s|__DEVI_ROOT__|$ROOT|g" "$ROOT/config/devi.settings.json" > "$TMP/settings.json"
 
 exec claude \
-  --mcp-config "$TMP/mcp.json" \
   --settings "$TMP/settings.json" \
+  --name "$SESSION_NAME" \
   --dangerously-load-development-channels server:devi \
   "${EXTRA[@]}"

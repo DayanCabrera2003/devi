@@ -44,6 +44,22 @@ const TOOLS = [
       "Lista los compañeros de equipo conectados a Devi (excluyéndote), con nombre, rol y descripción de sus permisos.",
     inputSchema: { type: "object", properties: {} },
   },
+  {
+    name: "send_request",
+    description:
+      "Envía una solicitud a un compañero a través de Devi (le llega como notificación). Úsalo solo después de que el usuario confirme el destinatario. No espera la respuesta: llegará más tarde como evento kind=\"response\".",
+    inputSchema: {
+      type: "object",
+      properties: {
+        to: { type: "string", description: "id del compañero (de list_teammates)" },
+        message: {
+          type: "string",
+          description: "Qué necesita el usuario, con el contexto suficiente para entenderlo sin ver esta sesión",
+        },
+      },
+      required: ["to", "message"],
+    },
+  },
 ];
 
 // ---- hub ------------------------------------------------------------------
@@ -85,6 +101,18 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         const people = await hub<Member[]>(`/api/teammates?exclude=${encodeURIComponent(USER)}`);
         if (people.length === 0) return text("No hay compañeros conectados a Devi ahora mismo.");
         return text(JSON.stringify(people, null, 2));
+      }
+      case "send_request": {
+        const { to, message } = (req.params.arguments ?? {}) as { to?: string; message?: string };
+        if (!sessionId) throw new Error("Esta sesión aún no está registrada en Devi Hub (¿está corriendo?)");
+        const r = await hub<{ id: string }>("/api/requests", {
+          method: "POST",
+          body: JSON.stringify({ from: USER, fromSessionId: sessionId, to, message }),
+        });
+        return text(
+          `Solicitud ${r.id} enviada a ${to}. Le llegará como notificación de Devi. ` +
+            `Puedes seguir trabajando: la respuesta llegará más tarde como evento de Devi.`,
+        );
       }
       default:
         return text(`Herramienta desconocida: ${req.params.name}`, true);
