@@ -1,17 +1,23 @@
 #!/usr/bin/env bash
 # Lanza Claude Code conectado a Devi como <user>, con una sesión llamada <session>.
-# Uso: bin/devi-claude --user maria --session backend-api [-- <args extra de claude>]
+# Uso: bin/devi-claude --user maria --session backend-api [--config-dir DIR] [-- <args extra de claude>]
+#
+# --config-dir (o DEVI_CLAUDE_CONFIG_DIR) usa otra configuración/cuenta de Claude Code solo para
+# estas sesiones, p. ej. una cuenta personal con Channels permitidos. La primera vez, inicia sesión
+# en esa cuenta con: CLAUDE_CONFIG_DIR=DIR claude   (y /login).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 USER_ID=""
 SESSION_NAME=""
+CONFIG_DIR="${DEVI_CLAUDE_CONFIG_DIR:-}"
 EXTRA=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --user) USER_ID="${2:-}"; shift 2 ;;
     --session) SESSION_NAME="${2:-}"; shift 2 ;;
+    --config-dir) CONFIG_DIR="${2:-}"; shift 2 ;;
     --) shift; EXTRA=("$@"); break ;;
     *) echo "Argumento desconocido: $1" >&2; exit 1 ;;
   esac
@@ -31,6 +37,10 @@ export DEVI_USER="$USER_ID"
 export DEVI_SESSION="$SESSION_NAME"
 export DEVI_HUB_URL="${DEVI_HUB_URL:-http://localhost:4747}"
 export DEVI_ROOT="$ROOT"
+if [[ -n "$CONFIG_DIR" ]]; then
+  mkdir -p "$CONFIG_DIR"
+  export CLAUDE_CONFIG_DIR="$CONFIG_DIR"
+fi
 
 # Los development channels solo reconocen servidores MCP configurados (no los de --mcp-config),
 # así que registramos "devi" en el scope local de la carpeta actual si aún no está.
