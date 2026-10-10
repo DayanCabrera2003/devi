@@ -1,0 +1,22 @@
+{
+  "name": "devi",
+  "version": "0.1.0",
+  "description": "Devi: la mascota que conecta las sesiones de Claude Code de un equipo",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "hub": "bun src/hub/server.ts",
+    "test": "bun test",
+    "smoke": "bun scripts/smoke-mcp.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

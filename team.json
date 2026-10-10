@@ -1,0 +1,20 @@
+[
+  {
+    "id": "dayan",
+    "name": "Dayan",
+    "role": "Tech Lead · Admin de Devi",
+    "description": "Owner del proyecto en GCP y Admin de la organización en GitHub. Puede cambiar IAM, secretos, branch protection y configuración de repos."
+  },
+  {
+    "id": "maria",
+    "name": "María",
+    "role": "Backend developer",
+    "description": "Mantiene la API. Tiene permisos de escritura en el repo backend y puede revisar y aprobar PRs. Sin permisos de administración en GCP ni en GitHub."
+  },
+  {
+    "id": "leo",
+    "name": "Leo",
+    "role": "DevOps",
+    "description": "Editor en GCP (Cloud Run, Cloud Build, logs). Puede desplegar y revisar pipelines, pero no cambiar IAM ni permisos de GitHub."
+  }
+]
