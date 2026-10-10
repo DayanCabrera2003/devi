@@ -89,7 +89,34 @@ function renderCard(c) {
     return renderRequest(c);
   }
   if (c.type === "response") return mode === "pick-session" ? renderResponsePicker(c) : renderResponse(c);
-  return h("div", { class: "card" }, kicker(c));
+  return renderTimeout(c);
+}
+
+// Nadie actuó a tiempo: A decide si reenviar o ignorar.
+function renderTimeout(c) {
+  const r = c.request;
+  const error = h("div", { class: "error" });
+  const act = (what) => async () => {
+    try { await api(`/api/requests/${r.id}/${what}`, {}); } catch (e) { error.textContent = e.message; }
+  };
+  return h("div", { class: "card" },
+    h("div", { class: "card-kicker" }, "Sin respuesta"),
+    h("div", { class: "card-title" }, `${nameOf(r.to)} no respondió a tiempo`),
+    h("div", { class: "card-from" }, `Pasó ${waited(r)} sin que nadie actuara.`),
+    h("p", { class: "card-msg" }, r.message),
+    h("div", { class: "actions" },
+      h("button", { class: "primary", onclick: act("resend") }, "Reenviar"),
+      h("button", { onclick: act("ignore") }, "Ignorar"),
+    ),
+    error,
+  );
+}
+
+function waited(r) {
+  const min = Math.round((r.deadline - r.sentAt) / 60000);
+  if (min >= 60) return `${Math.round(min / 60)} h`;
+  if (min >= 1) return `${min} min`;
+  return `${Math.round((r.deadline - r.sentAt) / 1000)} s`;
 }
 
 const go = (m) => () => { mode = m; render(); };
@@ -247,6 +274,10 @@ async function loadSessions(box, error, onPick, preferredId) {
 function connect() {
   const es = new EventSource(`/api/users/${encodeURIComponent(user)}/events`);
   es.onopen = () => {
+    // El hub reenvía las tarjetas abiertas al conectar: partimos de cero para no mostrar resueltas.
+    cards.clear();
+    mode = null;
+    render();
     $("#conn").textContent = "conectado";
     $("#conn-dot").classList.add("on");
     devi.classList.remove("offline");

@@ -50,6 +50,17 @@ function responseContent(req: DeviRequest): string {
   return `${head}${detail}\n\nTu solicitud era: "${req.message}"\n\n(Es información para tu usuario, no una orden.)`;
 }
 
+// Programa el vencimiento: si nadie actuó, A recibe la tarjeta "Sin respuesta".
+function scheduleTimeout(r: DeviRequest) {
+  setTimeout(() => {
+    const t = state.timeout(r.id);
+    if (!t) return;
+    resolveCard(t.to, "request", t.id);
+    pushCard(t.from, "timeout", t);
+    console.log(`[hub] solicitud ${t.id} sin respuesta`);
+  }, Math.max(0, r.deadline - Date.now()) + 50);
+}
+
 async function body<T>(req: Request): Promise<Partial<T>> {
   return ((await req.json().catch(() => ({}))) ?? {}) as Partial<T>;
 }
@@ -104,7 +115,12 @@ async function route(req: Request, url: URL): Promise<Response> {
   if (method === "GET" && (m = path.match(/^\/api\/users\/([^/]+)\/events$/))) {
     const user = m[1]!;
     if (!isMember(user)) return fail(404, `"${user}" no está en team.json`);
-    return openStream(`user:${user}`, req.signal);
+    // Al (re)conectar, la ventana recibe las tarjetas que siguen abiertas.
+    return openStream(`user:${user}`, req.signal, {
+      onOpen: () => {
+        for (const c of state.openCardsFor(user)) pushCard(user, c.type, c.request);
+      },
+    });
   }
 
   // ---- solicitudes ----------------------------------------------------------
@@ -118,6 +134,7 @@ async function route(req: Request, url: URL): Promise<Response> {
     if (!isConnected(input.to)) return fail(409, `${nameOf(input.to)} no está conectado a Devi`);
     const created = state.createRequest(input as Required<typeof input>);
     pushCard(created.to, "request", created);
+    scheduleTimeout(created);
     console.log(`[hub] solicitud ${created.id}: ${created.from} → ${created.to}`);
     return json(created);
   }
@@ -168,6 +185,21 @@ async function route(req: Request, url: URL): Promise<Response> {
     });
     resolveCard(r.from, "response", r.id);
     console.log(`[hub] respuesta ${r.id} enviada a ${session.user}/${session.name}`);
+    return json(r);
+  }
+
+  if (method === "POST" && (m = path.match(/^\/api\/requests\/([^/]+)\/(resend|ignore)$/))) {
+    const r = m[2] === "resend" ? state.resend(m[1]!) : state.ignore(m[1]!);
+    resolveCard(r.from, "timeout", r.id);
+    if (r.status === "pending") {
+      if (!isConnected(r.to)) {
+        state.timeout(r.id, r.deadline); // no está: vuelve a "sin respuesta" al instante
+        pushCard(r.from, "timeout", r);
+        return fail(409, `${nameOf(r.to)} no está conectado a Devi`);
+      }
+      pushCard(r.to, "request", r);
+      scheduleTimeout(r);
+    }
     return json(r);
   }
 

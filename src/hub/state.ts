@@ -70,6 +70,7 @@ export class DeviState {
       message: input.message.trim(),
       status: "pending",
       createdAt: now,
+      sentAt: now,
       deadline: now + this.timeoutMs,
     };
     this.requests.set(req.id, req);
@@ -127,6 +128,43 @@ export class DeviState {
     }
     req.status = "closed";
     return req;
+  }
+
+  // Nadie actuó a tiempo (pendiente, o reenviada a una sesión que no respondió).
+  timeout(id: string, now = Date.now()): DeviRequest | undefined {
+    const req = this.requests.get(id);
+    if (!req || (req.status !== "pending" && req.status !== "forwarded") || now < req.deadline) return undefined;
+    req.status = "timed_out";
+    return req;
+  }
+
+  // A vuelve a enviar la misma solicitud, con un plazo nuevo.
+  resend(id: string, now = Date.now()): DeviRequest {
+    const req = this.get(id);
+    if (req.status !== "timed_out") throw new TransitionError(409, `la solicitud está ${req.status}`);
+    req.status = "pending";
+    req.forwardedSessionId = undefined;
+    req.sentAt = now;
+    req.deadline = now + this.timeoutMs;
+    return req;
+  }
+
+  ignore(id: string): DeviRequest {
+    const req = this.get(id);
+    if (req.status !== "timed_out") throw new TransitionError(409, `la solicitud está ${req.status}`);
+    req.status = "closed";
+    return req;
+  }
+
+  // Tarjetas que siguen abiertas para un usuario (para reenviarlas al reconectar la ventana).
+  openCardsFor(user: string): { type: "request" | "response" | "timeout"; request: DeviRequest }[] {
+    const out: { type: "request" | "response" | "timeout"; request: DeviRequest }[] = [];
+    for (const r of [...this.requests.values()].sort((a, b) => a.createdAt - b.createdAt)) {
+      if (r.to === user && r.status === "pending") out.push({ type: "request", request: r });
+      if (r.from === user && ["accepted", "rejected", "answered"].includes(r.status)) out.push({ type: "response", request: r });
+      if (r.from === user && r.status === "timed_out") out.push({ type: "timeout", request: r });
+    }
+    return out;
   }
 
   // A envía la respuesta a una de sus sesiones (por defecto, la que hizo la solicitud).

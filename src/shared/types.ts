@@ -37,6 +37,7 @@ export type DeviRequest = {
   outcome?: "accepted" | "rejected" | "answered"; // se conserva aunque A cierre la respuesta
   outcomeText?: string; // nota de aceptar, motivo de rechazo o respuesta de la sesión
   createdAt: number;
+  sentAt: number; // último envío (creación o reenvío)
   deadline: number;
 };
 

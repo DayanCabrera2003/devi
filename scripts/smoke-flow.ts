@@ -8,7 +8,7 @@ const HUB = process.env.DEVI_HUB_URL ?? "http://localhost:4747";
 type Card = { event: string; data: any };
 
 // Lee el SSE de la ventana de un usuario y acumula los eventos.
-async function fakeWindow(user: string) {
+export async function fakeWindow(user: string) {
   const events: Card[] = [];
   const ctrl = new AbortController();
   const res = await fetch(`${HUB}/api/users/${user}/events`, { signal: ctrl.signal });
@@ -31,11 +31,11 @@ async function fakeWindow(user: string) {
       }
     } catch {}
   })();
-  const next = (pred: (c: Card) => boolean, what: string) => waitFor(async () => events.find(pred), what);
+  const next = (pred: (c: Card) => boolean, what: string, ms?: number) => waitFor(async () => events.find(pred), what, ms);
   return { events, next, close: () => ctrl.abort() };
 }
 
-const post = async (path: string, body: unknown) => {
+export const post = async (path: string, body: unknown) => {
   const res = await fetch(`${HUB}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

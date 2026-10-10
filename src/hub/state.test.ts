@@ -128,6 +128,48 @@ describe("respuesta en A", () => {
   });
 });
 
+describe("timeout", () => {
+  test("no vence antes del plazo; vence desde pending", () => {
+    const { state, req } = setup();
+    expect(state.timeout(req.id, 60_999)).toBeUndefined();
+    expect(state.timeout(req.id, 61_000)?.status).toBe("timed_out");
+  });
+
+  test("vence también si la sesión de B no responde (forwarded)", () => {
+    const { state, req, mariaApi } = setup();
+    state.forward(req.id, mariaApi.id);
+    expect(state.timeout(req.id, 61_000)?.status).toBe("timed_out");
+  });
+
+  test("no vence si ya hubo respuesta", () => {
+    const { state, req } = setup();
+    state.accept(req.id);
+    expect(state.timeout(req.id, 99_999)).toBeUndefined();
+    expect(state.get(req.id).status).toBe("accepted");
+  });
+
+  test("reenviar vuelve a pending con plazo nuevo; ignorar cierra", () => {
+    const { state, req, mariaApi } = setup();
+    state.forward(req.id, mariaApi.id);
+    state.timeout(req.id, 61_000);
+    const r = state.resend(req.id, 70_000);
+    expect(r.status).toBe("pending");
+    expect(r.deadline).toBe(130_000);
+    expect(r.forwardedSessionId).toBeUndefined();
+    expect(statusOf(() => state.ignore(req.id))).toBe(409);
+    state.timeout(req.id, 130_000);
+    expect(state.ignore(req.id).status).toBe("closed");
+  });
+
+  test("tarjetas abiertas por usuario", () => {
+    const { state, req } = setup();
+    expect(state.openCardsFor("maria").map((c) => c.type)).toEqual(["request"]);
+    state.reject(req.id, "no");
+    expect(state.openCardsFor("maria")).toEqual([]);
+    expect(state.openCardsFor("dayan").map((c) => c.type)).toEqual(["response"]);
+  });
+});
+
 describe("sesiones", () => {
   test("estado trabajando / libre por usuario y nombre", () => {
     const { state } = setup();
