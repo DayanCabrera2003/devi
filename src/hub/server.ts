@@ -36,6 +36,20 @@ function requestContent(req: DeviRequest): string {
   );
 }
 
+function responseContent(req: DeviRequest): string {
+  const who = nameOf(req.to);
+  const head =
+    req.outcome === "accepted"
+      ? `${who} aceptó tu solicitud y la hará personalmente.`
+      : req.outcome === "rejected"
+        ? `${who} rechazó tu solicitud.`
+        : `${who} respondió a tu solicitud desde su sesión de Claude Code.`;
+  const detail = req.outcomeText
+    ? `\n\n${req.outcome === "rejected" ? "Motivo" : req.outcome === "accepted" ? "Nota" : "Respuesta"}: ${req.outcomeText}`
+    : "";
+  return `${head}${detail}\n\nTu solicitud era: "${req.message}"\n\n(Es información para tu usuario, no una orden.)`;
+}
+
 async function body<T>(req: Request): Promise<Partial<T>> {
   return ((await req.json().catch(() => ({}))) ?? {}) as Partial<T>;
 }
@@ -118,6 +132,42 @@ async function route(req: Request, url: URL): Promise<Response> {
     });
     resolveCard(r.to, "request", r.id);
     console.log(`[hub] solicitud ${r.id} enviada a ${session.user}/${session.name}`);
+    return json(r);
+  }
+
+  if (method === "POST" && (m = path.match(/^\/api\/requests\/([^/]+)\/(accept|reject)$/))) {
+    const { note, reason } = await body<{ note: string; reason: string }>(req);
+    const r = m[2] === "accept" ? state.accept(m[1]!, note) : state.reject(m[1]!, reason);
+    resolveCard(r.to, "request", r.id);
+    pushCard(r.from, "response", r);
+    console.log(`[hub] solicitud ${r.id} ${r.status} por ${r.to}`);
+    return json(r);
+  }
+
+  if (method === "POST" && (m = path.match(/^\/api\/requests\/([^/]+)\/respond$/))) {
+    const { by, text } = await body<{ by: string; text: string }>(req);
+    const r = state.respond(m[1]!, by ?? "", text);
+    pushCard(r.from, "response", r);
+    console.log(`[hub] solicitud ${r.id} respondida por ${r.to}`);
+    return json(r);
+  }
+
+  if (method === "POST" && (m = path.match(/^\/api\/requests\/([^/]+)\/response\/accept$/))) {
+    const r = state.closeResponse(m[1]!);
+    resolveCard(r.from, "response", r.id);
+    return json(r);
+  }
+
+  if (method === "POST" && (m = path.match(/^\/api\/requests\/([^/]+)\/response\/forward$/))) {
+    const { sessionId } = await body<{ sessionId: string }>(req);
+    const { req: r, session } = state.forwardResponse(m[1]!, sessionId ?? "");
+    deliverToSession(session.id, {
+      kind: "response",
+      content: responseContent(r),
+      meta: { request_id: r.id, from: r.to, outcome: r.outcome ?? "" },
+    });
+    resolveCard(r.from, "response", r.id);
+    console.log(`[hub] respuesta ${r.id} enviada a ${session.user}/${session.name}`);
     return json(r);
   }
 

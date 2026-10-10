@@ -34,6 +34,7 @@ export type DeviRequest = {
   message: string;
   status: RequestStatus;
   forwardedSessionId?: string;
+  outcome?: "accepted" | "rejected" | "answered"; // se conserva aunque A cierre la respuesta
   outcomeText?: string; // nota de aceptar, motivo de rechazo o respuesta de la sesión
   createdAt: number;
   deadline: number;

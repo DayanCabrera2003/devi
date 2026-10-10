@@ -83,9 +83,16 @@ function render() {
 const kicker = (c) => ({ request: "Solicitud", response: "Respuesta", timeout: "Sin respuesta" })[c.type];
 
 function renderCard(c) {
-  if (c.type === "request") return mode === "pick-session" ? renderPicker(c) : renderRequest(c);
+  if (c.type === "request") {
+    if (mode === "pick-session") return renderPicker(c);
+    if (mode === "accept" || mode === "reject") return renderDecision(c, mode);
+    return renderRequest(c);
+  }
+  if (c.type === "response") return mode === "pick-session" ? renderResponsePicker(c) : renderResponse(c);
   return h("div", { class: "card" }, kicker(c));
 }
+
+const go = (m) => () => { mode = m; render(); };
 
 function renderRequest(c) {
   const r = c.request;
@@ -95,8 +102,94 @@ function renderRequest(c) {
     h("div", { class: "card-from" }, "desde la sesión ", h("span", { class: "mono" }, r.fromSessionName)),
     h("p", { class: "card-msg" }, r.message),
     h("div", { class: "actions" },
-      h("button", { class: "primary", onclick: () => { mode = "pick-session"; render(); } }, "Enviar a sesión"),
+      h("button", { class: "primary", onclick: go("pick-session") }, "Enviar a sesión"),
+      h("button", { class: "ok", onclick: go("accept") }, "Aceptar"),
+      h("button", { class: "no", onclick: go("reject") }, "Rechazar"),
     ),
+  );
+}
+
+// Aceptar (nota opcional) o Rechazar (motivo obligatorio).
+function renderDecision(c, kind) {
+  const r = c.request;
+  const accept = kind === "accept";
+  const error = h("div", { class: "error" });
+  const input = h("textarea", {
+    placeholder: accept ? "Nota opcional: \"lo hago en 10 min\"" : `Explícale a ${nameOf(r.from)} por qué`,
+    oninput: () => { confirm.disabled = !accept && !input.value.trim(); },
+  });
+  const confirm = h("button", {
+    class: accept ? "ok" : "no",
+    disabled: !accept,
+    onclick: async () => {
+      confirm.disabled = true;
+      try {
+        await api(`/api/requests/${r.id}/${kind}`, accept ? { note: input.value } : { reason: input.value });
+      } catch (e) {
+        error.textContent = e.message;
+        confirm.disabled = false;
+      }
+    },
+  }, accept ? "Confirmar: lo hago yo" : "Confirmar rechazo");
+  setTimeout(() => input.focus());
+  return h("div", { class: "card" },
+    h("div", { class: "card-kicker" }, accept ? "Aceptar" : "Rechazar"),
+    h("div", { class: "card-title" }, accept ? "Lo harás tú" : `Rechazar la solicitud de ${nameOf(r.from)}`),
+    h("div", { class: "card-from" }, accept
+      ? "Para lo que el agente no puede hacer (GCP, GitHub…)."
+      : "El motivo es obligatorio: le llegará con el rechazo."),
+    h("p", { class: "card-msg" }, r.message),
+    input,
+    h("div", { class: "actions" }, confirm, h("button", { onclick: go(null) }, "Volver")),
+    error,
+  );
+}
+
+const OUTCOME = {
+  accepted: ["Aceptada", "ok", "Lo hará personalmente."],
+  rejected: ["Rechazada", "no", "Motivo:"],
+  answered: ["Respondida", "", "Desde su sesión de Claude Code:"],
+};
+
+// Respuesta en la ventana de A: Aceptar (cierra) o Enviar a sesión.
+function renderResponse(c) {
+  const r = c.request;
+  const [label, cls, lead] = OUTCOME[r.outcome] ?? ["Respuesta", "", ""];
+  const error = h("div", { class: "error" });
+  const toSession = h("button", { class: "primary", hidden: true, onclick: go("pick-session") }, "Enviar a sesión");
+  // Solo se ofrece "Enviar a sesión" si A tiene alguna sesión abierta.
+  api(`/api/users/${user}/sessions`).then((s) => { toSession.hidden = s.length === 0; }).catch(() => {});
+  return h("div", { class: "card" },
+    h("div", { class: "card-kicker" }, "Respuesta · ", h("span", { class: cls ? `badge ${cls}` : "badge" }, label)),
+    h("div", { class: "card-title" }, `Respuesta de ${nameOf(r.to)}`),
+    h("div", { class: "card-from" }, "a: ", h("span", { class: "muted" }, `“${r.message}”`)),
+    r.outcomeText ? h("p", { class: "card-msg" }, h("span", { class: "muted" }, lead + " "), r.outcomeText)
+                  : h("p", { class: "card-msg" }, h("span", { class: "muted" }, lead)),
+    h("div", { class: "actions" },
+      toSession,
+      h("button", {
+        class: "ok",
+        onclick: async () => {
+          try { await api(`/api/requests/${r.id}/response/accept`, {}); } catch (e) { error.textContent = e.message; }
+        },
+      }, "Aceptar"),
+    ),
+    error,
+  );
+}
+
+function renderResponsePicker(c) {
+  const r = c.request;
+  const box = h("div", { class: "sessions" }, h("div", { class: "muted" }, "Buscando tus sesiones…"));
+  const error = h("div", { class: "error" });
+  loadSessions(box, error, (s) => api(`/api/requests/${r.id}/response/forward`, { sessionId: s.id }), r.fromSessionId);
+  return h("div", { class: "card" },
+    h("div", { class: "card-kicker" }, "Enviar a sesión"),
+    h("div", { class: "card-title" }, "¿A qué sesión se la pasas?"),
+    h("div", { class: "card-from" }, "Resaltada: la sesión que hizo la solicitud, si sigue abierta."),
+    box,
+    h("div", { class: "actions" }, h("button", { onclick: go(null) }, "Volver")),
+    error,
   );
 }
 
@@ -109,7 +202,7 @@ function renderPicker(c) {
     h("div", { class: "card-title" }, "¿A qué sesión se lo pasas?"),
     h("div", { class: "card-from" }, "Llegará como pregunta abierta, no como orden."),
     box,
-    h("div", { class: "actions" }, h("button", { onclick: () => { mode = null; render(); } }, "Volver")),
+    h("div", { class: "actions" }, h("button", { onclick: go(null) }, "Volver")),
     error,
   );
   loadSessions(box, error, async (s) => {
@@ -172,7 +265,7 @@ function connect() {
       poke();
       const r = card.request;
       if (card.type === "request") notify(`Devi · ${nameOf(r.from)} te pide algo`, r.message);
-      if (card.type === "response") notify(`Devi · Respuesta de ${nameOf(r.to)}`, r.outcomeText ?? "");
+      if (card.type === "response") notify(`Devi · Respuesta de ${nameOf(r.to)}`, `${OUTCOME[r.outcome]?.[0] ?? ""} ${r.outcomeText ?? ""}`.trim());
       if (card.type === "timeout") notify(`Devi · Sin respuesta de ${nameOf(r.to)}`, r.message);
     }
     if ([...cards.keys()][0] === key) mode = null;

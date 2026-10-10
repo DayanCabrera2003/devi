@@ -88,4 +88,53 @@ export class DeviState {
     req.forwardedSessionId = session.id;
     return { req, session };
   }
+
+  // B lo hará personalmente. La nota es opcional ("lo hago en 10 min").
+  accept(id: string, note?: string): DeviRequest {
+    const req = this.get(id);
+    if (req.status !== "pending") throw new TransitionError(409, `la solicitud ya está ${req.status}`);
+    req.status = req.outcome = "accepted";
+    req.outcomeText = note?.trim() || undefined;
+    return req;
+  }
+
+  // B la rechaza. El motivo es obligatorio: A necesita saber por qué.
+  reject(id: string, reason?: string): DeviRequest {
+    const req = this.get(id);
+    if (!reason?.trim()) throw new TransitionError(400, "el rechazo necesita un motivo");
+    if (req.status !== "pending") throw new TransitionError(409, `la solicitud ya está ${req.status}`);
+    req.status = req.outcome = "rejected";
+    req.outcomeText = reason.trim();
+    return req;
+  }
+
+  // La sesión de B responde lo que decidió su usuario.
+  respond(id: string, by: string, text?: string): DeviRequest {
+    const req = this.get(id);
+    if (req.to !== by) throw new TransitionError(403, "esta solicitud no es para ti");
+    if (!text?.trim()) throw new TransitionError(400, "la respuesta está vacía");
+    if (req.status !== "forwarded") throw new TransitionError(409, `la solicitud ya está ${req.status}`);
+    req.status = req.outcome = "answered";
+    req.outcomeText = text.trim();
+    return req;
+  }
+
+  // A cierra la respuesta sin enviar nada de vuelta (evita ciclos infinitos).
+  closeResponse(id: string): DeviRequest {
+    const req = this.get(id);
+    if (!["accepted", "rejected", "answered"].includes(req.status)) {
+      throw new TransitionError(409, `no hay respuesta abierta (estado: ${req.status})`);
+    }
+    req.status = "closed";
+    return req;
+  }
+
+  // A envía la respuesta a una de sus sesiones (por defecto, la que hizo la solicitud).
+  forwardResponse(id: string, sessionId: string): { req: DeviRequest; session: Session } {
+    const req = this.get(id);
+    const session = this.sessions.get(sessionId);
+    if (!session || session.user !== req.from) throw new TransitionError(409, "esa sesión ya no está abierta");
+    this.closeResponse(id);
+    return { req, session };
+  }
 }

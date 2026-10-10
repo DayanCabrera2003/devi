@@ -60,6 +60,19 @@ const TOOLS = [
       required: ["to", "message"],
     },
   },
+  {
+    name: "respond_to_request",
+    description:
+      "Responde a una solicitud de un compañero (evento kind=\"request\") con lo que el usuario decidió hacer. Úsalo solo después de que el usuario lo diga.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string", description: "request_id del evento de Devi" },
+        text: { type: "string", description: "Lo que el usuario va a hacer o su respuesta, en sus palabras" },
+      },
+      required: ["request_id", "text"],
+    },
+  },
 ];
 
 // ---- hub ------------------------------------------------------------------
@@ -113,6 +126,14 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
           `Solicitud ${r.id} enviada a ${to}. Le llegará como notificación de Devi. ` +
             `Puedes seguir trabajando: la respuesta llegará más tarde como evento de Devi.`,
         );
+      }
+      case "respond_to_request": {
+        const { request_id, text: answer } = (req.params.arguments ?? {}) as { request_id?: string; text?: string };
+        await hub(`/api/requests/${encodeURIComponent(request_id ?? "")}/respond`, {
+          method: "POST",
+          body: JSON.stringify({ by: USER, text: answer }),
+        });
+        return text(`Respuesta enviada. Le llegará a tu compañero como notificación de Devi.`);
       }
       default:
         return text(`Herramienta desconocida: ${req.params.name}`, true);

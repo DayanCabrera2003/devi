@@ -126,3 +126,7 @@ textarea:focus { outline: none; border-color: #55555f; }
 .who-list a:hover { border-color: #45454e; }
 
 .error { color: var(--no); font-size: 13px; margin-top: 8px; }
+
+.badge { text-transform: none; letter-spacing: 0; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--text); }
+.badge.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+.badge.no { color: var(--no); border-color: color-mix(in srgb, var(--no) 40%, transparent); }

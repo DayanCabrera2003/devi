@@ -82,6 +82,42 @@ if (import.meta.main) {
   const again = await post(`/api/requests/${req.id}/forward`, { sessionId: maria.sessionId });
   check(again.status === 409, "reenviar dos veces → 409");
 
+  // ---- slice 3: la respuesta vuelve a A ------------------------------------
+  const answered = await maria.callTool("respond_to_request", {
+    request_id: req.id,
+    text: "Lo reviso y lo apruebo si pasan los tests",
+  });
+  check(!answered.isError, "respond_to_request desde la sesión de María");
+  const resp = await winDayan.next(
+    (c) => c.event === "card" && c.data.type === "response" && c.data.request.id === req.id,
+    "tarjeta de respuesta en la ventana de Dayan",
+  );
+  check(resp.data.request.outcome === "answered" && resp.data.request.fromSessionId === dayan.sessionId,
+    "la respuesta trae el resultado y la sesión original de Dayan");
+  const back = await post(`/api/requests/${req.id}/response/forward`, { sessionId: dayan.sessionId });
+  check(back.status === 200, "Dayan envía la respuesta a su sesión original");
+  const evResp = await dayan.nextEvent((e) => e.meta?.kind === "response", "evento response en la sesión de Dayan");
+  check(evResp.content.includes("Lo reviso y lo apruebo") && evResp.meta?.outcome === "answered",
+    "la respuesta de María aparece dentro de la sesión de Dayan");
+
+  // Aceptar (con nota) y rechazar (motivo obligatorio) desde la ventana de B.
+  const s2 = await dayan.callTool("send_request", { to: "maria", message: "¿Puedes rotar el secreto de staging?" });
+  const id2 = s2.text.match(/Solicitud (\w+)/)![1]!;
+  check((await post(`/api/requests/${id2}/reject`, { reason: " " })).status === 400, "rechazar sin motivo → 400");
+  check((await post(`/api/requests/${id2}/reject`, { reason: "No tengo permisos en GCP, pídeselo a Leo" })).status === 200,
+    "rechazar con motivo");
+  const rej = await winDayan.next((c) => c.event === "card" && c.data.request.id === id2, "respuesta de rechazo");
+  check(rej.data.request.outcome === "rejected" && rej.data.request.outcomeText.includes("Leo"), "A ve el rechazo con su motivo");
+  check((await post(`/api/requests/${id2}/response/accept`, {})).status === 200, "A acepta la respuesta y se cierra");
+  check(!dayan.events.some((e) => e.meta?.request_id === id2), "aceptar la respuesta no envía nada a ninguna sesión");
+
+  const s3 = await dayan.callTool("send_request", { to: "maria", message: "¿Me das acceso al bucket?" });
+  const id3 = s3.text.match(/Solicitud (\w+)/)![1]!;
+  await post(`/api/requests/${id3}/accept`, { note: "lo hago en 10 min" });
+  const acc = await winDayan.next((c) => c.event === "card" && c.data.request.id === id3, "respuesta de aceptación");
+  check(acc.data.request.outcome === "accepted" && acc.data.request.outcomeText === "lo hago en 10 min",
+    "A ve la aceptación con la nota");
+
   const page = await fetch(`${HUB}/?user=maria`);
   check(page.ok && (await page.text()).includes("devi-eyes"), "el hub sirve la ventana de Devi");
 

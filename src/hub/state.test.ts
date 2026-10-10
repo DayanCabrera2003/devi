@@ -66,6 +66,68 @@ describe("enviar a sesión", () => {
   });
 });
 
+describe("aceptar y rechazar (B)", () => {
+  test("aceptar con o sin nota", () => {
+    const { state, req } = setup();
+    const r = state.accept(req.id, "  lo hago en 10 min ");
+    expect(r.status).toBe("accepted");
+    expect(r.outcomeText).toBe("lo hago en 10 min");
+    const other = setup();
+    expect(other.state.accept(other.req.id).outcomeText).toBeUndefined();
+  });
+
+  test("rechazar sin motivo → 400, con motivo → rejected", () => {
+    const { state, req } = setup();
+    expect(statusOf(() => state.reject(req.id, "   "))).toBe(400);
+    expect(state.get(req.id).status).toBe("pending");
+    expect(state.reject(req.id, "no tengo permisos").outcomeText).toBe("no tengo permisos");
+  });
+
+  test("no se puede aceptar algo ya reenviado (409)", () => {
+    const { state, req, mariaApi } = setup();
+    state.forward(req.id, mariaApi.id);
+    expect(statusOf(() => state.accept(req.id))).toBe(409);
+  });
+});
+
+describe("responder desde la sesión (B)", () => {
+  test("solo tras forward, solo el destinatario y no dos veces", () => {
+    const { state, req, mariaApi } = setup();
+    expect(statusOf(() => state.respond(req.id, "maria", "ok"))).toBe(409);
+    state.forward(req.id, mariaApi.id);
+    expect(statusOf(() => state.respond(req.id, "dayan", "ok"))).toBe(403);
+    expect(statusOf(() => state.respond(req.id, "maria", " "))).toBe(400);
+    const r = state.respond(req.id, "maria", "Lo reviso y lo apruebo si pasan los tests");
+    expect(r.status).toBe("answered");
+    expect(statusOf(() => state.respond(req.id, "maria", "otra vez"))).toBe(409);
+  });
+});
+
+describe("respuesta en A", () => {
+  test("aceptar la respuesta la cierra sin enviar nada", () => {
+    const { state, req } = setup();
+    state.accept(req.id);
+    expect(state.closeResponse(req.id).status).toBe("closed");
+    expect(state.get(req.id).outcome).toBe("accepted");
+    expect(statusOf(() => state.closeResponse(req.id))).toBe(409);
+  });
+
+  test("enviar a sesión: solo sesiones de A que sigan abiertas", () => {
+    const { state, req, mariaApi, dayanFront } = setup();
+    state.reject(req.id, "no puedo");
+    expect(statusOf(() => state.forwardResponse(req.id, mariaApi.id))).toBe(409);
+    const { session } = state.forwardResponse(req.id, dayanFront.id);
+    expect(session.name).toBe("frontend");
+    expect(state.get(req.id).status).toBe("closed");
+    expect(state.get(req.id).outcome).toBe("rejected");
+  });
+
+  test("no hay respuesta que cerrar mientras está pendiente", () => {
+    const { state, req } = setup();
+    expect(statusOf(() => state.closeResponse(req.id))).toBe(409);
+  });
+});
+
 describe("sesiones", () => {
   test("estado trabajando / libre por usuario y nombre", () => {
     const { state } = setup();
