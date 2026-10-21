@@ -262,6 +262,8 @@ export class RequestsManager {
   resend(access: Access, id: string): DeviRequest {
     const r = this.sent(access, id);
     if (r.status !== "timed_out") throw conflict(`la solicitud está ${r.status}`);
+    const to = this.team.member(r.toMemberId);
+    if (!to || to.disabled) throw conflict(`${this.team.nameOf(r.toMemberId)} ya no está en el equipo`);
     const now = this.ctx.now();
     r.status = "pending";
     r.forwardedSessionId = null;

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { DEFAULT_SETTINGS, PRESENCE } from "@devi/protocol";
 import { createTestApp } from "../../testing/harness";
-import { type Flow, MODULES_UNDER_TEST, setupFlow } from "./fixture";
+import { type Flow, MODULES_UNDER_TEST, members, setupFlow } from "./fixture";
 
 let f: Flow;
 afterEach(() => f.cleanup());
@@ -153,6 +153,46 @@ describe("plazos", () => {
     f.clock.advance(DEFAULT_SETTINGS.requestTimeoutMs);
     expect(t2.userEvents("m-dayan").find((e) => e.type === "request.timed_out").request.id).toBe(r.id);
     t2.app.stop();
+  });
+});
+
+describe("reinicio con borrador de respuesta", () => {
+  test("el plazo pausado sobrevive a restore() y se reanuda completo al descartar", async () => {
+    f = await setupFlow();
+    (f.app.ctx.services.get("settings") as any).update({ requestTimeoutMs: 60_000 });
+    const r = await f.forwardedRequest();
+    const d = (await f.responseDraft(r.id)).data;
+    f.app.stop();
+    const t2 = createTestApp({ modules: MODULES_UNDER_TEST, db: f.app.ctx.db, clock: f.clock, dataDir: f.dataDir });
+    await t2.app.start();
+    f.clock.advance(10 * 60_000); // muy pasado el plazo original (1 min), pero con borrador esperando
+    expect(t2.userEvents("m-dayan").some((e) => e.type === "request.timed_out")).toBe(false);
+    expect((await t2.call("maria@dev", "POST", `/api/v1/drafts/${d.id}/discard`)).status).toBe(200);
+    const updated = t2.userEvents("m-maria").findLast((e) => e.type === "request.updated");
+    expect(updated.request).toMatchObject({ status: "forwarded", deadline: f.clock.now() + 60_000 });
+    f.clock.advance(59_999);
+    expect(t2.userEvents("m-dayan").some((e) => e.type === "request.timed_out")).toBe(false);
+    f.clock.advance(1);
+    expect(t2.userEvents("m-dayan").some((e) => e.type === "request.timed_out")).toBe(true);
+    t2.app.stop();
+  });
+});
+
+describe("reenviar", () => {
+  test("si el destinatario ya no está activo → 409 y sigue timed_out", async () => {
+    f = await setupFlow();
+    const r = await f.pendingRequest();
+    f.clock.advance(DEFAULT_SETTINGS.requestTimeoutMs);
+    const maria = members.find((m) => m.id === "m-maria")!;
+    maria.disabled = true;
+    try {
+      const res = await post("dayan@dev", `/api/v1/requests/${r.id}/resend`);
+      expect(res.status).toBe(409);
+      expect(res.data.error).toContain("ya no está en el equipo");
+    } finally {
+      maria.disabled = false;
+    }
+    expect((await post("dayan@dev", `/api/v1/requests/${r.id}/resend`)).status).toBe(200);
   });
 });
 
