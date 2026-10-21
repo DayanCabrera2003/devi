@@ -1,6 +1,7 @@
 // Prueba de extremo a extremo de devi-update.sh: API de GitHub, descargas y /health falsos
-// (Bun.serve en el puerto 0), systemctl sustituido por un stub que apunta las llamadas.
-import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
+// (Bun.serve en el puerto 0 y, para la salud por socket, en un socket Unix), systemctl
+// sustituido por un stub que apunta las llamadas.
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -76,7 +77,7 @@ function publish(tag: string, asset: string, sumsOverride?: string) {
   };
 }
 
-async function run(): Promise<{ code: number; out: string }> {
+async function run(extraEnv: Record<string, string> = {}): Promise<{ code: number; out: string }> {
   const proc = Bun.spawn(["bash", SCRIPT], {
     env: {
       PATH: process.env.PATH ?? "/usr/bin:/bin",
@@ -84,9 +85,11 @@ async function run(): Promise<{ code: number; out: string }> {
       DEVI_BIN: join(dir, "bin/devi"),
       DEVI_OWNER: process.env.USER ?? "",
       DEVI_API: base,
+      DEVI_SOCKET: "",
       DEVI_HEALTH: `${base}/api/v1/health`,
       SYSTEMCTL: join(dir, "systemctl"),
       HEALTH_TIMEOUT: "2",
+      ...extraEnv,
     },
     stdout: "pipe",
     stderr: "pipe",
@@ -160,4 +163,40 @@ test("no deja temporales junto al binario", async () => {
   expect((await run()).code).toBe(0);
   const entries = new Bun.Glob("bin/.devi-update.*").scanSync({ cwd: dir, dot: true, onlyFiles: false });
   expect([...entries].filter((e) => !e.endsWith(".lock"))).toEqual([]);
+});
+
+describe("salud por el socket Unix (como en producción)", () => {
+  let sock: ReturnType<typeof Bun.serve> | null = null;
+  const sockPath = () => join(dir, "devi.sock");
+  const serveSocket = (healthy: boolean) => {
+    sock = Bun.serve({
+      unix: sockPath(),
+      fetch: (req) =>
+        new URL(req.url).pathname === "/api/v1/health" && healthy
+          ? Response.json({ ok: true, version: "x" })
+          : new Response("no", { status: 503 }),
+    } as unknown as Parameters<typeof Bun.serve>[0]);
+  };
+  afterEach(() => {
+    sock?.stop(true);
+    sock = null;
+  });
+  // Sin DEVI_HEALTH: la URL por defecto (http://localhost/api/v1/health) va por DEVI_SOCKET.
+  const viaSocket = () => ({ DEVI_SOCKET: sockPath(), DEVI_HEALTH: "" });
+
+  test("sano por el socket: actualiza", async () => {
+    serveSocket(true);
+    const r = await run(viaSocket());
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("actualizado a 0.4.0");
+    expect(installed()).toBe(fakeBinary("0.4.0"));
+  });
+
+  test("el socket no responde sano: vuelve atrás", async () => {
+    serveSocket(false);
+    const r = await run(viaSocket());
+    expect(r.code).toBe(1);
+    expect(installed()).toBe(fakeBinary("0.3.0"));
+    expect(calls()).toEqual(["restart devi-server", "restart devi-server"]);
+  });
 });

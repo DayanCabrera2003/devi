@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-# Como root: tiene que reiniciar devi-server. El binario se comprueba como asai (runuser).
-ExecStart=/home/asai/devi/devi-update.sh
+# Como root: instala el binario (de root) y reinicia devi-server. El binario nuevo se prueba como devi (runuser).
+ExecStart=/opt/devi/devi-update.sh
 Nice=10
 IOSchedulingClass=idle

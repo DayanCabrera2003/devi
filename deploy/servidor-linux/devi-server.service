@@ -4,19 +4,47 @@ After=network-online.target tailscaled.service
 Wants=network-online.target
 
 [Service]
-User=asai
-Group=asai
-ExecStart=/home/asai/devi/bin/devi server --port 4747 --data-dir /home/asai/.local/share/devi --admin dcabrera@asai.digital
+User=devi
+Group=devi
+# Socket en /run/devi (0700, de devi): solo devi y root (tailscaled) llegan a él.
+RuntimeDirectory=devi
+RuntimeDirectoryMode=0700
+StateDirectory=devi
+StateDirectoryMode=0700
+ExecStart=/opt/devi/bin/devi server --socket /run/devi/devi.sock --data-dir /var/lib/devi --admin dcabrera@asai.digital --allowed-domain asai.digital
 Restart=on-failure
 RestartSec=5
+UMask=0077
+
+# Recursos: el servidor tiene prioridad sobre el resto de la PC y no pasa de 512 MB.
 MemoryMin=128M
 MemoryMax=512M
 CPUWeight=500
 OOMScoreAdjust=-500
+
+# Endurecimiento
 NoNewPrivileges=yes
 PrivateTmp=yes
+PrivateDevices=yes
 ProtectSystem=strict
-ReadWritePaths=/home/asai/.local/share/devi
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+# El JIT de Bun (JavaScriptCore) necesita páginas escribibles y ejecutables: con
+# MemoryDenyWriteExecute=yes el binario no arranca.
+MemoryDenyWriteExecute=no
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+ReadWritePaths=/var/lib/devi
 
 [Install]
 WantedBy=multi-user.target

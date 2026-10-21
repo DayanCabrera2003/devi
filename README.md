@@ -18,7 +18,7 @@ La respuesta vuelve como notificación a quien preguntó, que puede **aceptarla*
  Claude Code (maria) ─stdio─ MCP devi ─HTTP/SSE─┘   SQLite        └─SSE─ Ventana Devi (maria)
 ```
 
-- **Servidor de Devi** (`packages/server/`): la única fuente de verdad. Módulos `team`, `settings`, `sessions`, `files` y `requests` sobre SQLite (ver `docs/superpowers/specs/2026-10-21-devi-produccion-design.md`).
+- **Servidor de Devi** (`packages/server/`): la única fuente de verdad. Módulos `team`, `settings`, `sessions`, `requests`, `files` y `audit` sobre SQLite. Arquitectura: [docs/arquitectura.md](docs/arquitectura.md).
 - **MCP de Devi** (`devi mcp`, en `packages/cli/`): uno por sesión de Claude Code. Ofrece `list_teammates`, `send_request` y `respond_to_request`, y es un [**Claude Code channel**](https://code.claude.com/docs/en/channels-reference): empuja las solicitudes y respuestas dentro de la sesión abierta.
 - **App de escritorio** (`apps/desktop/`): Tauri v2 + Svelte 5. Bandeja de tarjetas, autorizaciones, selector de sesiones, admin y modo servidor. Instalación: [docs/instalacion.md](docs/instalacion.md).
 - **Hooks** (`devi hook`): marcan cada sesión como *trabajando* o *libre*.
@@ -83,3 +83,10 @@ bun run typecheck
 - `apps/desktop`: app de escritorio (Tauri + Svelte).
 - `plugin/`: plugin de Claude Code. `scripts/`: compilación del binario por plataforma.
 - `docs/ejemplos/team.json`: ejemplo para importar un equipo con `devi server --import docs/ejemplos/team.json`.
+- `deploy/servidor-linux/`: servicio systemd del servidor y actualizador automático.
+
+## Documentación
+
+- [docs/arquitectura.md](docs/arquitectura.md): componentes, protocolo, modelo de datos, flujos, seguridad y cómo añadir un módulo.
+- [docs/instalacion.md](docs/instalacion.md): instalar la app, Tailscale y la integración con Claude Code.
+- [deploy/servidor-linux/README.md](deploy/servidor-linux/README.md): servidor del equipo en Linux (instalación, migración, seguridad y actualizaciones).

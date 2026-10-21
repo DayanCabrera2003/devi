@@ -102,8 +102,8 @@ export class SessionsStore {
   }
 
   // Emparejamiento hook ↔ MCP: primero por pid del proceso padre (Claude Code), luego por claude_session_id.
-  // (Plan B de la Fase 2: si el pid no sirve, el registro traerá claudeSessionId y se guardará en esa
-  // misma columna; esta consulta ya lo empareja sin cambios.)
+  // Si algún día el registro trae también claudeSessionId, se guardará en esa misma columna y esta
+  // consulta lo empareja sin cambios.
   findForHook(memberId: string, parentPid: number, claudeSessionId: string): SessionRecord | null {
     return rec(
       (this.db

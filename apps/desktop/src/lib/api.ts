@@ -4,9 +4,11 @@ import { createClient } from "@devi/client";
 import {
   API,
   API_VERSION,
+  AuditQuery,
   PERM_LABELS,
   VERSION_HEADER,
   type ApiRoute,
+  type AuditPage,
   type CreateMemberBody,
   type CreateRoleBody,
   type DeviRequest,
@@ -23,11 +25,7 @@ import {
   type UserEvent,
 } from "@devi/protocol";
 import type { z } from "zod";
-import { type AuditPage, parseAuditPage } from "./audit";
 import type { ClientConfig } from "./native";
-
-// Ruta de la auditoría. Cuando @devi/protocol tenga API.audit, audit() puede pasar a this.call("audit").
-export const AUDIT_PATH = "/api/v1/audit";
 
 export type MemberBody = z.input<typeof CreateMemberBody>;
 export type MemberPatch = z.input<typeof UpdateMemberBody>;
@@ -111,8 +109,10 @@ export const errorMessage = (e: unknown): string => classifyError(e).message;
 // eventos reenviados; "reconnecting" al perder la conexión; ("failed", err) en 401/403/426.
 export type StatusListener = (status: string, err?: unknown) => void;
 
+type CallOpts = { params?: Record<string, string>; body?: unknown; query?: Record<string, string> };
+
 export interface ClientLike {
-  call(name: ApiRoute, opts: { params?: Record<string, string>; body?: unknown }): Promise<unknown>;
+  call(name: ApiRoute, opts: CallOpts): Promise<unknown>;
   downloadFile(id: string): Promise<string>;
   subscribeUser(onEvent: (e: UserEvent) => void, opts?: { onStatus?: StatusListener }): () => void;
 }
@@ -128,7 +128,7 @@ export class DeviApi {
     this.devUser = devUser;
   }
 
-  private call<T>(name: ApiRoute, opts: { params?: Record<string, string>; body?: unknown } = {}): Promise<T> {
+  private call<T>(name: ApiRoute, opts: CallOpts = {}): Promise<T> {
     return this.client.call(name, opts) as Promise<T>;
   }
 
@@ -177,23 +177,13 @@ export class DeviApi {
     return headers;
   }
 
-  // GET con fetch directo, para rutas que aún no están en API. Devuelve el JSON sin validar.
-  async getJson(path: string, query: Record<string, string> = {}): Promise<unknown> {
-    const url = new URL(path, this.baseUrl);
-    for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
-    const res = await fetch(url, { headers: this.headers() });
-    if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as ErrorBody | null;
-      throw new HttpFailure(res.status, body ?? { error: `Error ${res.status} del servidor de Devi` });
-    }
-    return res.json();
-  }
-
-  // Admin → Auditoría: página de entradas más recientes que `before` (si se da).
-  async audit(opts: { limit: number; before?: number }): Promise<AuditPage> {
-    const query: Record<string, string> = { limit: String(opts.limit) };
-    if (opts.before !== undefined) query.before = String(opts.before);
-    return parseAuditPage(await this.getJson(AUDIT_PATH, query));
+  // Admin → Auditoría: página de entradas más antiguas que el id `before` (si se da). @devi/client valida la
+  // respuesta con AuditPageSchema; AuditQuery acota limit y before antes de mandarlos.
+  audit(opts: { limit: number; before?: number }): Promise<AuditPage> {
+    const q = AuditQuery.parse(opts);
+    const query: Record<string, string> = { limit: String(q.limit) };
+    if (q.before !== undefined) query.before = String(q.before);
+    return this.call<AuditPage>("audit", { query });
   }
 
   // Binario (application/octet-stream): se pide con fetch directo y las mismas cabeceras.

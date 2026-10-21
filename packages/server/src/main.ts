@@ -68,7 +68,7 @@ export async function startServer(cfg: ServerConfig, modules: DeviModule[] = MOD
   const where = cfg.socket ? `unix:${cfg.socket}` : `http://${cfg.host}:${server.port}`;
   console.log(`[devi] servidor en ${where} · datos en ${cfg.dataDir}`);
   if (!cfg.socket && !cfg.dev) {
-    console.warn("[devi] ⚠ escuchando en un puerto TCP: cualquier proceso de esta máquina puede falsificar la identidad. En producción usa --socket (ver deploy/servidor-linux/SEGURIDAD.md).");
+    console.warn("[devi] ⚠ escuchando en un puerto TCP: cualquier proceso de esta máquina puede falsificar la identidad. En producción usa --socket (ver deploy/servidor-linux/README.md).");
   }
   return { server, app };
 }

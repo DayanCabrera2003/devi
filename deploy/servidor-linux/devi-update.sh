@@ -2,17 +2,21 @@
 # Actualizador del servidor Devi (lo lanza devi-update.timer como root).
 # Mira la última release PUBLICADA de GitHub (no borradores ni prereleases); si su versión
 # difiere de la instalada (más nueva o más vieja: publicar una release antigua es un rollback),
-# descarga el binario, comprueba su sha256 con SHA256SUMS, lo instala de forma atómica,
-# reinicia el servicio y comprueba /health. Si no arranca sano, vuelve a devi.prev.
+# descarga el binario, comprueba su sha256 con SHA256SUMS, lo instala de forma atómica (de root,
+# modo 755: el usuario del servicio no puede cambiarlo), reinicia el servicio y comprueba /health
+# por el socket Unix del servidor. Si no arranca sano, vuelve a devi.prev.
 set -euo pipefail
 
 DEVI_REPO="${DEVI_REPO:-DayanCabrera2003/devi}"
-DEVI_BIN="${DEVI_BIN:-/home/asai/devi/bin/devi}"
-DEVI_OWNER="${DEVI_OWNER:-asai}"
+DEVI_BIN="${DEVI_BIN:-/opt/devi/bin/devi}"
+# Usuario con el que se prueba `devi --version` (el del servicio). El binario instalado es de root.
+DEVI_OWNER="${DEVI_OWNER:-devi}"
 DEVI_SERVICE="${DEVI_SERVICE:-devi-server}"
 DEVI_ASSET="${DEVI_ASSET:-devi-x86_64-unknown-linux-gnu}"
 DEVI_API="${DEVI_API:-https://api.github.com}"
-DEVI_HEALTH="${DEVI_HEALTH:-http://127.0.0.1:4747/api/v1/health}"
+# Salud: por el socket del servidor. Con DEVI_SOCKET vacío se pide DEVI_HEALTH por TCP (servidor con --port).
+DEVI_SOCKET="${DEVI_SOCKET-/run/devi/devi.sock}"
+DEVI_HEALTH="${DEVI_HEALTH:-http://localhost/api/v1/health}"
 SYSTEMCTL="${SYSTEMCTL:-systemctl}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-30}"
 
@@ -106,17 +110,22 @@ if [ -e "$DEVI_BIN" ]; then
   mv -f "$tmp/prev" "$PREV"
 fi
 if [ "$(id -u)" -eq 0 ]; then
-  chown "$DEVI_OWNER:" "$tmp/devi"
-  [ -e "$PREV" ] && chown "$DEVI_OWNER:" "$PREV"
+  chown root:root "$tmp/devi"
+  [ -e "$PREV" ] && chown root:root "$PREV"
 fi
 mv -f "$tmp/devi" "$DEVI_BIN"
 "$SYSTEMCTL" restart "$DEVI_SERVICE"
 
 # 4. Comprobación de salud.
+health_curl=(curl -fsS --max-time 2)
+if [ -n "$DEVI_SOCKET" ]; then
+  health_curl+=(--unix-socket "$DEVI_SOCKET")
+fi
+
 healthy() {
   local deadline=$((SECONDS + HEALTH_TIMEOUT))
   while [ "$SECONDS" -lt "$deadline" ]; do
-    if curl -fsS --max-time 2 "$DEVI_HEALTH" 2>/dev/null | grep -q '"ok":[[:space:]]*true'; then
+    if "${health_curl[@]}" "$DEVI_HEALTH" 2>/dev/null | grep -q '"ok":[[:space:]]*true'; then
       return 0
     fi
     sleep 1

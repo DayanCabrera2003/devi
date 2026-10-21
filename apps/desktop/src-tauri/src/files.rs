@@ -2,7 +2,7 @@
 //! solo puede pedir a este módulo que escriba en `<carpeta de recibidos>/<request_id>/`
 //! (archivos de la solicitud) o en `<carpeta de recibidos>/<request_id>/respuesta/` (de la respuesta),
 //! con nombres saneados y sin salirse nunca de esa carpeta.
-//! Las reglas de saneado son la convención común con `devi mcp` (ver el plan de la Fase 3).
+//! Las reglas de saneado son las mismas que usa `devi mcp` al descargar (packages/cli/src/files.ts).
 
 use serde::Deserialize;
 use std::fs;

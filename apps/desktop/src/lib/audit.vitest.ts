@@ -1,36 +1,28 @@
 import { describe, expect, test } from "vitest";
-import { actionLabel, auditNotice, describeTarget, formatDetails, parseAuditAlert, parseAuditPage } from "./audit";
+import { AUDIT_ACTIONS, type AuditEntry } from "@devi/protocol";
+import { actionLabel, auditNotice, describeTarget, formatDetails } from "./audit";
 
-const ENTRY = {
-  id: "a1", at: 1_700_000_000_000, actorMemberId: "m1", actorLogin: "dayan@x",
+const ENTRY: AuditEntry = {
+  id: 1, at: 1_700_000_000_000, actorMemberId: "m1", actorLogin: "dayan@x",
   action: "member.updated", targetType: "member", targetId: "m2", details: { perms: "team.admin" },
 };
 
 describe("audit", () => {
-  test("parseAuditAlert acepta { type: audit.alert, entry } y descarta lo demás", () => {
-    expect(parseAuditAlert({ type: "audit.alert", entry: ENTRY })).toEqual(ENTRY);
-    expect(parseAuditAlert({ type: "audit.alert", entry: { ...ENTRY, at: "ayer" } })).toBeNull();
-    expect(parseAuditAlert({ type: "audit.alert" })).toBeNull();
-    expect(parseAuditAlert({ type: "team.updated" })).toBeNull();
-    expect(parseAuditAlert(null)).toBeNull();
-    expect(parseAuditAlert("audit.alert")).toBeNull();
-  });
-
-  test("parseAuditPage valida la respuesta del servidor", () => {
-    expect(parseAuditPage({ entries: [ENTRY], nextBefore: 5 })).toEqual({ entries: [ENTRY], nextBefore: 5 });
-    expect(parseAuditPage({ entries: [ENTRY] })).toEqual({ entries: [ENTRY] });
-    expect(() => parseAuditPage({ entries: "x" })).toThrow(/inesperada/);
-  });
-
   test("acciones con etiqueta en español; las desconocidas se muestran tal cual", () => {
     expect(actionLabel("member.updated")).toBe("Persona modificada");
     expect(actionLabel("settings.updated")).toBe("Ajustes del servidor cambiados");
+    expect(actionLabel("login.rejected")).toBe("Acceso rechazado");
     expect(actionLabel("algo.nuevo")).toBe("algo.nuevo");
+  });
+
+  test("todas las acciones del protocolo tienen etiqueta propia", () => {
+    for (const a of AUDIT_ACTIONS) expect(actionLabel(a)).not.toBe(a);
   });
 
   test("destino y detalles como texto", () => {
     expect(describeTarget(ENTRY, (id) => (id === "m2" ? "María" : id))).toBe("Persona: María");
-    expect(describeTarget({ targetType: "settings" }, (id) => id)).toBe("settings");
+    expect(describeTarget({ targetType: "settings" }, (id) => id)).toBe("Ajustes");
+    expect(describeTarget({ targetType: "login", targetId: "x@y" }, (id) => id)).toBe("Login: x@y");
     expect(formatDetails({ perms: "team.admin", antes: "no" })).toBe("perms: team.admin · antes: no");
     expect(formatDetails({})).toBe("");
   });

@@ -1,6 +1,6 @@
 import type { DeviRequest, Draft, FileMeta, UserEvent } from "@devi/protocol";
 import { type DeviApi, errorMessage } from "./api";
-import { type AuditEntry, auditNotice, parseAuditAlert } from "./audit";
+import { type AuditEntry, auditNotice } from "./audit";
 import { Clock } from "./clock.svelte";
 import type { MascotState } from "./mascot";
 import { type AppPrefs, type ClientConfig, type Native, type ServerStatus, prefsOf } from "./native";
@@ -56,7 +56,7 @@ export class DeviApp {
   // Cada connect()/disconnect() la sube; un connect() que despierta con otra generación se retira.
   private generation = 0;
   private readonly notified = new Set<string>();
-  private readonly alerted = new Set<string>();
+  private readonly alerted = new Set<number>();
   private replay: Replay | null = null;
 
   constructor(deps: AppDeps) {
@@ -163,9 +163,8 @@ export class DeviApp {
   private onEvent(ev: UserEvent): void {
     const me = this.team.myId;
     if (!me || !this.api) return;
-    // audit.alert puede no estar aún en UserEvent: se reconoce por su forma y se valida aparte.
-    if ((ev as { type: string }).type === "audit.alert") {
-      this.onAuditAlert(ev);
+    if (ev.type === "audit.alert") {
+      this.onAuditAlert(ev.entry);
       return;
     }
     if (ev.type === "team.updated") {
@@ -184,9 +183,9 @@ export class DeviApp {
     this.publishMascot();
   }
 
-  private onAuditAlert(ev: unknown): void {
-    const entry = parseAuditAlert(ev);
-    if (!entry || !this.team.isAdmin || this.alerted.has(entry.id)) return;
+  // @devi/client ya validó la entrada con UserEventSchema.
+  private onAuditAlert(entry: AuditEntry): void {
+    if (!this.team.isAdmin || this.alerted.has(entry.id)) return;
     this.alerted.add(entry.id);
     this.auditAlerts = [entry, ...this.auditAlerts];
     // Un cambio de seguridad avisa aunque Devi esté en pausa; solo lo silencia desactivar los avisos.
@@ -322,8 +321,8 @@ export class DeviApp {
     this.publishMascot();
   }
 
-  // Enviar a sesión: solo avisa al servidor. El MCP de esa sesión descarga los archivos
-  // en la carpeta de recibidos (decisión entre fases, opción 2).
+  // Enviar a sesión: solo avisa al servidor. El MCP de esa sesión (o el hook, sin canal) descarga
+  // los archivos en la carpeta de recibidos.
   async forward(r: DeviRequest, sessionId: string): Promise<void> {
     this.applyRequest(await this.need().forwardRequest(r.id, sessionId));
   }
