@@ -70,9 +70,11 @@ jobs:
           bun run --cwd apps/desktop build
           cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
 
-      # Hasta que exista la clave del updater (secretos TAURI_SIGNING_PRIVATE_KEY[_PASSWORD]),
-      # se desactivan los artefactos del updater: sin clave, tauri build falla al firmarlos.
-      # Con la clave configurada, no se pasa nada y rige tauri.conf.json.
+      # Las actualizaciones automáticas NO están activas todavía: la clave del updater se genera
+      # en la Task 25 (que además registra el plugin y la pubkey en tauri.conf.json). Hasta
+      # entonces los usuarios actualizan instalando la versión nueva. Sin los secretos
+      # TAURI_SIGNING_PRIVATE_KEY[_PASSWORD] se desactivan los artefactos del updater (sin clave,
+      # tauri build falla al firmarlos); con ellos, no se pasa nada y rige tauri.conf.json.
       - name: Firma del updater (opcional)
         id: updater
         shell: bash

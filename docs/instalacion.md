@@ -118,7 +118,11 @@ devi claude --session frontend
 
 ## 5. Actualizaciones
 
-Devi busca versiones nuevas al abrirse y muestra «Devi X está disponible → Actualizar y reiniciar». Las actualizaciones van firmadas con la clave del proyecto: la app solo instala las que estén firmadas con ella. Si el servidor exige una versión más nueva, la app muestra **Actualiza Devi**.
+**Las actualizaciones automáticas todavía no están activas.** Requieren generar la clave de firma del updater (Task 25 del plan de la app de escritorio), y aún no se ha hecho. Hasta entonces, para actualizar descarga el instalador de la versión nueva desde Releases e instálalo encima de la actual: se conservan tus datos y tu configuración.
+
+Cuando estén activas, Devi buscará versiones nuevas al abrirse y mostrará «Devi X está disponible → Actualizar y reiniciar», y solo instalará las versiones firmadas con la clave del proyecto.
+
+Si el servidor exige una versión más nueva, la app muestra **Actualiza Devi**: instala la versión nueva como se explica arriba.
 
 ## 6. Seguridad
 
