@@ -103,7 +103,13 @@ Lanza las sesiones con `devi claude`: abre Claude Code con el canal de Devi y em
 devi claude --session frontend
 ```
 
-`devi` queda en una ruta estable tras el paso 4 del asistente (`~/.local/share/devi/bin/devi` en Linux y macOS). Si no está en tu `PATH`, usa esa ruta completa.
+`devi` queda en una ruta estable tras el paso 4 del asistente. Si no está en tu `PATH`, usa la ruta completa:
+
+| Sistema | Ruta del binario |
+|---|---|
+| Linux | `~/.local/share/devi/bin/devi` (o `$XDG_DATA_HOME/devi/bin/devi`) |
+| macOS | `~/Library/Application Support/Devi/bin/devi` |
+| Windows | `%LOCALAPPDATA%\Devi\bin\devi.exe` |
 
 **Canales y organizaciones.** Sin política de la organización, Claude Code pide confirmar el canal en modo desarrollo la primera vez. En organizaciones Team o Enterprise, un Owner puede permitir el canal de Devi sin ese aviso con estas managed settings:
 

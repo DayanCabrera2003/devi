@@ -10,8 +10,6 @@ Cuando estás bloqueado esperando algo de un compañero (una duda, un PR, un per
 
 La respuesta vuelve como notificación a quien preguntó, que puede **aceptarla** o **enviarla a su sesión**. Si nadie actúa a tiempo, Devi avisa con **Reenviar** o **Ignorar**.
 
-> Proyecto de [Build With AI: Basics](https://devpost.com) (Devpost). Proof of concept: los dos compañeros se simulan en una sola máquina. El plan está en [`devpost/`](devpost/): [scope](devpost/scope.md), [PRD](devpost/prd.md), [spec](devpost/spec.md) y [checklist](devpost/checklist.md).
-
 ## Cómo funciona
 
 ```
@@ -38,7 +36,7 @@ bun install
 bun run devi server --dev --admin dayan@dev --data-dir /tmp/devi-dev   # servidor en 127.0.0.1:4747
 ```
 
-En modo dev la identidad va en la cabecera `X-Devi-Dev-User` y la CLI lee `~/.config/devi/config.json` (normalmente lo escribe la app de escritorio):
+En modo dev la identidad va en la cabecera `X-Devi-Dev-User` y la CLI lee `devi/config.json` del directorio de configuración del SO (normalmente lo escribe la app de escritorio): `~/.config/devi/config.json` en Linux, `~/Library/Application Support/devi/config.json` en macOS y `%APPDATA%\devi\config.json` en Windows. En Linux:
 
 ```bash
 mkdir -p ~/.config/devi
@@ -52,7 +50,7 @@ bun scripts/build-cli.ts --current
 ./dist/bin/devi-bun-linux-x64 install-integration   # el nombre depende de la plataforma
 ```
 
-Lanza una sesión con el canal de Devi y comprueba el entorno:
+Lanza una sesión con el canal de Devi y comprueba el entorno. La ruta del binario estable es la de Linux; en macOS y Windows mira la tabla de [docs/instalacion.md](docs/instalacion.md#4-usar-devi-con-claude-code):
 
 ```bash
 ~/.local/share/devi/bin/devi claude --session frontend
