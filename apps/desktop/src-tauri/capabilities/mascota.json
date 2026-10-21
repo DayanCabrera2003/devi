@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "mascota",
+  "description": "Ventana mascota: solo escucha el estado, se arrastra y abre la ventana principal.",
+  "windows": ["mascota"],
+  "permissions": ["core:default", "core:window:allow-start-dragging", "allow-show-main-window"]
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Ventana principal: bandeja, asistente, ajustes y admin. Sin acceso general a disco ni a shell.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "notification:default",
+    "autostart:allow-enable",
+    "autostart:allow-disable",
+    "autostart:allow-is-enabled",
+    "process:allow-restart",
+    "allow-save-received-files",
+    "allow-save-db-export",
+    "allow-read-client-config",
+    "allow-write-client-config",
+    "allow-choose-received-dir",
+    "allow-reset-received-dir",
+    "allow-run-devi",
+    "allow-tailscale-self-login",
+    "allow-tailscale-serve-configured",
+    "allow-start-server",
+    "allow-stop-server",
+    "allow-server-status",
+    "allow-set-paused"
+  ]
+}
