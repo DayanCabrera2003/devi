@@ -20,6 +20,21 @@
     }
   ],
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "devi",
+            "args": [
+              "hook",
+              "start"
+            ],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "hooks": [
@@ -30,7 +45,7 @@
               "hook",
               "working"
             ],
-            "timeout": 5
+            "timeout": 10
           }
         ]
       }

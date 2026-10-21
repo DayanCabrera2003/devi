@@ -7,8 +7,8 @@ import { loadClientConfig } from "../config";
 import { debugPairing, pairing } from "../pairing";
 import type { Sys } from "../paths";
 import { CLI_VERSION } from "../version";
-import { toChannelMessage } from "./deliveries";
 import { instructions } from "./instructions";
+import { relayDelivery } from "./relay";
 import { startSessionLoop } from "./session";
 import { TOOLS, callTool } from "./tools";
 
@@ -19,6 +19,8 @@ export async function runMcp(sys: Sys): Promise<void> {
   console.log = console.error; // por si alguna dependencia escribe en stdout
   const cwd = sys.env.CLAUDE_PROJECT_DIR || process.cwd();
   const sessionName = sessionNameFor(sys.env.DEVI_SESSION || undefined, cwd);
+  // Solo `devi claude` con un flag de canal lo pone. Sin él, Claude Code descarta las notificaciones del canal.
+  const channel = sys.env.DEVI_CHANNEL === "1";
   debugPairing("mcp", { cwd, sessionName });
 
   let client: DeviClient | null = null;
@@ -52,19 +54,17 @@ export async function runMcp(sys: Sys): Promise<void> {
   let queue = Promise.resolve();
   const stop = startSessionLoop({
     client: c,
-    register: { name: sessionName, cwd, ...pairing() },
+    register: { name: sessionName, cwd, channel, ...pairing() },
     onSession: (id) => {
       sessionId = id;
     },
     onDelivery: (d) => {
-      queue = queue.then(async () => {
-        try {
-          const msg = await toChannelMessage(d, { client: c, receivedDir });
-          await mcp.notification({ method: "notifications/claude/channel", params: msg });
-        } catch (e) {
-          log(`no se pudo entregar un evento ${d.kind}: ${(e as Error).message}`);
-        }
-      });
+      queue = queue.then(() =>
+        relayDelivery(d, {
+          channel, client: c, receivedDir, log,
+          notify: (msg) => mcp.notification({ method: "notifications/claude/channel", params: msg }),
+        }),
+      );
     },
     log,
   });

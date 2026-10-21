@@ -12,6 +12,17 @@ export function buildClaudeArgs(opts: { session: string; mode: "plugin" | "dev";
   return [...channelArgs(opts.mode), "--name", opts.session, ...opts.passthrough];
 }
 
+const CHANNEL_FLAGS = new Set(["--channels", "--dangerously-load-development-channels"]);
+
+// Entorno de Claude Code: DEVI_SESSION y, solo si se le pasa un flag de canal, DEVI_CHANNEL=1.
+// El MCP y los hooks lo heredan: con canal, el MCP entrega en tiempo real; sin él, los hooks recogen la bandeja.
+export function claudeEnv(base: Record<string, string | undefined>, session: string, args: string[]): Record<string, string | undefined> {
+  const env: Record<string, string | undefined> = { ...base, DEVI_SESSION: session };
+  delete env.DEVI_CHANNEL;
+  if (args.some((a) => CHANNEL_FLAGS.has(a))) env.DEVI_CHANNEL = "1";
+  return env;
+}
+
 // `devi claude`: lanza Claude Code con el canal de Devi y espera a que termine (mismo código de salida).
 export async function runClaude(
   opts: { session: string | undefined; channel: ChannelMode; passthrough: string[] },
@@ -30,7 +41,7 @@ export async function runClaude(
   const args = buildClaudeArgs({ session, mode, passthrough: opts.passthrough });
   const child = Bun.spawn(spawnArgv(claude, args, sys.platform), {
     stdio: ["inherit", "inherit", "inherit"],
-    env: { ...process.env, DEVI_SESSION: session },
+    env: claudeEnv(process.env, session, args),
   });
   // Ctrl+C es para Claude Code, no para este proceso.
   const ignore = () => {};

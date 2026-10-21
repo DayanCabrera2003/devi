@@ -4,7 +4,7 @@ import { backoffDelayMs } from "./backoff";
 
 export type SessionLoopOptions = {
   client: DeviClient;
-  register: { name: string; cwd: string; parentPid: number };
+  register: { name: string; cwd: string; parentPid: number; channel?: boolean };
   onSession: (id: string | null) => void;
   onDelivery: (d: SessionDelivery) => void;
   log: (...a: unknown[]) => void;

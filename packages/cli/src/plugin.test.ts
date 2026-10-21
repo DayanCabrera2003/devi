@@ -19,7 +19,9 @@ test("plugin.json: MCP, canal y hooks en forma exec apuntando al binario", () =>
     mcpServers: { devi: { command: "/home/a/.local/share/devi/bin/devi", args: ["mcp"] } },
     channels: [{ server: "devi", displayName: "Devi" }],
     hooks: {
-      UserPromptSubmit: [{ hooks: [{ type: "command", command: "/home/a/.local/share/devi/bin/devi", args: ["hook", "working"], timeout: 5 }] }],
+      // Sin canal, estos dos hooks recogen la bandeja (plazo de ~4 s): por eso su timeout es 10.
+      SessionStart: [{ hooks: [{ type: "command", command: "/home/a/.local/share/devi/bin/devi", args: ["hook", "start"], timeout: 10 }] }],
+      UserPromptSubmit: [{ hooks: [{ type: "command", command: "/home/a/.local/share/devi/bin/devi", args: ["hook", "working"], timeout: 10 }] }],
       Stop: [{ hooks: [{ type: "command", command: "/home/a/.local/share/devi/bin/devi", args: ["hook", "idle"], timeout: 5 }] }],
     },
   });

@@ -1,12 +1,14 @@
 // Parser de argumentos de `devi`. Sin dependencias: cada subcomando tiene pocos flags.
 export type ChannelMode = "auto" | "plugin" | "dev";
+// working = UserPromptSubmit, idle = Stop, start = SessionStart.
+export type HookEvent = "working" | "idle" | "start";
 
 export type CliCommand =
   | { cmd: "help" }
   | { cmd: "version" }
   | { cmd: "server"; argv: string[] }
   | { cmd: "mcp" }
-  | { cmd: "hook"; status: "working" | "idle" | null }
+  | { cmd: "hook"; event: HookEvent | null }
   | { cmd: "claude"; session: string | undefined; channel: ChannelMode; passthrough: string[] }
   | { cmd: "doctor" }
   | {
@@ -25,7 +27,8 @@ export const USAGE = `Uso: devi <comando>
   server [--port N] [--data-dir DIR] [--admin LOGIN] [--import team.json] [--dev]
                          Arranca el servidor del equipo
   mcp                    Servidor MCP + canal (lo lanza Claude Code, no a mano)
-  hook <working|idle>    Hook de Claude Code (lee el JSON del hook por stdin)
+  hook <working|idle|start>
+                         Hook de Claude Code (lee el JSON del hook por stdin)
   claude [--session NOMBRE] [--channel auto|plugin|dev] [-- args de claude]
                          Lanza Claude Code con el canal de Devi cargado
   doctor                 Diagnostica Tailscale, servidor, login, plugin y canal
@@ -59,7 +62,7 @@ export function parseCliArgs(argv: string[], env: Record<string, string | undefi
     case "hook": {
       // Nunca falla: un estado desconocido se ignora (el hook no debe molestar a la sesión).
       const s = rest[0];
-      return { cmd: "hook", status: s === "working" || s === "idle" ? s : null };
+      return { cmd: "hook", event: s === "working" || s === "idle" || s === "start" ? s : null };
     }
     case "doctor":
       if (rest.length > 0) throw new CliArgError(`devi doctor no admite argumentos: ${rest.join(" ")}`);
@@ -81,7 +84,8 @@ function parseChannel(v: string | undefined): ChannelMode {
 
 function parseClaude(argv: string[], env: Record<string, string | undefined>): CliCommand {
   let session: string | undefined;
-  let channel = parseChannel(env.DEVI_CHANNEL);
+  // DEVI_CHANNEL=1 no es un modo: lo pone `devi claude` en su Claude Code para avisar de que hay canal.
+  let channel = env.DEVI_CHANNEL === "1" ? "auto" : parseChannel(env.DEVI_CHANNEL);
   let passthrough: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;

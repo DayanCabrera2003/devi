@@ -27,7 +27,7 @@ async function main(argv: string[]): Promise<number | null> {
       await runMcp(sys);
       return null; // sigue vivo hasta que Claude Code cierre stdin
     case "hook":
-      await runHook(cmd.status, sys);
+      await runHook(cmd.event, sys);
       return 0;
     case "claude":
       return runClaude(cmd, sys);

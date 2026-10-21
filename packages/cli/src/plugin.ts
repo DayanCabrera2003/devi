@@ -1,3 +1,4 @@
+import type { HookEvent } from "./args";
 import { MARKETPLACE_NAME, PLUGIN_NAME } from "./paths";
 
 const DESCRIPTION = "Devi: conecta las sesiones de Claude Code de tu equipo (solicitudes, respuestas y archivos con autorización humana)";
@@ -5,8 +6,9 @@ const DESCRIPTION = "Devi: conecta las sesiones de Claude Code de tu equipo (sol
 // Ficheros del marketplace local con el plugin de Devi. `bin` es la ruta absoluta del binario
 // estable (o "devi" para la copia de referencia del repo, que lo busca en el PATH).
 export function pluginFiles(bin: string, version: string): Record<string, unknown> {
-  const hook = (status: "working" | "idle") => [
-    { hooks: [{ type: "command", command: bin, args: ["hook", status], timeout: 5 }] },
+  // SessionStart y UserPromptSubmit recogen además la bandeja cuando no hay canal (plazo de ~4 s): timeout 10.
+  const hook = (event: HookEvent, timeout: number) => [
+    { hooks: [{ type: "command", command: bin, args: ["hook", event], timeout }] },
   ];
   return {
     ".claude-plugin/marketplace.json": {
@@ -22,7 +24,7 @@ export function pluginFiles(bin: string, version: string): Record<string, unknow
       author: { name: "Devi" },
       mcpServers: { devi: { command: bin, args: ["mcp"] } },
       channels: [{ server: "devi", displayName: "Devi" }],
-      hooks: { UserPromptSubmit: hook("working"), Stop: hook("idle") },
+      hooks: { SessionStart: hook("start", 10), UserPromptSubmit: hook("working", 10), Stop: hook("idle", 5) },
     },
   };
 }

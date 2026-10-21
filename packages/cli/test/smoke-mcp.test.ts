@@ -2,9 +2,11 @@
 // y dos "apps falsas" (@devi/client) contra un servidor real en modo dev (proceso aparte).
 // Recorre: list_teammates → send_request con archivo → autorizar → forward → request en el canal
 // con ruta local → respond_to_request (con archivo) → autorizar → forward → response en el canal.
+// Segundo test: una sesión SIN canal (sin DEVI_CHANNEL=1) no recibe nada por el canal; la solicitud llega
+// cuando el usuario escribe, por `devi hook working` (additionalContext con la ruta local del archivo).
 // Todo vive en carpetas temporales; el servidor y los MCP se matan en afterAll.
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -41,14 +43,14 @@ let beat: ReturnType<typeof setInterval> | null = null;
 
 afterAll(async () => {
   if (beat) clearInterval(beat);
-  for (const c of closers.reverse()) await Promise.resolve(c()).catch(() => {});
+  await Promise.all(closers.reverse().map((c) => Promise.resolve(c()).catch(() => {})));
   serverProc?.kill();
   await serverProc?.exited;
   rmSync(tmp, { recursive: true, force: true });
-});
+}, 20_000); // cada MCP avisa al servidor al cerrarse (hasta 1 s cada uno)
 
 // "Claude Code falso": lanza `devi mcp` con su propia config, carpeta de proyecto y carpeta de recibidos.
-async function fakeClaude(login: string, session: string, home: string) {
+async function fakeClaude(login: string, session: string, home: string, opts: { channel?: boolean } = {}) {
   const project = join(home, "proyecto");
   mkdirSync(project, { recursive: true });
   const config = join(home, "config.json");
@@ -63,7 +65,7 @@ async function fakeClaude(login: string, session: string, home: string) {
     command: process.execPath,
     args: [MAIN, "mcp"],
     cwd: project,
-    env: { ...process.env, HOME: home, DEVI_CONFIG: config, DEVI_SESSION: session, CLAUDE_PROJECT_DIR: project } as Record<string, string>,
+    env: fakeEnv(home, config, session, project, opts.channel ?? true),
     stderr: "pipe",
   });
   closers.push(() => client.close());
@@ -73,8 +75,35 @@ async function fakeClaude(login: string, session: string, home: string) {
     return { text: r.content.map((c) => c.text).join("\n"), isError: !!r.isError };
   };
   const nextEvent = (kind: string) => waitFor(() => events.find((e) => e.meta.kind === kind), `evento ${kind} en ${session}`);
-  return { project, receivedDir, callTool, nextEvent };
+  return { project, receivedDir, config, home, events, callTool, nextEvent };
 }
+
+// Entorno de un "Claude Code falso": DEVI_CHANNEL=1 solo si se lanzó con canal (como hace `devi claude`).
+function fakeEnv(home: string, config: string, session: string, project: string, channel: boolean): Record<string, string> {
+  const env: Record<string, string> = { ...(process.env as Record<string, string>), HOME: home, DEVI_CONFIG: config, DEVI_SESSION: session, CLAUDE_PROJECT_DIR: project };
+  delete env.DEVI_CHANNEL;
+  if (channel) env.DEVI_CHANNEL = "1";
+  return env;
+}
+
+// `devi hook <event>` con el JSON del hook por stdin, como lo lanzaría Claude Code (hijo de este proceso,
+// igual que los MCP: comparten el pid padre con el que se emparejan).
+async function runHookProc(cc: Awaited<ReturnType<typeof fakeClaude>>, event: string, stdin: object) {
+  const proc = Bun.spawn([process.execPath, MAIN, "hook", event], {
+    stdin: new TextEncoder().encode(JSON.stringify(stdin)),
+    stdout: "pipe",
+    stderr: "ignore",
+    env: fakeEnv(cc.home, cc.config, "x", join(cc.home, "proyecto"), false),
+  });
+  const out = await new Response(proc.stdout).text();
+  expect(await proc.exited).toBe(0);
+  return out;
+}
+
+// Lo que el primer test deja montado para el segundo.
+let shared: {
+  dayanApp: DeviClient; roleId: string; dayan: Awaited<ReturnType<typeof fakeClaude>>; dayanUi: ReturnType<typeof fakeApp>;
+} | null = null;
 
 // "App falsa": guarda los eventos SSE de usuario.
 function fakeApp(app: DeviClient) {
@@ -174,4 +203,42 @@ test("devi mcp: de list_teammates a la respuesta en el canal, con archivos", asy
   const respPath = join(dayan.receivedDir, incoming.request.id, "respuesta", "resultado.txt");
   expect(resp.content).toContain(respPath);
   expect(readFileSync(respPath, "utf8")).toBe("PR aprobado, sin cambios");
+  shared = { dayanApp, roleId: role.id, dayan, dayanUi };
+}, 60_000);
+
+test("sesión sin canal: la solicitud llega por el hook al escribir, con la ruta local, y solo una vez", async () => {
+  expect(shared).not.toBeNull();
+  const { dayanApp, roleId, dayan, dayanUi } = shared!;
+  const leo = await dayanApp.call("createMember", { body: { login: "leo@dev", name: "Leo", description: "Ops", roleIds: [roleId] } });
+  const leoApp = createClient({ baseUrl: serverUrl, devUser: "leo@dev", origin: "tauri://localhost" });
+  const leoUi = fakeApp(leoApp);
+  const leoCc = await fakeClaude("leo@dev", "ops", join(tmp, "leo"), { channel: false });
+
+  const leoSession = await waitFor(async () => (await leoApp.call("memberSessions", { params: { id: leo.id } }))[0], "sesión de leo");
+  expect(leoSession.channel).toBe(false);
+  expect((await dayanApp.call("memberSessions", { params: { id: (await dayanApp.call("me")).member.id } }))[0]?.channel).toBe(true);
+  heartbeats.add(() => leoApp.call("heartbeat", { body: { sessionId: leoSession.id } }));
+  await leoApp.call("heartbeat", { body: { sessionId: leoSession.id } });
+
+  writeFileSync(join(dayan.project, "deploy.txt"), "desplegar v2 en staging");
+  const sent = await dayan.callTool("send_request", { to: leo.id, message: "¿Puedes desplegar v2?", files: ["deploy.txt"] });
+  expect(sent.isError).toBe(false);
+  const awaiting = await dayanUi.next("draft.awaiting", (e) => e.draft.kind === "request" && e.draft.message === "¿Puedes desplegar v2?");
+  await dayanApp.call("authorizeDraft", { params: { id: awaiting.draft.id } });
+  const incoming = await leoUi.next("request.incoming");
+  await leoApp.call("forwardRequest", { params: { id: incoming.request.id }, body: { sessionId: leoSession.id } });
+
+  const hookInput = { session_id: "cc-leo", cwd: join(leoCc.home, "proyecto"), hook_event_name: "UserPromptSubmit", prompt: "hola" };
+  const out = await runHookProc(leoCc, "working", hookInput);
+  const parsed = JSON.parse(out) as { hookSpecificOutput: { hookEventName: string; additionalContext: string } };
+  expect(parsed.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit");
+  const ctx = parsed.hookSpecificOutput.additionalContext;
+  const localPath = join(leoCc.receivedDir, incoming.request.id, "deploy.txt");
+  expect(ctx).toContain("¿Puedes desplegar v2?");
+  expect(ctx).toContain(localPath);
+  expect(existsSync(localPath)).toBe(true);
+  expect(readFileSync(localPath, "utf8")).toBe("desplegar v2 en staging");
+  expect(leoCc.events).toEqual([]); // sin canal, el MCP no empuja nada
+
+  expect((await runHookProc(leoCc, "working", hookInput)).trim()).toBe("");
 }, 60_000);

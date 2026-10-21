@@ -19,10 +19,11 @@ describe("parseCliArgs", () => {
   });
 
   test("hook nunca lanza: estado desconocido → null", () => {
-    expect(parseCliArgs(["hook", "working"])).toEqual({ cmd: "hook", status: "working" });
-    expect(parseCliArgs(["hook", "idle"])).toEqual({ cmd: "hook", status: "idle" });
-    expect(parseCliArgs(["hook", "otro"])).toEqual({ cmd: "hook", status: null });
-    expect(parseCliArgs(["hook"])).toEqual({ cmd: "hook", status: null });
+    expect(parseCliArgs(["hook", "working"])).toEqual({ cmd: "hook", event: "working" });
+    expect(parseCliArgs(["hook", "idle"])).toEqual({ cmd: "hook", event: "idle" });
+    expect(parseCliArgs(["hook", "start"])).toEqual({ cmd: "hook", event: "start" });
+    expect(parseCliArgs(["hook", "otro"])).toEqual({ cmd: "hook", event: null });
+    expect(parseCliArgs(["hook"])).toEqual({ cmd: "hook", event: null });
   });
 
   test("claude: sesión, canal y args después de --", () => {
@@ -31,6 +32,8 @@ describe("parseCliArgs", () => {
       cmd: "claude", session: "api", channel: "plugin", passthrough: ["--model", "opus", "--session", "x"],
     });
     expect(parseCliArgs(["claude"], { DEVI_CHANNEL: "dev" })).toMatchObject({ channel: "dev" });
+    // DEVI_CHANNEL=1 lo pone `devi claude` a su Claude Code: un `devi claude` anidado no debe fallar por eso.
+    expect(parseCliArgs(["claude"], { DEVI_CHANNEL: "1" })).toMatchObject({ channel: "auto" });
     expect(() => parseCliArgs(["claude", "--channel", "x"])).toThrow(CliArgError);
     expect(() => parseCliArgs(["claude", "--model", "opus"])).toThrow(/después de --/);
     expect(() => parseCliArgs(["claude", "--session"])).toThrow(/necesita un valor/);

@@ -2,15 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { toChannelMessage } from "./deliveries";
-import { fakeClient } from "./fake-client";
+import { materializeDelivery } from "./deliveries";
+import { fakeClient } from "./mcp/fake-client";
 
 const files = (list: { id: string; name: string }[]) => JSON.stringify(list);
 
-describe("toChannelMessage", () => {
+describe("materializeDelivery", () => {
   test("sin archivos: pasa content y meta, con kind", async () => {
     const f = fakeClient();
-    const m = await toChannelMessage(
+    const m = await materializeDelivery(
       { kind: "draft_authorized", content: "Tu solicitud salió", meta: { draft_id: "d1" } },
       { client: f.client, receivedDir: "/nunca" },
     );
@@ -20,7 +20,7 @@ describe("toChannelMessage", () => {
   test("descarga los archivos a <recibidos>/<request_id>/ y da las rutas locales", async () => {
     const dir = mkdtempSync(join(tmpdir(), "devi-recv-"));
     const f = fakeClient({ downloadFile: (id: unknown) => `contenido de ${id}` });
-    const m = await toChannelMessage(
+    const m = await materializeDelivery(
       { kind: "request", content: "María pide algo", meta: { request_id: "q1", files: files([{ id: "f1", name: "../../log.txt" }]) } },
       { client: f.client, receivedDir: dir },
     );
@@ -35,7 +35,7 @@ describe("toChannelMessage", () => {
     mkdirSync(join(dir, "q2", "respuesta"), { recursive: true });
     writeFileSync(join(dir, "q2", "respuesta", "a.txt"), "de la app");
     const f = fakeClient();
-    await toChannelMessage(
+    await materializeDelivery(
       { kind: "response", content: "r", meta: { request_id: "q2", files: files([{ id: "f1", name: "a.txt" }]) } },
       { client: f.client, receivedDir: dir },
     );
@@ -46,7 +46,7 @@ describe("toChannelMessage", () => {
   test("un fallo de descarga se cuenta en el texto", async () => {
     const dir = mkdtempSync(join(tmpdir(), "devi-recv-"));
     const f = fakeClient({ downloadFile: new Error("404") });
-    const m = await toChannelMessage(
+    const m = await materializeDelivery(
       { kind: "request", content: "x", meta: { request_id: "q3", files: files([{ id: "f9", name: "b.txt" }]) } },
       { client: f.client, receivedDir: dir },
     );
@@ -56,7 +56,7 @@ describe("toChannelMessage", () => {
   test("nombres repetidos en la misma solicitud: a.txt y a (2).txt", async () => {
     const dir = mkdtempSync(join(tmpdir(), "devi-recv-"));
     const f = fakeClient({ downloadFile: (id: unknown) => `c-${id}` });
-    const m = await toChannelMessage(
+    const m = await materializeDelivery(
       { kind: "request", content: "x", meta: { request_id: "q4", files: files([{ id: "f1", name: "a.txt" }, { id: "f2", name: "a.txt" }]) } },
       { client: f.client, receivedDir: dir },
     );
@@ -68,7 +68,7 @@ describe("toChannelMessage", () => {
   test("una descarga fallida no deja archivo final ni temporal", async () => {
     const dir = mkdtempSync(join(tmpdir(), "devi-recv-"));
     const f = fakeClient({ downloadFile: new Error("corte") });
-    await toChannelMessage(
+    await materializeDelivery(
       { kind: "request", content: "x", meta: { request_id: "q5", files: files([{ id: "f1", name: "a.txt" }]) } },
       { client: f.client, receivedDir: dir },
     );
@@ -80,7 +80,7 @@ describe("toChannelMessage", () => {
     for (const id of ["../x", "a/b", "", "a".repeat(65), "con espacio"]) {
       const f = fakeClient();
       await expect(
-        toChannelMessage({ kind: "request", content: "x", meta: { request_id: id, files: files([{ id: "f1", name: "a.txt" }]) } }, { client: f.client, receivedDir: dir }),
+        materializeDelivery({ kind: "request", content: "x", meta: { request_id: id, files: files([{ id: "f1", name: "a.txt" }]) } }, { client: f.client, receivedDir: dir }),
       ).rejects.toThrow(/request_id/);
       expect(f.calls).toEqual([]);
     }
@@ -90,7 +90,7 @@ describe("toChannelMessage", () => {
   test("nombres con mayúsculas distintas en la misma entrega: A.txt y a (2).txt", async () => {
     const dir = mkdtempSync(join(tmpdir(), "devi-recv-"));
     const f = fakeClient({ downloadFile: (id: unknown) => `c-${id}` });
-    await toChannelMessage(
+    await materializeDelivery(
       { kind: "request", content: "x", meta: { request_id: "q6", files: files([{ id: "f1", name: "A.txt" }, { id: "f2", name: "a.txt" }]) } },
       { client: f.client, receivedDir: dir },
     );
@@ -102,7 +102,7 @@ describe("toChannelMessage", () => {
     const fuera = mkdtempSync(join(tmpdir(), "devi-fuera-"));
     symlinkSync(fuera, join(dir, "q7"));
     const f = fakeClient({ downloadFile: "secreto" });
-    const m = await toChannelMessage(
+    const m = await materializeDelivery(
       { kind: "request", content: "x", meta: { request_id: "q7", files: files([{ id: "f1", name: "a.txt" }]) } },
       { client: f.client, receivedDir: dir },
     );
@@ -117,7 +117,7 @@ describe("toChannelMessage", () => {
     mkdirSync(join(dir, "q8"));
     symlinkSync(join(fuera, "objetivo.txt"), join(dir, "q8", "a.txt"));
     const f = fakeClient({ downloadFile: "secreto" });
-    const m = await toChannelMessage(
+    const m = await materializeDelivery(
       { kind: "request", content: "x", meta: { request_id: "q8", files: files([{ id: "f1", name: "a.txt" }]) } },
       { client: f.client, receivedDir: dir },
     );
@@ -129,11 +129,11 @@ describe("toChannelMessage", () => {
   test("request y response con el mismo nombre no chocan: la respuesta va a respuesta/", async () => {
     const dir = mkdtempSync(join(tmpdir(), "devi-recv-"));
     const f = fakeClient({ downloadFile: (id: unknown) => `c-${id}` });
-    const req = await toChannelMessage(
+    const req = await materializeDelivery(
       { kind: "request", content: "x", meta: { request_id: "q9", files: files([{ id: "f1", name: "a.txt" }]) } },
       { client: f.client, receivedDir: dir },
     );
-    const res = await toChannelMessage(
+    const res = await materializeDelivery(
       { kind: "response", content: "y", meta: { request_id: "q9", files: files([{ id: "f2", name: "a.txt" }]) } },
       { client: f.client, receivedDir: dir },
     );

@@ -3,14 +3,16 @@ import { join, resolve, sep } from "node:path";
 import type { DeviClient } from "@devi/client";
 import { FileMetaSchema, type SessionDelivery } from "@devi/protocol";
 import { z } from "zod";
-import { safeFileName, uniqueName } from "../files";
+import { safeFileName, uniqueName } from "./files";
 
-// Lo que se empuja por el canal: notifications/claude/channel { content, meta }.
-export type ChannelMessage = { content: string; meta: Record<string, string> };
+// Entrega lista para el agente: lo que se empuja por el canal (notifications/claude/channel { content, meta })
+// o, sin canal, lo que el hook inyecta como contexto. Los dos caminos usan materializeDelivery: mismo saneado,
+// mismas carpetas y los archivos que ya existen no se vuelven a descargar.
+export type DeliveryMessage = { content: string; meta: Record<string, string> };
 
 const FilesMeta = z.array(FileMetaSchema.pick({ id: true, name: true }));
 
-// Convierte una entrega del servidor en el mensaje del canal. Si trae archivos (meta.files = JSON
+// Convierte una entrega del servidor (por SSE o de la bandeja) en el mensaje para el agente. Si trae archivos (meta.files = JSON
 // de [{id,name}]), se guardan en <receivedDir>/<request_id>/ (las respuestas, en .../respuesta/) y el agente recibe las rutas locales.
 // Si la app ya los descargó, se reutilizan (no se vuelven a pedir).
 // Mismo patrón que valida la app de escritorio; evita cualquier ruta en el nombre de la carpeta.
@@ -32,10 +34,10 @@ async function safeFolder(root: string, parts: string[]): Promise<string> {
   return current;
 }
 
-export async function toChannelMessage(
-  d: SessionDelivery,
+export async function materializeDelivery(
+  d: Pick<SessionDelivery, "kind" | "content" | "meta">,
   deps: { client: DeviClient; receivedDir: string },
-): Promise<ChannelMessage> {
+): Promise<DeliveryMessage> {
   const meta: Record<string, string> = { ...d.meta, kind: d.kind };
   const raw = d.meta.files;
   if ((d.kind !== "request" && d.kind !== "response") || !raw) return { content: d.content, meta };
