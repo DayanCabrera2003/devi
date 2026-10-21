@@ -7,6 +7,7 @@
   import { normalizeServerUrl } from "../lib/format";
   import FolderSetting from "./settings/FolderSetting.svelte";
   import LocalServerPanel from "./settings/LocalServerPanel.svelte";
+  import ShellAliasSetting from "./settings/ShellAliasSetting.svelte";
 
   const app = useApp();
   let url = $state(app.config?.serverUrl ?? "");
@@ -108,6 +109,8 @@
   <DeviCommand args={["install-integration"]} label="Reinstalar la integración" />
   <DeviCommand args={["doctor"]} label="Diagnóstico (devi doctor)" />
 </section>
+
+<ShellAliasSetting />
 
 <section class="card">
   <div class="card-kicker">Asistente</div>
