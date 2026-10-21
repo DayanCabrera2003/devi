@@ -9,6 +9,7 @@ export type CliCommand =
   | { cmd: "hook"; status: "working" | "idle" | null }
   | { cmd: "claude"; session: string | undefined; channel: ChannelMode; passthrough: string[] }
   | { cmd: "doctor" }
+  | { cmd: "shell-alias"; action: "install" | "remove" | "status"; json: boolean }
   | {
       cmd: "install-integration";
       from: string | undefined;
@@ -31,6 +32,8 @@ export const USAGE = `Uso: devi <comando>
   doctor                 Diagnostica Tailscale, servidor, login, plugin y canal
   install-integration [--from BINARIO] [--bin-dir DIR] [--marketplace-dir DIR] [--no-claude] [--json]
                          Instala el binario en una ruta estable y el plugin de Claude Code
+  shell-alias install|remove|status [--json]
+                         Hace que escribir \`claude\` en la terminal equivalga a \`devi claude\`
   --version              Muestra la versión`;
 
 function takeValue(argv: string[], i: number, flag: string): string {
@@ -68,6 +71,8 @@ export function parseCliArgs(argv: string[], env: Record<string, string | undefi
       return parseClaude(rest, env);
     case "install-integration":
       return parseInstall(rest);
+    case "shell-alias":
+      return parseShellAlias(rest);
     default:
       throw new CliArgError(`comando desconocido: ${cmd}\n\n${USAGE}`);
   }
@@ -94,6 +99,19 @@ function parseClaude(argv: string[], env: Record<string, string | undefined>): C
   }
   if (session !== undefined && session.trim() === "") throw new CliArgError("--session no puede estar vacío");
   return { cmd: "claude", session, channel, passthrough };
+}
+
+function parseShellAlias(argv: string[]): CliCommand {
+  const [action, ...flags] = argv;
+  if (action !== "install" && action !== "remove" && action !== "status") {
+    throw new CliArgError(`devi shell-alias necesita install, remove o status${action ? ` (recibido: ${action})` : ""}`);
+  }
+  let json = false;
+  for (const a of flags) {
+    if (a === "--json") json = true;
+    else throw new CliArgError(`argumento desconocido para shell-alias: ${a}`);
+  }
+  return { cmd: "shell-alias", action, json };
 }
 
 function parseInstall(argv: string[]): CliCommand {

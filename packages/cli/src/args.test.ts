@@ -46,6 +46,15 @@ describe("parseCliArgs", () => {
     expect(() => parseCliArgs(["install-integration", "--nope"])).toThrow(CliArgError);
   });
 
+  test("shell-alias install|remove|status [--json]", () => {
+    expect(parseCliArgs(["shell-alias", "install"])).toEqual({ cmd: "shell-alias", action: "install", json: false });
+    expect(parseCliArgs(["shell-alias", "remove"])).toEqual({ cmd: "shell-alias", action: "remove", json: false });
+    expect(parseCliArgs(["shell-alias", "status", "--json"])).toEqual({ cmd: "shell-alias", action: "status", json: true });
+    expect(() => parseCliArgs(["shell-alias"])).toThrow(/install, remove o status/);
+    expect(() => parseCliArgs(["shell-alias", "borrar"])).toThrow(CliArgError);
+    expect(() => parseCliArgs(["shell-alias", "install", "--x"])).toThrow(CliArgError);
+  });
+
   test("comando desconocido", () => {
     expect(() => parseCliArgs(["volar"])).toThrow(/comando desconocido: volar/);
   });

@@ -1,11 +1,12 @@
 #!/usr/bin/env bun
-// Binario `devi`: server | mcp | hook | claude | doctor | install-integration.
+// Binario `devi`: server | mcp | hook | claude | doctor | install-integration | shell-alias.
 import { CliArgError, USAGE, parseCliArgs } from "./args";
 import { runClaude } from "./commands/claude";
 import { runDoctor } from "./commands/doctor";
 import { runHook } from "./commands/hook";
 import { runInstallIntegration } from "./commands/install-integration";
 import { runServer } from "./commands/server";
+import { runShellAlias } from "./commands/shell-alias";
 import { runMcp } from "./mcp/server";
 import { currentSys } from "./paths";
 import { CLI_VERSION } from "./version";
@@ -35,6 +36,8 @@ async function main(argv: string[]): Promise<number | null> {
       return runDoctor(sys);
     case "install-integration":
       return runInstallIntegration(cmd, sys);
+    case "shell-alias":
+      return runShellAlias(cmd, sys);
   }
 }
 
