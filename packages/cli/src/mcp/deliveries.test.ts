@@ -62,7 +62,7 @@ describe("toChannelMessage", () => {
     );
     expect(readFileSync(join(dir, "q4", "a.txt"), "utf8")).toBe("c-f1");
     expect(readFileSync(join(dir, "q4", "a (2).txt"), "utf8")).toBe("c-f2");
-    expect(m.meta.file_paths.split("\n")).toHaveLength(2);
+    expect(m.meta.file_paths!.split("\n")).toHaveLength(2);
   });
 
   test("una descarga fallida no deja archivo final ni temporal", async () => {
