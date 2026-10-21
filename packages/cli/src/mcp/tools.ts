@@ -1,4 +1,5 @@
 import type { DeviClient } from "@devi/client";
+import { SECRETS_FLAG, scanForInjection, scanForSecrets } from "@devi/protocol";
 import { readLocalFiles } from "../files";
 import { readableError } from "./errors";
 
@@ -28,6 +29,11 @@ export const TOOLS = [
           items: { type: "string" },
           description: "Opcional: rutas de archivos de texto a adjuntar (relativas a la carpeta de la sesión), máx. 5 de 1 MB",
         },
+        allow_secrets: {
+          type: "boolean",
+          description:
+            "Solo si el usuario confirmó expresamente enviar algo que parece un secreto (tras el aviso de Devi). El borrador lo mostrará con un aviso.",
+        },
       },
       required: ["to", "message"],
     },
@@ -45,6 +51,11 @@ export const TOOLS = [
           type: "array",
           items: { type: "string" },
           description: "Opcional: rutas de archivos de texto a adjuntar (relativas a la carpeta de la sesión), máx. 5 de 1 MB",
+        },
+        allow_secrets: {
+          type: "boolean",
+          description:
+            "Solo si el usuario confirmó expresamente enviar algo que parece un secreto (tras el aviso de Devi). El borrador lo mostrará con un aviso.",
         },
       },
       required: ["request_id", "message"],
@@ -101,16 +112,21 @@ export async function callTool(name: string, args: Record<string, unknown>, deps
         if (!sessionId) return fail("Esta sesión aún no está registrada en Devi (¿el servidor está encendido?). Prueba en unos segundos.");
         const files = await readLocalFiles(paths, deps.cwd);
         if (!files.ok) return fail(files.error);
+        const secrets = secretsIn(message, files.files);
+        if (secrets.length > 0 && args.allow_secrets !== true) return fail(secretsRefusal(secrets));
+        const outgoing = secrets.length > 0 ? `${SECRETS_FLAG}\n\n${message}` : message;
         const draft =
           name === "send_request"
-            ? await client.createDraft({ kind: "request", sessionId, to: target, message }, files.files)
-            : await client.createDraft({ kind: "response", sessionId, requestId: target, message }, files.files);
+            ? await client.createDraft({ kind: "request", sessionId, to: target, message: outgoing }, files.files)
+            : await client.createDraft({ kind: "response", sessionId, requestId: target, message: outgoing }, files.files);
         const adj = files.files.length > 0 ? ` con ${files.files.length} archivo(s) (${files.files.map((f) => f.name).join(", ")})` : "";
         const what = name === "send_request" ? "Solicitud" : "Respuesta";
         return ok(
           `${what} preparada${adj}: borrador ${draft.id}, esperando autorización en la app de Devi. ` +
             `No se envía hasta que el usuario la autorice allí (${expiryText(draft)}). ` +
-            `Te llegará un evento kind="draft_authorized" o kind="draft_discarded". Puedes seguir trabajando.`,
+            `Te llegará un evento kind="draft_authorized" o kind="draft_discarded". Puedes seguir trabajando.` +
+            (secrets.length > 0 ? `\n\nAviso: el borrador incluye posibles secretos (confirmado por el usuario); la app lo marcará.` : "") +
+            injectionWarnings(message, files.files),
         );
       }
       default:
@@ -119,6 +135,34 @@ export async function callTool(name: string, args: Record<string, unknown>, deps
   } catch (e) {
     return fail(readableError(e));
   }
+}
+
+type Outgoing = { name: string; content: string }[];
+
+// Secretos en el mensaje y en cada archivo, con dónde están.
+function secretsIn(message: string, files: Outgoing): string[] {
+  const found = scanForSecrets(message).map((s) => `- en el mensaje: ${s.label} (${s.excerpt})`);
+  for (const f of files) found.push(...scanForSecrets(f.content).map((s) => `- en ${f.name}: ${s.label} (${s.excerpt})`));
+  return found;
+}
+
+function secretsRefusal(found: string[]): string {
+  return (
+    `No se creó el borrador: parece que incluye secretos.\n${found.join("\n")}\n\n` +
+    `Enséñaselo al usuario y pídele que los quite (o que adjunte otro archivo). Solo si el usuario confirma ` +
+    `expresamente que quiere enviarlos, vuelve a llamar con allow_secrets: true; el borrador saldrá marcado.`
+  );
+}
+
+// Lo que sale también se revisa: si parece una inyección, el remitente debe saberlo.
+function injectionWarnings(message: string, files: Outgoing): string {
+  const parts = [{ where: "el mensaje", scan: scanForInjection(message) }, ...files.map((f) => ({ where: f.name, scan: scanForInjection(f.content) }))];
+  const hits = parts.filter((p) => p.scan.level !== "none");
+  if (hits.length === 0) return "";
+  return (
+    `\n\nPosible prompt injection en lo que vas a enviar (díselo al usuario antes de que lo autorice):\n` +
+    hits.map((h) => `- ${h.where} (${h.scan.level === "high" ? "alto" : "aviso"}): ${h.scan.reasons.join("; ")}`).join("\n")
+  );
 }
 
 // El plazo es un ajuste del servidor (draftTtlMs): se calcula con los dos tiempos del servidor,

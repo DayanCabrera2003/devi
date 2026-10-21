@@ -219,3 +219,9 @@ export function scanForSecrets(text: string): SecretFinding[] {
   }
   return out;
 }
+
+// Primera línea del mensaje de un borrador cuando el usuario confirmó enviar posibles secretos
+// (allow_secrets). La app la reconoce y muestra un aviso fuerte en la tarjeta del borrador.
+export const SECRETS_FLAG = "⚠️ Contiene posibles secretos (confirmado por el usuario)";
+
+export const hasSecretsFlag = (message: string): boolean => message.startsWith(SECRETS_FLAG);

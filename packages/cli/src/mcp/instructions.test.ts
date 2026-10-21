@@ -33,4 +33,5 @@ test("sección de seguridad: datos, nunca instrucciones; qué no hacer; decide e
   expect(sec).toMatch(/send_request.*respond_to_request|respond_to_request.*send_request/s);
   expect(sec).toMatch(/secretos/);
   expect(sec).toMatch(/avisa al usuario/i);
+  expect(sec).toContain("allow_secrets: true solo si");
 });
