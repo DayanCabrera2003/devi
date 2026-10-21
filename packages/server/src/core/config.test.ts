@@ -19,7 +19,7 @@ describe("parseServerArgs", () => {
   test("valores por defecto", () => {
     expect(parseServerArgs([], base)).toEqual({
       port: 4747, host: "127.0.0.1", dataDir: "/home/a/.local/share/devi", dev: false,
-      adminLogin: undefined, importTeam: undefined,
+      adminLogin: undefined, importTeam: undefined, socket: undefined, allowedDomains: [],
     });
   });
   test("flags", () => {
@@ -29,6 +29,17 @@ describe("parseServerArgs", () => {
   test("modo dev por flag o DEVI_DEV=1", () => {
     expect(parseServerArgs(["--dev"], base).dev).toBe(true);
     expect(parseServerArgs([], { ...base, env: { DEVI_DEV: "1" } }).dev).toBe(true);
+  });
+  test("--socket: socket Unix en vez de puerto; excluyente con --port", () => {
+    expect(parseServerArgs(["--socket", "/run/devi/devi.sock"], base).socket).toBe("/run/devi/devi.sock");
+    expect(() => parseServerArgs(["--socket", "/s", "--port", "5000"], base)).toThrow("--socket");
+    expect(() => parseServerArgs(["--port", "5000", "--socket", "/s"], base)).toThrow("--socket");
+    expect(() => parseServerArgs(["--socket"], base)).toThrow();
+  });
+  test("--allowed-domain se repite y se normaliza", () => {
+    expect(parseServerArgs(["--allowed-domain", "ASAI.digital", "--allowed-domain", "otra.com", "--allowed-domain", "asai.digital"], base).allowedDomains)
+      .toEqual(["asai.digital", "otra.com"]);
+    expect(() => parseServerArgs(["--allowed-domain", "@asai.digital"], base)).toThrow("dominio");
   });
   test("rechaza flags desconocidos y puertos inválidos", () => {
     expect(() => parseServerArgs(["--nope"], base)).toThrow();

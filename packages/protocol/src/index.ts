@@ -4,5 +4,6 @@ export * from "./perms";
 export * from "./limits";
 export * from "./errors";
 export * from "./entities";
+export * from "./audit";
 export * from "./api";
 export * from "./events";

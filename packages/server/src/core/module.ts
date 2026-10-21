@@ -5,6 +5,7 @@ import type { Timers } from "./clock";
 import type { ServerConfig } from "./config";
 import type { Migration } from "./db";
 import type { Presence } from "./presence";
+import type { RateLimiter } from "./ratelimit";
 import type { Router } from "./router";
 import type { ServiceRegistry } from "./services";
 import type { SseHub } from "./sse";
@@ -20,6 +21,7 @@ export interface ModuleContext {
   timers: Timers; // programar con esto (no con setTimeout) para que los tests usen FakeClock
   presence: Presence; // SSE abiertos + latidos → quién está conectado
   services: ServiceRegistry; // servicios que los módulos se ofrecen entre sí
+  rateLimit: RateLimiter; // límites de ritmo por persona (el núcleo ya aplica draft y mutation)
   // Solo el módulo team lo llama: decide quién es miembro y con qué permisos.
   setAccessResolver(resolver: AccessResolver): void;
 }

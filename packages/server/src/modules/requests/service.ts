@@ -1,9 +1,11 @@
-import type { API, Perm, CreateDraftMeta, DeviRequest, Draft, SessionDelivery, UserEvent } from "@devi/protocol";
+import { createHash } from "node:crypto";
+import type { API, AuditAction, AuditTarget, Perm, CreateDraftMeta, DeviRequest, Draft, SessionDelivery, UserEvent } from "@devi/protocol";
 import type { z } from "zod";
 import type { Access } from "../../core/auth";
 import { HttpError } from "../../core/http";
 import type { ModuleContext } from "../../core/module";
 import { deliverToSession, pushUser } from "../../core/push";
+import type { AuditDetails } from "../../core/services";
 import { authorizedContent, type DiscardReason, discardedContent, requestContent, responseContent } from "./content";
 import type { DraftRecord, RequestRecord, RequestsStore } from "./store";
 import { KeyedTimers } from "./timers";
@@ -17,6 +19,7 @@ const isResponseOpen = (s: RequestRecord["status"]) => (RESPONSE_OPEN as readonl
 
 // meta.files de las entregas: JSON de [{id, name}]. El MCP descarga los archivos y da rutas locales al agente.
 const filesMeta = (files: { id: string; name: string }[]) => JSON.stringify(files.map((f) => ({ id: f.id, name: f.name })));
+const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
 const conflict = (message: string) => new HttpError(409, message, { code: "conflict" });
 const sessionGone = () => new HttpError(409, "esa sesión ya no está abierta", { code: "session_gone" });
 
@@ -86,7 +89,15 @@ export class RequestsManager {
       this.files.removeWritten(written);
       throw e;
     }
-    if (previous) this.afterDiscard(previous, "replaced", previousStaged);
+    if (previous) {
+      this.audit("draft.discarded", access.memberId, "draft", previous.id, { reason: "replaced" });
+      this.afterDiscard(previous, "replaced", previousStaged);
+    }
+    this.audit("draft.created", access.memberId, "draft", d.id, {
+      kind: d.kind, to: peer, toName: this.team.nameOf(peer), requestId: d.requestId, sessionId: session.id,
+      sessionName: session.name, messageSha256: sha256(d.message),
+      files: JSON.stringify(valid.map((f) => ({ name: f.name, size: f.size }))),
+    });
     if (request) this.timers.cancel(requestKey(request.id)); // el plazo se pausa mientras haya borrador de respuesta
     this.timers.at(draftKey(d.id), d.expiresAt, () => this.expire(d.id));
     const view = this.draftView(d);
@@ -123,6 +134,7 @@ export class RequestsManager {
         });
       });
       this.timers.cancel(draftKey(d.id));
+      this.audit("draft.authorized", access.memberId, "draft", d.id, { kind: "request", to: to.id, requestId: r.id });
       this.schedule(r);
       const view = this.requestView(r);
       this.push(r.toMemberId, { type: "request.incoming", request: view });
@@ -147,6 +159,8 @@ export class RequestsManager {
       });
       this.timers.cancel(draftKey(d.id));
       this.timers.cancel(requestKey(r.id));
+      this.audit("draft.authorized", access.memberId, "draft", d.id, { kind: "response", requestId: r.id });
+      this.audit("request.answered", access.memberId, "request", r.id, { draftId: d.id, to: r.fromMemberId });
       const view = this.requestView(r);
       this.push(r.fromMemberId, { type: "response.incoming", request: view });
       this.push(r.fromMemberId, { type: "request.updated", request: view });
@@ -159,6 +173,7 @@ export class RequestsManager {
   discardByAuthor(access: Access, id: string): Draft {
     const d = this.authoredAwaiting(access, id);
     this.discard(d, "discarded");
+    this.audit("draft.discarded", access.memberId, "draft", d.id, { kind: d.kind, reason: "discarded" });
     return this.draftView(this.store.getDraft(d.id)!);
   }
 
@@ -176,6 +191,8 @@ export class RequestsManager {
       this.store.setDraftStatus(d.id, "discarded");
       staged = this.stageForAuthor(d, this.discardedDelivery(d, reason));
     });
+    // Caducado (también al arrancar, en restore): lo hace el servidor.
+    if (reason === "expired") this.audit("draft.expired", null, "draft", d.id, { kind: d.kind, author: d.authorMemberId });
     this.afterDiscard(d, reason, staged);
   }
 
@@ -236,6 +253,7 @@ export class RequestsManager {
       this.store.saveRequest(r);
       if (!this.deliver(s.id, staged)) throw sessionGone();
     });
+    this.audit("request.forwarded", access.memberId, "request", r.id, { sessionId: s.id, sessionName: s.name });
     return this.pushBoth(r, "request.updated");
   }
 
@@ -244,6 +262,7 @@ export class RequestsManager {
     if (r.status !== "pending") throw conflict(`la solicitud ya está ${r.status}`);
     r.status = r.outcome = "accepted";
     r.outcomeText = note?.trim() || null;
+    this.audit("request.accepted", access.memberId, "request", r.id, { from: r.fromMemberId });
     return this.answer(r);
   }
 
@@ -253,6 +272,7 @@ export class RequestsManager {
     if (r.status !== "pending") throw conflict(`la solicitud ya está ${r.status}`);
     r.status = r.outcome = "rejected";
     r.outcomeText = reason.trim();
+    this.audit("request.rejected", access.memberId, "request", r.id, { from: r.fromMemberId, reasonSha256: sha256(r.outcomeText) });
     return this.answer(r);
   }
 
@@ -261,6 +281,7 @@ export class RequestsManager {
   acceptResponse(access: Access, id: string): DeviRequest {
     const r = this.sent(access, id);
     if (!isResponseOpen(r.status)) throw conflict(`no hay respuesta abierta (estado: ${r.status})`);
+    this.audit("response.accepted", access.memberId, "request", r.id, { outcome: r.outcome });
     return this.close(r);
   }
 
@@ -282,6 +303,7 @@ export class RequestsManager {
       r.status = "closed";
       this.store.saveRequest(r);
     });
+    this.audit("response.forwarded", access.memberId, "request", r.id, { sessionId: s.id, sessionName: s.name, outcome: r.outcome });
     return this.close(r);
   }
 
@@ -297,6 +319,7 @@ export class RequestsManager {
     r.deadline = now + this.settings.requestTimeoutMs;
     this.store.saveRequest(r);
     this.schedule(r);
+    this.audit("request.resent", access.memberId, "request", r.id, { to: r.toMemberId });
     const view = this.requestView(r);
     this.push(r.toMemberId, { type: "request.incoming", request: view });
     return this.pushBoth(r, "request.updated");
@@ -305,6 +328,7 @@ export class RequestsManager {
   ignore(access: Access, id: string): DeviRequest {
     const r = this.sent(access, id);
     if (r.status !== "timed_out") throw conflict(`la solicitud está ${r.status}`);
+    this.audit("request.ignored", access.memberId, "request", r.id, { to: r.toMemberId });
     return this.close(r);
   }
 
@@ -318,6 +342,7 @@ export class RequestsManager {
     if (this.ctx.now() < r.deadline) return this.schedule(r);
     r.status = "timed_out";
     this.store.saveRequest(r);
+    this.audit("request.timed_out", null, "request", r.id, { from: r.fromMemberId, to: r.toMemberId });
     const view = this.requestView(r);
     this.push(r.fromMemberId, { type: "request.timed_out", request: view });
     this.push(r.toMemberId, { type: "request.updated", request: view });
@@ -398,6 +423,10 @@ export class RequestsManager {
     this.push(r.fromMemberId, { type, request: view });
     this.push(r.toMemberId, { type, request: view });
     return view;
+  }
+
+  private audit(action: AuditAction, actorMemberId: string | null, targetType: AuditTarget, targetId: string, details: AuditDetails = {}): void {
+    this.ctx.services.find("audit")?.record({ actorMemberId, action, targetType, targetId, details });
   }
 
   private push(memberId: string, event: UserEvent): void {

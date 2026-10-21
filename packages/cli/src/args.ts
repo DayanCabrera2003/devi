@@ -25,8 +25,9 @@ export class CliArgError extends Error {}
 
 export const USAGE = `Uso: devi <comando>
 
-  server [--port N] [--data-dir DIR] [--admin LOGIN] [--import team.json] [--dev]
-                         Arranca el servidor del equipo
+  server [--port N | --socket RUTA] [--data-dir DIR] [--admin LOGIN] [--allowed-domain DOMINIO]...
+         [--import team.json] [--dev]
+                         Arranca el servidor del equipo (en producción, con --socket)
   mcp                    Servidor MCP + canal (lo lanza Claude Code, no a mano)
   hook <working|idle|start>
                          Hook de Claude Code (lee el JSON del hook por stdin)

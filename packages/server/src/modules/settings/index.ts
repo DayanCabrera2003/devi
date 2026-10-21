@@ -11,6 +11,9 @@ export const settingsModule: DeviModule = {
   routes(r, ctx) {
     const settings = new SettingsManager(new SettingsStore(ctx.db), ctx.db);
     ctx.services.provide("settings", settings);
+    // Antes de cualquier onStart (team comprueba el --admin contra los dominios).
+    const added = settings.seedDomains(ctx.config.allowedDomains);
+    if (added.length > 0) ctx.log(`dominios permitidos añadidos por --allowed-domain: ${added.join(", ")}`);
     registerSettingsRoutes(r, ctx, settings);
   },
 };

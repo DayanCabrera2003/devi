@@ -96,6 +96,23 @@ const MINUTE = 60_000;
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
 
+// Dominio de login permitido ("asai.digital"): sin @, en minúsculas.
+export const DomainSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(/^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/, "dominio inválido (p. ej. empresa.com, sin @)");
+
+// ¿El login es <algo>@<uno de los dominios>? Sin dominios configurados, cualquiera vale.
+// Comparación exacta del dominio (sin subdominios) y sin distinguir mayúsculas.
+export function loginInDomains(login: string, domains: readonly string[]): boolean {
+  if (domains.length === 0) return true;
+  const at = login.lastIndexOf("@");
+  if (at <= 0) return false;
+  const domain = login.slice(at + 1).toLowerCase();
+  return domains.some((d) => d.toLowerCase() === domain);
+}
+
 // Rangos que acepta el servidor (la app los repite en sus controles). Que fileMaxAgeDays ≥ fileRetentionDays
 // lo valida el servicio de settings, porque en un parche parcial depende del valor guardado.
 export const SettingsSchema = z.object({
@@ -103,6 +120,8 @@ export const SettingsSchema = z.object({
   draftTtlMs: z.number().int().min(MINUTE).max(24 * HOUR),
   fileRetentionDays: z.number().int().min(1).max(30),
   fileMaxAgeDays: z.number().int().min(1).max(30),
+  // Si no está vacío, solo entran logins @<uno de estos dominios> (403 "domain" antes de mirar el equipo).
+  allowedDomains: z.array(DomainSchema).max(20),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 

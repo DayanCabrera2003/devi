@@ -1,14 +1,15 @@
 import type { Database } from "bun:sqlite";
-import { API, API_VERSION, PRESENCE, VERSION_HEADER, VERSION_QUERY, isCompatible } from "@devi/protocol";
+import { API, API_VERSION, PRESENCE, VERSION_HEADER, VERSION_QUERY, isCompatible, loginInDomains } from "@devi/protocol";
 import { ZodError } from "zod";
 import type { AccessResolver, IdentityProvider } from "./auth";
 import { Bus } from "./bus";
 import { RealTimers, type Timers } from "./clock";
 import { testConfig, type ServerConfig } from "./config";
 import { migrate, openDb } from "./db";
-import { HttpError, corsHeaders, errorResponse, isAllowedOrigin, isSseRoute, json } from "./http";
+import { HttpError, corsHeaders, errorResponse, isAllowedOrigin, isSseRoute, json, securityHeaders, withHeaders } from "./http";
 import type { DeviModule, ModuleContext } from "./module";
 import { Presence } from "./presence";
+import { RateLimiter, type RateLimits } from "./ratelimit";
 import { Router } from "./router";
 import { ServiceRegistry } from "./services";
 import { SseHub } from "./sse";
@@ -22,6 +23,7 @@ export type AppOptions = {
   now?: () => number;
   log?: (...a: unknown[]) => void;
   timers?: Timers; // por defecto RealTimers; los tests pasan un FakeClock
+  rateLimits?: Partial<RateLimits>; // por defecto DEFAULT_RATE_LIMITS
 };
 
 export function createApp(opts: AppOptions) {
@@ -39,6 +41,7 @@ export function createApp(opts: AppOptions) {
     timers: opts.timers ?? new RealTimers(),
     presence: new Presence(sse, bus, now),
     services: new ServiceRegistry(),
+    rateLimit: new RateLimiter(now, opts.rateLimits),
     setAccessResolver: (r) => {
       resolveAccess = r;
     },
@@ -70,8 +73,19 @@ export function createApp(opts: AppOptions) {
     const principal = opts.identity.identify(req);
     if (!principal) throw new HttpError(401, "No se pudo identificar quién llama (¿estás en la tailnet?)", { code: "no_identity" });
 
+    // Dominios permitidos (ajuste allowedDomains): se comprueba antes de mirar el equipo.
+    const domains = ctx.services.find("settings")?.get().allowedDomains ?? [];
+    if (!loginInDomains(principal.login, domains)) {
+      ctx.services.find("audit")?.loginRejected(principal.login, "domain");
+      throw new HttpError(403, `Tu login (${principal.login}) no es de un dominio permitido en este servidor de Devi`, {
+        code: "domain",
+        login: principal.login,
+      });
+    }
+
     const access = resolveAccess(principal.login);
     if (!access) {
+      ctx.services.find("audit")?.loginRejected(principal.login, "unknown_login");
       throw new HttpError(403, `Pide al admin de Devi que te añada al equipo (tu login: ${principal.login})`, {
         code: "unknown_login",
         login: principal.login,
@@ -89,13 +103,19 @@ export function createApp(opts: AppOptions) {
     if (match.route.perm && !access.perms.has(match.route.perm)) {
       throw new HttpError(403, `Te falta el permiso "${match.route.perm}"`, { code: "missing_perm", perm: match.route.perm });
     }
+    // Límites de ritmo por persona: borradores aparte; el latido de presencia no cuenta; las lecturas tampoco.
+    if (match.route === API.createDraft) ctx.rateLimit.take("draft", access.memberId);
+    else if (req.method !== "GET" && match.route !== API.heartbeat) ctx.rateLimit.take("mutation", access.memberId);
     return match.handler({ request: req, url, params: match.params, principal, access });
   }
 
   async function fetch(req: Request): Promise<Response> {
     const origin = req.headers.get("Origin");
     const cors = isAllowedOrigin(origin, opts.allowedOrigins) ? corsHeaders(origin!, { dev: ctx.config.dev }) : null;
-    if (req.method === "OPTIONS") return new Response(null, { status: cors ? 204 : 403, headers: cors ?? {} });
+    const pathname = new URL(req.url).pathname;
+    if (req.method === "OPTIONS") {
+      return withHeaders(new Response(null, { status: cors ? 204 : 403 }), { ...(cors ?? {}), ...securityHeaders(pathname, null) });
+    }
 
     let res: Response;
     try {
@@ -108,16 +128,7 @@ export function createApp(opts: AppOptions) {
         res = errorResponse(new HttpError(500, "Error interno del servidor de Devi", { code: "internal" }));
       }
     }
-    if (cors) {
-      try {
-        for (const [k, v] of Object.entries(cors)) res.headers.set(k, v);
-      } catch {
-        // Cabeceras inmutables (p. ej. Response.redirect): se reenvuelve y se ponen en la copia.
-        res = new Response(res.body, res);
-        for (const [k, v] of Object.entries(cors)) res.headers.set(k, v);
-      }
-    }
-    return res;
+    return withHeaders(res, { ...(cors ?? {}), ...securityHeaders(pathname, res.headers.get("Content-Type")) });
   }
 
   async function start() {

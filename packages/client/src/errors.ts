@@ -21,6 +21,13 @@ export function describeApiError(status: number, body: ErrorBody): string {
   if (status === 403 && body.code === "unknown_login") {
     return `Tu login de Tailscale (${body.login ?? "desconocido"}) no está en el equipo de Devi: pide al admin que te añada.`;
   }
+  if (status === 403 && body.code === "domain") {
+    return `Tu login de Tailscale (${body.login ?? "desconocido"}) no es de un dominio permitido en este servidor de Devi. Entra en Tailscale con la cuenta del equipo o pide al admin que revise los dominios permitidos.`;
+  }
+  if (status === 429 && body.code === "rate_limit") {
+    const wait = body.retryAfter ? `${body.retryAfter} s` : "un momento";
+    return `Demasiadas acciones seguidas en Devi: espera ${wait} y vuelve a intentarlo.`;
+  }
   if (status === 403 && body.code === "missing_perm") {
     const label = body.perm && body.perm in PERM_LABELS ? ` (${PERM_LABELS[body.perm as Perm]})` : "";
     return `Te falta el permiso "${body.perm ?? "?"}"${label} en Devi: pídeselo al admin.`;

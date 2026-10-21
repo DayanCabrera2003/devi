@@ -9,6 +9,7 @@ import { DevIdentity } from "../core/auth";
 import { FakeClock } from "../core/clock";
 import { testConfig } from "../core/config";
 import type { DeviModule } from "../core/module";
+import type { RateLimits } from "../core/ratelimit";
 import type { MemberInfo } from "../core/services";
 
 // Utilidades de test: app en modo dev, SQLite en memoria, reloj falso y un directorio de datos temporal.
@@ -25,6 +26,8 @@ export function createTestApp(opts: {
   clock?: FakeClock;
   dataDir?: string;
   dev?: boolean; // por defecto true (testConfig)
+  allowedDomains?: string[]; // como --allowed-domain
+  rateLimits?: Partial<RateLimits>;
 }) {
   const clock = opts.clock ?? new FakeClock();
   const dataDir = opts.dataDir ?? mkdtempSync(join(tmpdir(), "devi-test-"));
@@ -35,8 +38,9 @@ export function createTestApp(opts: {
     db: opts.db,
     now: clock.now,
     timers: clock,
-    config: testConfig({ dataDir, adminLogin: opts.adminLogin, importTeam: opts.importTeam, dev: opts.dev ?? true }),
+    config: testConfig({ dataDir, adminLogin: opts.adminLogin, importTeam: opts.importTeam, dev: opts.dev ?? true, allowedDomains: opts.allowedDomains ?? [] }),
     log: () => {},
+    rateLimits: opts.rateLimits,
   });
 
   // Registra todo lo que se empuja por SSE (a usuarios y a sesiones), haya o no stream abierto.
@@ -103,6 +107,7 @@ export function stubTeamModule(members: (MemberInfo & { perms: Perm[] })[]): Dev
         member: (id) => members.find((m) => m.id === id) ?? null,
         nameOf: (id) => members.find((m) => m.id === id)?.name ?? id,
         memberIds: () => members.map((m) => m.id),
+        adminIds: () => members.filter((m) => !m.disabled && m.perms.includes("team.admin")).map((m) => m.id),
       });
     },
   };

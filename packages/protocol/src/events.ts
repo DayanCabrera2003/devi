@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AuditEntrySchema } from "./audit";
 import { DeviRequestSchema, DraftSchema } from "./entities";
 
 // SSE de usuario (app de escritorio). En el cable: `event: <type>` + `data: <JSON del evento>`.
@@ -11,6 +12,8 @@ export const UserEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("request.timed_out"), request: DeviRequestSchema }),
   z.object({ type: z.literal("team.updated") }),
   z.object({ type: z.literal("sessions.updated"), memberId: z.string() }),
+  // Solo a admins: cambios sensibles (roles y permisos, personas añadidas o desactivadas, ajustes, logins rechazados).
+  z.object({ type: z.literal("audit.alert"), entry: AuditEntrySchema }),
 ]);
 export type UserEvent = z.infer<typeof UserEventSchema>;
 export type UserEventType = UserEvent["type"];
