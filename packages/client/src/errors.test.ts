@@ -27,3 +27,15 @@ test("DeviApiError guarda status y cuerpo", () => {
   expect(e.body).toEqual({ error: "x", code: "origin" });
   expect(e.message).toContain("origen");
 });
+
+test("dominio no permitido y límite de ritmo", () => {
+  expect(describeApiError(403, { error: "x", code: "domain", login: "ana@gmail.com" })).toBe(
+    "Tu login de Tailscale (ana@gmail.com) no es de un dominio permitido en este servidor de Devi. Entra en Tailscale con la cuenta del equipo o pide al admin que revise los dominios permitidos.",
+  );
+  expect(describeApiError(429, { error: "x", code: "rate_limit", retryAfter: 30 })).toBe(
+    "Demasiadas acciones seguidas en Devi: espera 30 s y vuelve a intentarlo.",
+  );
+  expect(describeApiError(429, { error: "x", code: "rate_limit" })).toBe(
+    "Demasiadas acciones seguidas en Devi: espera un momento y vuelve a intentarlo.",
+  );
+});
