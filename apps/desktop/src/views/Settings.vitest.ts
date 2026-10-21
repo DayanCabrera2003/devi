@@ -3,11 +3,12 @@ import { describe, expect, test, vi } from "vitest";
 import { fakeApp } from "../lib/test-app";
 import Settings from "./Settings.svelte";
 
-vi.mock("@tauri-apps/plugin-autostart", () => ({
+const autostart = vi.hoisted(() => ({
   isEnabled: vi.fn(async () => false),
   enable: vi.fn(async () => {}),
   disable: vi.fn(async () => {}),
 }));
+vi.mock("@tauri-apps/plugin-autostart", () => autostart);
 
 describe("Settings", () => {
   test("una URL no válida no se guarda y explica por qué", async () => {
@@ -34,5 +35,41 @@ describe("Settings", () => {
     const { context } = await fakeApp();
     const { queryByText } = render(Settings, { context });
     expect(queryByText("Este equipo es el servidor")).toBeNull();
+  });
+
+  test("si no se puede guardar la preferencia de notificaciones, lo dice y la casilla vuelve a su estado", async () => {
+    const writeConfig = vi.fn(async () => {
+      throw "No se pudo escribir config.json";
+    });
+    const { context } = await fakeApp({}, { writeConfig });
+    const { getByRole, findByText } = render(Settings, { context });
+    const box = getByRole("checkbox", { name: "Notificaciones del sistema" }) as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    await fireEvent.click(box);
+    expect(await findByText("No se pudo escribir config.json")).toBeTruthy();
+    expect(box.checked).toBe(true);
+  });
+
+  test("si falla pausar los avisos, lo dice y no queda en pausa", async () => {
+    const setPaused = vi.fn(async () => {
+      throw "La bandeja no responde";
+    });
+    const { app, context } = await fakeApp({}, { setPaused });
+    const { getByRole, findByText } = render(Settings, { context });
+    const box = getByRole("checkbox", { name: "Pausar avisos por ahora" }) as HTMLInputElement;
+    await fireEvent.click(box);
+    expect(await findByText("La bandeja no responde")).toBeTruthy();
+    expect(box.checked).toBe(false);
+    expect(app.paused).toBe(false);
+  });
+
+  test("si falla el arranque automático, lo dice y la casilla refleja el estado real", async () => {
+    autostart.enable.mockRejectedValueOnce("Sin permiso para el arranque automático");
+    const { context } = await fakeApp();
+    const { getByRole, findByText } = render(Settings, { context });
+    const box = getByRole("checkbox", { name: "Abrir Devi al iniciar sesión" }) as HTMLInputElement;
+    await fireEvent.click(box);
+    expect(await findByText("Sin permiso para el arranque automático")).toBeTruthy();
+    expect(box.checked).toBe(false);
   });
 });

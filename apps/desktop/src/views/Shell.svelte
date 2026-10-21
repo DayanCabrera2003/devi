@@ -66,7 +66,9 @@
   {#if app.paused}
     <div class="banner">
       <span>Avisos en pausa.</span>
-      <button class="ghost" onclick={() => app.togglePause(false)}>Reanudar</button>
+      <button class="ghost" onclick={() => app.togglePause(false).catch((e) => console.warn("[devi] reanudar", e))}>
+        Reanudar
+      </button>
     </div>
   {/if}
 

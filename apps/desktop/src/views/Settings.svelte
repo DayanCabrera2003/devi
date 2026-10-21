@@ -12,13 +12,25 @@
   let url = $state(app.config?.serverUrl ?? "");
   let urlMsg = $state<{ ok: boolean; text: string } | null>(null);
   let autostart = $state(false);
-  let autostartError = $state<string | null>(null);
+  let prefsError = $state<string | null>(null);
 
   onMount(() => {
     isEnabled()
       .then((v) => (autostart = v))
-      .catch((e) => (autostartError = errorMessage(e)));
+      .catch((e) => (prefsError = errorMessage(e)));
   });
+
+  // Si el cambio falla se muestra el error y la casilla vuelve al estado real
+  // (el estado no cambió, así que Svelte no la repintaría por su cuenta).
+  async function toggle(box: HTMLInputElement, fn: (on: boolean) => Promise<void>, real: () => boolean) {
+    prefsError = null;
+    try {
+      await fn(box.checked);
+    } catch (e) {
+      prefsError = errorMessage(e);
+    }
+    box.checked = real();
+  }
 
   async function saveUrl() {
     const r = normalizeServerUrl(url);
@@ -36,13 +48,11 @@
   }
 
   async function toggleAutostart(on: boolean) {
-    autostartError = null;
     try {
       if (on) await enable();
       else await disable();
-      autostart = await isEnabled();
-    } catch (e) {
-      autostartError = errorMessage(e);
+    } finally {
+      autostart = await isEnabled().catch(() => autostart);
     }
   }
 </script>
@@ -67,19 +77,24 @@
     <input
       type="checkbox"
       checked={app.prefs.notifications}
-      onchange={(e) => app.updatePrefs({ notifications: e.currentTarget.checked })}
+      onchange={(e) =>
+        toggle(e.currentTarget, (on) => app.updatePrefs({ notifications: on }), () => app.prefs.notifications)}
     />
     Notificaciones del sistema
   </label>
   <label class="check">
-    <input type="checkbox" checked={app.paused} onchange={(e) => app.togglePause(e.currentTarget.checked)} />
+    <input
+      type="checkbox"
+      checked={app.paused}
+      onchange={(e) => toggle(e.currentTarget, (on) => app.togglePause(on), () => app.paused)}
+    />
     Pausar avisos por ahora
   </label>
   <label class="check">
-    <input type="checkbox" checked={autostart} onchange={(e) => toggleAutostart(e.currentTarget.checked)} />
+    <input type="checkbox" checked={autostart} onchange={(e) => toggle(e.currentTarget, toggleAutostart, () => autostart)} />
     Abrir Devi al iniciar sesión
   </label>
-  {#if autostartError}<div class="error">{autostartError}</div>{/if}
+  {#if prefsError}<div class="error">{prefsError}</div>{/if}
 </section>
 
 <FolderSetting />

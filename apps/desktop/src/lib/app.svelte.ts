@@ -409,10 +409,16 @@ export class DeviApp {
     this.paused = paused;
   }
 
-  // Desde la UI: también actualiza la casilla del tray.
+  // Desde la UI: también actualiza la casilla del tray. Si falla, se deshace y se propaga el error.
   async togglePause(paused: boolean): Promise<void> {
+    const before = this.paused;
     this.paused = paused;
-    await this.deps.native.setPaused(paused).catch(() => {});
+    try {
+      await this.deps.native.setPaused(paused);
+    } catch (e) {
+      this.paused = before;
+      throw e;
+    }
   }
 
   goto(view: View): void {
