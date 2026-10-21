@@ -6,7 +6,8 @@ import { appContext } from "./context";
 import type { Native } from "./native";
 import { ME, TEAM } from "./test-fixtures";
 
-export function fakeApp(api: Record<string, unknown> = {}) {
+// Conecta (team.refresh + subscribe con la API falsa) para que las acciones tengan API.
+export async function fakeApp(api: Record<string, unknown> = {}) {
   const fullApi = {
     me: vi.fn(async () => ME),
     team: vi.fn(async () => TEAM),
@@ -22,7 +23,6 @@ export function fakeApp(api: Record<string, unknown> = {}) {
     emitMascot: vi.fn(),
   });
   app.config = { serverUrl: "https://pc.t.ts.net", app: { notifications: true, setupDone: true } };
-  app.team.me = ME;
-  app.team.team = TEAM;
+  await app.connect();
   return { app, api: fullApi, context: appContext(app) };
 }

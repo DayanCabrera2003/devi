@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { DeviRequest, Session } from "@devi/protocol";
-  import { onMount } from "svelte";
   import FileList from "../components/FileList.svelte";
   import SaveFilesButton from "../components/SaveFilesButton.svelte";
   import SessionPicker from "../components/SessionPicker.svelte";
@@ -18,10 +17,19 @@
   const outcome = $derived(OUTCOME[request.outcome ?? "answered"]);
   const to = $derived(app.team.nameOf(request.toMemberId));
 
-  // "Enviar a sesión" solo se ofrece si hay alguna sesión abierta.
-  onMount(() => {
-    void app.loadSessions();
-  });
+  // Las sesiones se piden al abrir el selector, no al montar cada tarjeta.
+  let loadingSessions = $state(false);
+
+  async function openPicker() {
+    if (loadingSessions) return;
+    loadingSessions = true;
+    try {
+      await app.loadSessions();
+    } finally {
+      loadingSessions = false;
+    }
+    mode = "pick";
+  }
 
   async function acceptIt() {
     busy = true;
@@ -66,9 +74,9 @@
       <SaveFilesButton save={() => app.saveFiles(request.id, "response", request.responseFiles)} />
     {/if}
     <div class="actions">
-      {#if app.sessions.list.length > 0}
-        <button class="primary" onclick={() => (mode = "pick")}>Enviar a sesión</button>
-      {/if}
+      <button class="primary" disabled={loadingSessions} onclick={openPicker}>
+        {loadingSessions ? "Buscando sesiones…" : "Enviar a sesión"}
+      </button>
       <button class="ok" disabled={busy} onclick={acceptIt}>Aceptar</button>
     </div>
     {#if error}<div class="error">{error}</div>{/if}
