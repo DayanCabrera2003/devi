@@ -1,15 +1,18 @@
 <script lang="ts">
   // Archivos de una tarjeta con vista previa de texto (se lee del servidor; no se escribe a disco).
-  import type { FileMeta } from "@devi/protocol";
+  // Al previsualizar un archivo se analiza por si trae prompt injection; onScan avisa a la tarjeta.
+  import { type FileMeta, type InjectionScan, scanForInjection } from "@devi/protocol";
   import { errorMessage } from "../lib/api";
   import { formatBytes } from "../lib/format";
+  import InjectionWarning from "./InjectionWarning.svelte";
 
-  type Props = { files: FileMeta[]; load: (id: string) => Promise<string> };
-  let { files, load }: Props = $props();
+  type Props = { files: FileMeta[]; load: (id: string) => Promise<string>; onScan?: (id: string, scan: InjectionScan) => void };
+  let { files, load, onScan }: Props = $props();
 
   let open = $state<string | null>(null);
   let contents = $state<Record<string, string>>({});
   let errors = $state<Record<string, string>>({});
+  let scans = $state<Record<string, InjectionScan>>({});
 
   async function toggle(f: FileMeta) {
     if (open === f.id) {
@@ -20,7 +23,11 @@
     if (contents[f.id] !== undefined) return;
     delete errors[f.id];
     try {
-      contents[f.id] = await load(f.id);
+      const text = await load(f.id);
+      contents[f.id] = text;
+      const scan = scanForInjection(text);
+      scans[f.id] = scan;
+      onScan?.(f.id, scan);
     } catch (e) {
       errors[f.id] = errorMessage(e);
     }
@@ -37,6 +44,8 @@
         </button>
         {#if open === f.id}
           {#if contents[f.id] !== undefined}
+            {@const scan = scans[f.id]}
+            {#if scan}<InjectionWarning {scan} where={f.name} />{/if}
             <pre class="preview">{contents[f.id]}</pre>
           {:else if errors[f.id]}
             <div class="error">{errors[f.id]}</div>

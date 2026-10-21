@@ -249,3 +249,13 @@ body.mascota { max-width: none; margin: 0; padding: 0; min-height: 0; overflow: 
 .mascot-devi svg { pointer-events: none; } /* los clics llegan al div arrastrable */
 .mascot-pill { font-size: 11px; padding: 4px 10px; border-radius: 999px; }
 .mascot-pill.offline { color: var(--muted); }
+
+/* ---- avisos de seguridad ---- */
+
+.injection, .secrets {
+  margin: 8px 0; padding: 8px 12px; border-radius: 10px; font-size: 13px; overflow-wrap: anywhere;
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); color: var(--warn);
+}
+.injection.high, .secrets { border-color: color-mix(in srgb, var(--no) 55%, transparent); color: var(--no); }
+.injection .small { margin-top: 4px; }
+.send-confirm { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 8px 0; }

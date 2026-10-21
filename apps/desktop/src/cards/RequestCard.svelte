@@ -1,10 +1,13 @@
 <script lang="ts">
-  import type { DeviRequest, Session } from "@devi/protocol";
+  import { type DeviRequest, type InjectionScan, type Session, scanForInjection } from "@devi/protocol";
   import DecisionForm from "../components/DecisionForm.svelte";
   import FileList from "../components/FileList.svelte";
+  import InjectionWarning from "../components/InjectionWarning.svelte";
+  import SendConfirm from "../components/SendConfirm.svelte";
   import SaveFilesButton from "../components/SaveFilesButton.svelte";
   import SessionPicker from "../components/SessionPicker.svelte";
   import { useApp } from "../lib/context";
+  import { combineScans } from "../lib/safety";
 
   type Props = { request: DeviRequest };
   let { request }: Props = $props();
@@ -18,7 +21,15 @@
       : "Llegará como pregunta abierta, no como orden.",
   );
 
+  // Posible prompt injection: en el mensaje y en los archivos que se hayan previsualizado.
+  const messageScan = $derived(scanForInjection(request.message));
+  let fileScans = $state<Record<string, InjectionScan>>({});
+  const scan = $derived(combineScans([messageScan, ...Object.values(fileScans)]));
+  let reviewed = $state(false);
+  const blocked = $derived(scan.level === "high" && !reviewed);
+
   async function openPicker() {
+    if (blocked) return;
     mode = "pick";
     await app.loadSessions();
   }
@@ -52,13 +63,15 @@
     <div class="card-kicker">Solicitud</div>
     <div class="card-title">{from} te pide algo</div>
     <div class="card-from">desde la sesión <span class="mono">{request.fromSessionName}</span></div>
+    <InjectionWarning scan={messageScan} />
     <p class="card-msg">{request.message}</p>
-    <FileList files={request.files} load={(id) => app.downloadFile(id)} />
+    <FileList files={request.files} load={(id) => app.downloadFile(id)} onScan={(id, s) => (fileScans[id] = s)} />
     {#if request.files.length > 0}
       <SaveFilesButton save={() => app.saveFiles(request.id, "request", request.files)} />
     {/if}
+    {#if scan.level === "high"}<SendConfirm bind:checked={reviewed} />{/if}
     <div class="actions">
-      <button class="primary" onclick={openPicker}>Enviar a sesión</button>
+      <button class="primary" disabled={blocked} onclick={openPicker}>Enviar a sesión</button>
       <button class="ok" onclick={() => (mode = "accept")}>Aceptar</button>
       <button class="no" onclick={() => (mode = "reject")}>Rechazar</button>
     </div>
