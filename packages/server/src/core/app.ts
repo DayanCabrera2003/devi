@@ -1,13 +1,16 @@
 import type { Database } from "bun:sqlite";
-import { API, API_VERSION, VERSION_HEADER, VERSION_QUERY, isCompatible } from "@devi/protocol";
+import { API, API_VERSION, PRESENCE, VERSION_HEADER, VERSION_QUERY, isCompatible } from "@devi/protocol";
 import { ZodError } from "zod";
 import type { AccessResolver, IdentityProvider } from "./auth";
 import { Bus } from "./bus";
+import { RealTimers, type Timers } from "./clock";
 import { testConfig, type ServerConfig } from "./config";
 import { migrate, openDb } from "./db";
 import { HttpError, corsHeaders, errorResponse, isAllowedOrigin, isSseRoute, json } from "./http";
 import type { DeviModule, ModuleContext } from "./module";
+import { Presence } from "./presence";
 import { Router } from "./router";
+import { ServiceRegistry } from "./services";
 import { SseHub } from "./sse";
 
 export type AppOptions = {
@@ -18,17 +21,24 @@ export type AppOptions = {
   db?: Database;
   now?: () => number;
   log?: (...a: unknown[]) => void;
+  timers?: Timers; // por defecto RealTimers; los tests pasan un FakeClock
 };
 
 export function createApp(opts: AppOptions) {
   let resolveAccess: AccessResolver = () => null;
+  const bus = new Bus();
+  const sse = new SseHub();
+  const now = opts.now ?? Date.now;
   const ctx: ModuleContext = {
     db: opts.db ?? openDb(),
     config: opts.config ?? testConfig(),
-    bus: new Bus(),
-    sse: new SseHub(),
-    now: opts.now ?? Date.now,
+    bus,
+    sse,
+    now,
     log: opts.log ?? ((...a) => console.log("[devi]", ...a)),
+    timers: opts.timers ?? new RealTimers(),
+    presence: new Presence(sse, bus, now),
+    services: new ServiceRegistry(),
     setAccessResolver: (r) => {
       resolveAccess = r;
     },
@@ -106,7 +116,13 @@ export function createApp(opts: AppOptions) {
 
   async function start() {
     for (const m of opts.modules) await m.onStart?.(ctx);
+    ctx.timers.every(PRESENCE.sweepMs, () => ctx.presence.sweep());
   }
 
-  return { fetch, start, ctx };
+  // Cancela todos los temporizadores (tareas periódicas, plazos). Lo usan los tests y el apagado.
+  function stop() {
+    ctx.timers.stopAll();
+  }
+
+  return { fetch, start, stop, ctx };
 }
