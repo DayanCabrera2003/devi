@@ -2,7 +2,7 @@ import type { DeviRequest, Draft, FileMeta, UserEvent } from "@devi/protocol";
 import { type DeviApi, errorMessage } from "./api";
 import type { MascotState } from "./mascot";
 import { type AppPrefs, type ClientConfig, type Native, type ServerStatus, prefsOf } from "./native";
-import { type Notice, noticeFor, noticeKey, shouldNotify } from "./notify";
+import { type Notice, noticeFor, noticeKey, shouldNotify, summaryNotice } from "./notify";
 import { ConnectionStore } from "./stores/connection.svelte";
 import { type Card, InboxStore } from "./stores/inbox.svelte";
 import { SessionsStore } from "./stores/sessions.svelte";
@@ -19,6 +19,13 @@ export type AppDeps = {
 };
 
 const MAX_RETRY_MS = 30_000;
+
+// Tras cada "open" el servidor reenvía las tarjetas abiertas, sin marca de fin. Se da por
+// terminado el reenvío cuando pasan REPLAY_QUIET_MS sin eventos (o REPLAY_MAX_MS desde open).
+export const REPLAY_QUIET_MS = 300;
+const REPLAY_MAX_MS = 3_000;
+
+type Replay = { cards: Map<string, Card>; timer: ReturnType<typeof setTimeout> | null; deadline: number };
 
 // Estado global de la ventana principal. Una instancia por ventana (la crea Shell).
 export class DeviApp {
@@ -44,6 +51,7 @@ export class DeviApp {
   // Cada connect()/disconnect() la sube; un connect() que despierta con otra generación se retira.
   private generation = 0;
   private readonly notified = new Set<string>();
+  private replay: Replay | null = null;
 
   constructor(deps: AppDeps) {
     this.deps = deps;
@@ -117,6 +125,7 @@ export class DeviApp {
     this.unsubscribe = null;
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.retryTimer = null;
+    this.cancelReplay();
   }
 
   // Espera exponencial: 1 s, 2 s, 4 s… hasta 30 s.
@@ -135,7 +144,11 @@ export class DeviApp {
     if (this.conn.state.status === "connected" && before !== "connected") {
       // Al conectar, el servidor reenvía las tarjetas abiertas: se parte de cero.
       this.inbox.clear();
+      this.startReplay();
       if (this.api) void this.team.refresh(this.api).catch(() => {});
+    } else if (this.conn.state.status !== "connected") {
+      // Se cortó antes de acabar el reenvío: esas tarjetas se volverán a reenviar y contar.
+      this.cancelReplay();
     }
     if (this.conn.blocked) this.disconnect();
     this.publishMascot();
@@ -153,18 +166,63 @@ export class DeviApp {
       return;
     }
     const added = this.inbox.apply(ev, me);
-    if (added) this.announce(added);
+    if (added) {
+      if (this.replay) this.collectReplayed(added);
+      else this.announce(added);
+    }
     this.publishMascot();
   }
 
   private announce(card: Card): void {
-    this.pokeKey++;
     const key = noticeKey(card);
     if (this.notified.has(key)) return;
     this.notified.add(key);
+    this.pokeKey++;
     if (shouldNotify(this.prefs, this.paused)) {
       void this.deps.notify(noticeFor(card, (id) => this.team.nameOf(id)));
     }
+  }
+
+  // ---- reenvío inicial: un solo aviso resumen en vez de uno por tarjeta ----------------
+
+  private startReplay(): void {
+    this.cancelReplay();
+    this.replay = { cards: new Map(), timer: null, deadline: Date.now() + REPLAY_MAX_MS };
+    this.armReplay();
+  }
+
+  private armReplay(): void {
+    const r = this.replay;
+    if (!r) return;
+    if (r.timer) clearTimeout(r.timer);
+    r.timer = setTimeout(() => this.flushReplay(), Math.max(0, Math.min(REPLAY_QUIET_MS, r.deadline - Date.now())));
+  }
+
+  private cancelReplay(): void {
+    if (this.replay?.timer) clearTimeout(this.replay.timer);
+    this.replay = null;
+  }
+
+  private collectReplayed(card: Card): void {
+    const key = noticeKey(card);
+    if (!this.notified.has(key)) this.replay?.cards.set(key, card);
+    this.armReplay();
+  }
+
+  private flushReplay(): void {
+    const r = this.replay;
+    this.replay = null;
+    if (!r) return;
+    const open = new Set(this.inbox.cards.map((c) => c.key));
+    const fresh = [...r.cards.entries()].filter(([key, c]) => !this.notified.has(key) && open.has(c.key));
+    if (fresh.length === 0) return;
+    for (const [key] of fresh) this.notified.add(key);
+    this.pokeKey++;
+    if (shouldNotify(this.prefs, this.paused)) {
+      const first = fresh[0]![1];
+      void this.deps.notify(fresh.length === 1 ? noticeFor(first, (id) => this.team.nameOf(id)) : summaryNotice(fresh.length));
+    }
+    this.publishMascot();
   }
 
   publishMascot(): void {

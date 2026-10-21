@@ -29,6 +29,11 @@ export function noticeKey(card: Card): string {
   return card.kind === "draft" ? card.key : `${card.key}@${card.request.sentAt}`;
 }
 
+// Un solo aviso para todo lo que estaba pendiente al conectar.
+export function summaryNotice(n: number): Notice {
+  return { title: "Devi", body: `Tienes ${n} avisos pendientes en Devi` };
+}
+
 export const shouldNotify = (prefs: { notifications: boolean }, paused: boolean) => prefs.notifications && !paused;
 
 export async function sendNative(n: Notice): Promise<void> {

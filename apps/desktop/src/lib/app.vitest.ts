@@ -1,9 +1,9 @@
 import type { UserEvent } from "@devi/protocol";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { DeviApi } from "./api";
-import { DeviApp } from "./app.svelte";
+import { DeviApp, REPLAY_QUIET_MS } from "./app.svelte";
 import type { ClientConfig, Native } from "./native";
-import { ME, TEAM, req } from "./test-fixtures";
+import { ME, TEAM, draft, req } from "./test-fixtures";
 
 const CONFIG: ClientConfig = { serverUrl: "https://pc.t.ts.net", app: { notifications: true, setupDone: true } };
 
@@ -56,6 +56,9 @@ function setup(config: ClientConfig | null = CONFIG) {
   };
 }
 
+// Deja pasar la ventana del reenvío inicial (requiere vi.useFakeTimers()).
+const settle = () => vi.advanceTimersByTimeAsync(REPLAY_QUIET_MS * 10);
+
 const incoming: UserEvent = { type: "request.incoming", request: req() };
 
 describe("DeviApp", () => {
@@ -79,32 +82,106 @@ describe("DeviApp", () => {
   });
 
   test("una solicitud entrante avisa una sola vez, también tras reconectar", async () => {
+    vi.useFakeTimers();
     const t = setup();
     await t.app.boot();
     t.status("open");
-    t.event(incoming);
+    await settle();
+    t.event(incoming); // en vivo, tras el reenvío inicial
     expect(t.app.inbox.cards).toHaveLength(1);
     expect(t.notify).toHaveBeenCalledOnce();
     expect(t.notify.mock.calls[0]?.[0]).toMatchObject({ title: "Devi · María te pide algo" });
+    expect(t.app.pokeKey).toBe(1);
 
     t.status("reconnecting");
     expect(t.app.conn.state.status).toBe("reconnecting");
     t.status("open");
     expect(t.app.inbox.cards).toHaveLength(0); // el servidor reenvía las abiertas
     t.event(incoming);
+    await settle();
     expect(t.app.inbox.cards).toHaveLength(1);
     expect(t.notify).toHaveBeenCalledOnce();
-    expect(t.app.pokeKey).toBe(2);
+    expect(t.app.pokeKey).toBe(1); // una tarjeta ya avisada no hace rebotar a la mascota
   });
 
-  test("con avisos en pausa no notifica", async () => {
+  test("un evento repetido en vivo no vuelve a rebotar a la mascota", async () => {
+    vi.useFakeTimers();
     const t = setup();
     await t.app.boot();
     t.status("open");
+    await settle();
+    t.event(incoming);
+    t.app.inbox.clear();
+    t.event(incoming); // misma tarjeta (mismo sentAt): ya avisada
+    expect(t.app.pokeKey).toBe(1);
+  });
+
+  test("con avisos en pausa no notifica", async () => {
+    vi.useFakeTimers();
+    const t = setup();
+    await t.app.boot();
+    t.status("open");
+    await settle();
     t.app.setPaused(true);
     t.event(incoming);
     expect(t.app.inbox.cards).toHaveLength(1);
     expect(t.notify).not.toHaveBeenCalled();
+  });
+
+  test("el reenvío inicial tras open da un solo aviso resumen; lo que llega después avisa uno a uno", async () => {
+    vi.useFakeTimers();
+    const t = setup();
+    await t.app.boot();
+    t.status("open");
+    t.event({ type: "draft.awaiting", draft: draft() });
+    t.event(incoming);
+    t.event({ type: "request.timed_out", request: req({ id: "q2", fromMemberId: "m1", toMemberId: "m2", status: "timed_out" }) });
+    expect(t.notify).not.toHaveBeenCalled();
+    await settle();
+    expect(t.notify).toHaveBeenCalledOnce();
+    expect(t.notify.mock.calls[0]?.[0]).toMatchObject({ body: "Tienes 3 avisos pendientes en Devi" });
+    expect(t.app.pokeKey).toBe(1);
+
+    t.event({ type: "request.incoming", request: req({ id: "q3", message: "¿Y esto?" }) });
+    expect(t.notify).toHaveBeenCalledTimes(2);
+    expect(t.notify.mock.calls[1]?.[0]).toMatchObject({ title: "Devi · María te pide algo", body: "¿Y esto?" });
+
+    // Al reconectar, las ya avisadas no vuelven a avisar.
+    t.status("reconnecting");
+    t.status("open");
+    t.event(incoming);
+    t.event({ type: "draft.awaiting", draft: draft() });
+    await settle();
+    expect(t.notify).toHaveBeenCalledTimes(2);
+  });
+
+  test("con un solo aviso pendiente al abrir se muestra ese aviso", async () => {
+    vi.useFakeTimers();
+    const t = setup();
+    await t.app.boot();
+    t.status("open");
+    t.event(incoming);
+    await settle();
+    expect(t.notify).toHaveBeenCalledOnce();
+    expect(t.notify.mock.calls[0]?.[0]).toMatchObject({ title: "Devi · María te pide algo" });
+  });
+
+  test("el resumen del reenvío respeta pausar avisos", async () => {
+    vi.useFakeTimers();
+    const t = setup();
+    await t.app.boot();
+    t.app.setPaused(true);
+    t.status("open");
+    t.event(incoming);
+    t.event({ type: "draft.awaiting", draft: draft() });
+    await settle();
+    expect(t.notify).not.toHaveBeenCalled();
+    t.app.setPaused(false);
+    t.status("reconnecting");
+    t.status("open");
+    t.event(incoming);
+    await settle();
+    expect(t.notify).not.toHaveBeenCalled(); // ya se contaron como avisadas
   });
 
   test("login desconocido: pantalla propia y sin suscripción", async () => {
