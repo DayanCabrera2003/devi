@@ -76,6 +76,12 @@ export class InboxStore {
     this.apply({ type: "request.updated", request: r }, me);
   }
 
+  // La solicitud de una tarjeta abierta (para dar contexto a un borrador de respuesta).
+  requestById(id: string): DeviRequest | undefined {
+    for (const c of this.cards) if (c.kind !== "draft" && c.request.id === id) return c.request;
+    return undefined;
+  }
+
   remove(key: string): void {
     this.cards = this.cards.filter((c) => c.key !== key);
   }

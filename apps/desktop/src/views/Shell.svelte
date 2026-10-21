@@ -26,8 +26,10 @@
       }),
       listen(MASCOT_READY, () => app.publishMascot()),
     ];
+    const stopClock = app.clock.start();
     void app.boot();
     return () => {
+      stopClock();
       app.disconnect();
       for (const off of offs) void off.then((f) => f());
     };

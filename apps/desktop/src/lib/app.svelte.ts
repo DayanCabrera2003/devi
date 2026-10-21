@@ -1,5 +1,6 @@
 import type { DeviRequest, Draft, FileMeta, UserEvent } from "@devi/protocol";
 import { type DeviApi, errorMessage } from "./api";
+import { Clock } from "./clock.svelte";
 import type { MascotState } from "./mascot";
 import { type AppPrefs, type ClientConfig, type Native, type ServerStatus, prefsOf } from "./native";
 import { type Notice, noticeFor, noticeKey, shouldNotify, summaryNotice } from "./notify";
@@ -42,6 +43,7 @@ export class DeviApp {
   readonly team = new TeamStore();
   readonly inbox = new InboxStore();
   readonly sessions = new SessionsStore();
+  readonly clock = new Clock(); // lo arranca y lo para Shell
 
   private readonly deps: AppDeps;
   private api: DeviApi | null = null;
