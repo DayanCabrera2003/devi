@@ -54,7 +54,7 @@ export class SseHub {
       },
     });
     return new Response(body, {
-      headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" },
+      headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-store", Connection: "keep-alive" },
     });
   }
 

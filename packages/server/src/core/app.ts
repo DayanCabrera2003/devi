@@ -6,7 +6,7 @@ import { Bus } from "./bus";
 import { RealTimers, type Timers } from "./clock";
 import { testConfig, type ServerConfig } from "./config";
 import { migrate, openDb } from "./db";
-import { HttpError, corsHeaders, errorResponse, isAllowedOrigin, isSseRoute, json } from "./http";
+import { HttpError, corsHeaders, errorResponse, isAllowedOrigin, isSseRoute, json, securityHeaders, withHeaders } from "./http";
 import type { DeviModule, ModuleContext } from "./module";
 import { Presence } from "./presence";
 import { RateLimiter, type RateLimits } from "./ratelimit";
@@ -112,7 +112,10 @@ export function createApp(opts: AppOptions) {
   async function fetch(req: Request): Promise<Response> {
     const origin = req.headers.get("Origin");
     const cors = isAllowedOrigin(origin, opts.allowedOrigins) ? corsHeaders(origin!, { dev: ctx.config.dev }) : null;
-    if (req.method === "OPTIONS") return new Response(null, { status: cors ? 204 : 403, headers: cors ?? {} });
+    const pathname = new URL(req.url).pathname;
+    if (req.method === "OPTIONS") {
+      return withHeaders(new Response(null, { status: cors ? 204 : 403 }), { ...(cors ?? {}), ...securityHeaders(pathname, null) });
+    }
 
     let res: Response;
     try {
@@ -125,16 +128,7 @@ export function createApp(opts: AppOptions) {
         res = errorResponse(new HttpError(500, "Error interno del servidor de Devi", { code: "internal" }));
       }
     }
-    if (cors) {
-      try {
-        for (const [k, v] of Object.entries(cors)) res.headers.set(k, v);
-      } catch {
-        // Cabeceras inmutables (p. ej. Response.redirect): se reenvuelve y se ponen en la copia.
-        res = new Response(res.body, res);
-        for (const [k, v] of Object.entries(cors)) res.headers.set(k, v);
-      }
-    }
-    return res;
+    return withHeaders(res, { ...(cors ?? {}), ...securityHeaders(pathname, res.headers.get("Content-Type")) });
   }
 
   async function start() {
