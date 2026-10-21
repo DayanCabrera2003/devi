@@ -2,6 +2,7 @@
 //! escritura confinada en disco y configuración. La UI habla con el servidor por HTTP/SSE.
 
 // Módulos nativos (se añaden en las tareas 5 a 9).
+mod config;
 
 use tauri::{Manager, WindowEvent};
 
@@ -30,6 +31,10 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            config::read_client_config,
+            config::write_client_config,
+            config::choose_received_dir,
+            config::reset_received_dir,
         ])
         .run(tauri::generate_context!())
         .expect("no se pudo iniciar Devi");
