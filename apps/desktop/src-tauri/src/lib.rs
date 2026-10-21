@@ -1,23 +1,19 @@
 //! App de escritorio de Devi. Rust solo hace lo nativo: tray, ventanas, sidecar `devi`,
 //! escritura confinada en disco y configuración. La UI habla con el servidor por HTTP/SSE.
 
-// Módulos nativos (se añaden en las tareas 5 a 9).
 mod config;
 mod files;
 mod sidecar;
 mod tailscale;
+mod tray;
 
-use tauri::{Manager, WindowEvent};
+use tauri::{Manager, RunEvent, WindowEvent};
 
 pub fn run() {
     tauri::Builder::default()
-        // Debe ir el primero: una segunda instancia solo enfoca la ventana existente.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.show();
-                let _ = w.set_focus();
-            }
-        }))
+        // Debe ir el primero: una segunda instancia solo enfoca la ventana existente
+        // (y así nunca hay dos servidores sidecar).
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| tray::show_main(app)))
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--minimized"]),
@@ -27,6 +23,19 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(sidecar::ServerState::default())
+        .setup(|app| {
+            // Sin tray (p. ej. falta libayatana-appindicator) Devi sigue funcionando con la mascota.
+            if let Err(e) = tray::create(app.handle()) {
+                eprintln!("[devi] no se pudo crear el icono de la bandeja: {e}");
+            }
+            // Al arrancar con la sesión (autostart) solo se ve la mascota.
+            if std::env::args().any(|a| a == "--minimized") {
+                if let Some(w) = app.get_webview_window("main") {
+                    w.hide()?;
+                }
+            }
+            Ok(())
+        })
         .on_window_event(|window, event| {
             // Cerrar una ventana la oculta: Devi sigue vivo en la bandeja del sistema.
             if let WindowEvent::CloseRequested { api, .. } = event {
@@ -47,7 +56,14 @@ pub fn run() {
             sidecar::start_server,
             sidecar::stop_server,
             sidecar::server_status,
+            tray::show_main_window,
+            tray::set_paused,
         ])
-        .run(tauri::generate_context!())
-        .expect("no se pudo iniciar Devi");
+        .build(tauri::generate_context!())
+        .expect("no se pudo iniciar Devi")
+        .run(|app, event| {
+            if let RunEvent::Exit = event {
+                sidecar::kill_server(app);
+            }
+        });
 }
