@@ -31,6 +31,12 @@ describe("parseCliArgs", () => {
       cmd: "claude", session: "api", channel: "plugin", passthrough: ["--model", "opus", "--session", "x"],
     });
     expect(parseCliArgs(["claude"], { DEVI_CHANNEL: "dev" })).toMatchObject({ channel: "dev" });
+    // Lo que manda la función `claude` del shell: `devi claude -- "$@"`, también sin args.
+    expect(parseCliArgs(["claude", "--"])).toEqual({ cmd: "claude", session: undefined, channel: "auto", passthrough: [] });
+    expect(parseCliArgs(["claude", "--", "-c"])).toMatchObject({ session: undefined, passthrough: ["-c"] });
+    expect(parseCliArgs(["claude", "--", "--resume", "abc", "-n", "x", "--"])).toMatchObject({
+      session: undefined, passthrough: ["--resume", "abc", "-n", "x", "--"],
+    });
     expect(() => parseCliArgs(["claude", "--channel", "x"])).toThrow(CliArgError);
     expect(() => parseCliArgs(["claude", "--model", "opus"])).toThrow(/después de --/);
     expect(() => parseCliArgs(["claude", "--session"])).toThrow(/necesita un valor/);

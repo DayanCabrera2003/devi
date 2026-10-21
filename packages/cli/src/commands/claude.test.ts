@@ -15,3 +15,24 @@ test("args de claude: canal, --name y los args extra al final", () => {
     "--channels", "plugin:devi@devi-local", "--name", "api",
   ]);
 });
+
+test("args de claude: si el usuario pasa su propio --name/-n, no se añade otro", () => {
+  for (const own of [["--name", "mio"], ["-n", "mio"], ["--name=mio"]]) {
+    expect(buildClaudeArgs({ session: "api", mode: "plugin", passthrough: ["-c", ...own] })).toEqual([
+      "--channels", "plugin:devi@devi-local", "-c", ...own,
+    ]);
+  }
+  // Después de un `--` de claude ya no son flags: --name se añade igual.
+  expect(buildClaudeArgs({ session: "api", mode: "plugin", passthrough: ["--", "-n"] })).toEqual([
+    "--channels", "plugin:devi@devi-local", "--name", "api", "--", "-n",
+  ]);
+});
+
+test("args de claude: -c y --resume se pasan tal cual", () => {
+  expect(buildClaudeArgs({ session: "web", mode: "plugin", passthrough: ["-c"] })).toEqual([
+    "--channels", "plugin:devi@devi-local", "--name", "web", "-c",
+  ]);
+  expect(buildClaudeArgs({ session: "web", mode: "plugin", passthrough: ["--resume", "abc"] })).toEqual([
+    "--channels", "plugin:devi@devi-local", "--name", "web", "--resume", "abc",
+  ]);
+});
