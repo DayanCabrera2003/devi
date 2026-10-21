@@ -2,10 +2,16 @@
 export type RunResult = { code: number; stdout: string; stderr: string };
 
 // En Windows, `claude` instalado con npm es un .cmd: hay que pasar por cmd.exe.
+// Cita un argumento para cmd.exe: vacío → "", `%` → `%%`, `!` → `^!`, comillas dobladas.
+export function quoteCmdArg(a: string): string {
+  if (a === "") return '""';
+  const escaped = a.replace(/%/g, "%%").replace(/!/g, "^!");
+  return /[\s"&|<>^]/.test(a) ? `"${escaped.replace(/"/g, '""')}"` : escaped;
+}
+
 export function spawnArgv(resolved: string, args: string[], platform: NodeJS.Platform): string[] {
   if (platform === "win32" && /\.(cmd|bat)$/i.test(resolved)) {
-    const quote = (a: string) => (/[\s"&|<>^]/.test(a) ? `"${a.replace(/"/g, '""')}"` : a);
-    return ["cmd.exe", "/d", "/s", "/c", [resolved, ...args].map(quote).join(" ")];
+    return ["cmd.exe", "/d", "/s", "/c", [resolved, ...args].map(quoteCmdArg).join(" ")];
   }
   return [resolved, ...args];
 }
