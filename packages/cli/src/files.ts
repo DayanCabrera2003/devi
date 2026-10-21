@@ -78,11 +78,17 @@ export async function readLocalFiles(paths: string[], cwd: string): Promise<File
 
 const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 
-// Nombre seguro para guardar un archivo recibido: sin rutas, sin caracteres reservados, sin "..",
-// sin puntos/espacios finales (Windows los descarta) y sin nombres reservados de Windows (CON, NUL, COM1…).
+// Nombre seguro para guardar un archivo recibido. Las MISMAS reglas, en el mismo orden, las aplica el
+// código Rust de la app de escritorio (y el MCP salta los archivos que ya existen), así que no cambiarlas
+// de un solo lado: 1) última componente tras / o \; 2) caracteres de control y <>:"/\|?* → _;
+// 3) sin puntos ni espacios al inicio/final; 4) máximo 120 caracteres; 5) vacío → "archivo";
+// 6) nombres reservados de Windows (con o sin extensión) llevan "_" delante.
 export function safeFileName(name: string): string {
   const base = name.split(/[\\/]/).pop() ?? "";
-  let clean = base.replace(/[<>:"|?*\u0000-\u001f]/g, "_").replace(/^\.+/, "").trim().slice(0, 200).replace(/[. ]+$/, "");
+  let clean = base
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_")
+    .replace(/^[. ]+|[. ]+$/g, "")
+    .slice(0, 120);
   if (clean === "") return "archivo";
   if (WINDOWS_RESERVED.test(clean.split(".")[0]!.trim())) clean = `_${clean}`;
   return clean;

@@ -104,3 +104,24 @@ test("uniqueName numera los repetidos", () => {
   expect(uniqueName("Makefile", used)).toBe("Makefile");
   expect(uniqueName("Makefile", used)).toBe("Makefile (2)");
 });
+
+// Mismas reglas que el código Rust de la app de escritorio: ambos lados deben producir nombres idénticos.
+test("safeFileName: tabla compartida con la app", () => {
+  const cases: [string, string][] = [
+    ["../../etc/passwd", "passwd"],
+    ["a\\b\\c.txt", "c.txt"],
+    ["  .hidden. ", "hidden"],
+    ["CON", "_CON"],
+    ["nul.txt", "_nul.txt"],
+    ["a<b>.txt", "a_b_.txt"],
+    ["", "archivo"],
+    ["a\u0001b\u001f.txt", "a_b_.txt"],
+    ["x".repeat(200), "x".repeat(120)],
+  ];
+  for (const [input, expected] of cases) expect(safeFileName(input)).toBe(expected);
+});
+
+test("uniqueName: duplicados sin distinguir mayúsculas", () => {
+  const used = new Set<string>();
+  expect([uniqueName("A.txt", used), uniqueName("a.txt", used)]).toEqual(["A.txt", "a (2).txt"]);
+});

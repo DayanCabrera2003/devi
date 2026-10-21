@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { toChannelMessage } from "./deliveries";
@@ -73,5 +73,56 @@ describe("toChannelMessage", () => {
       { client: f.client, receivedDir: dir },
     );
     expect(readdirSync(join(dir, "q5"))).toEqual([]);
+  });
+
+  test("request_id inválido → error (no se escribe nada)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "devi-recv-"));
+    for (const id of ["../x", "a/b", "", "a".repeat(65), "con espacio"]) {
+      const f = fakeClient();
+      await expect(
+        toChannelMessage({ kind: "request", content: "x", meta: { request_id: id, files: files([{ id: "f1", name: "a.txt" }]) } }, { client: f.client, receivedDir: dir }),
+      ).rejects.toThrow(/request_id/);
+      expect(f.calls).toEqual([]);
+    }
+    expect(readdirSync(dir)).toEqual([]);
+  });
+
+  test("nombres con mayúsculas distintas en la misma entrega: A.txt y a (2).txt", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "devi-recv-"));
+    const f = fakeClient({ downloadFile: (id: unknown) => `c-${id}` });
+    await toChannelMessage(
+      { kind: "request", content: "x", meta: { request_id: "q6", files: files([{ id: "f1", name: "A.txt" }, { id: "f2", name: "a.txt" }]) } },
+      { client: f.client, receivedDir: dir },
+    );
+    expect(readdirSync(join(dir, "q6")).sort()).toEqual(["A.txt", "a (2).txt"]);
+  });
+
+  test("una carpeta de la solicitud que es un symlink se rechaza", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "devi-recv-"));
+    const fuera = mkdtempSync(join(tmpdir(), "devi-fuera-"));
+    symlinkSync(fuera, join(dir, "q7"));
+    const f = fakeClient({ downloadFile: "secreto" });
+    const m = await toChannelMessage(
+      { kind: "request", content: "x", meta: { request_id: "q7", files: files([{ id: "f1", name: "a.txt" }]) } },
+      { client: f.client, receivedDir: dir },
+    );
+    expect(m.content).toContain("No se pudieron descargar: a.txt");
+    expect(readdirSync(fuera)).toEqual([]);
+  });
+
+  test("un archivo destino que es un symlink no se sigue ni se sobrescribe", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "devi-recv-"));
+    const fuera = mkdtempSync(join(tmpdir(), "devi-fuera-"));
+    writeFileSync(join(fuera, "objetivo.txt"), "intacto");
+    mkdirSync(join(dir, "q8"));
+    symlinkSync(join(fuera, "objetivo.txt"), join(dir, "q8", "a.txt"));
+    const f = fakeClient({ downloadFile: "secreto" });
+    const m = await toChannelMessage(
+      { kind: "request", content: "x", meta: { request_id: "q8", files: files([{ id: "f1", name: "a.txt" }]) } },
+      { client: f.client, receivedDir: dir },
+    );
+    expect(m.content).toContain("No se pudieron descargar: a.txt");
+    expect(readFileSync(join(fuera, "objetivo.txt"), "utf8")).toBe("intacto");
+    expect(existsSync(join(dir, "q8", "a.txt.tmp-0"))).toBe(false);
   });
 });
