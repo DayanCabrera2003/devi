@@ -5,11 +5,12 @@ import { settingsModule } from "../settings/index";
 import { requestsModule } from "./index";
 
 // Escenario de los tests de requests: Dayan (A) pide a María (B). Leo puede pedir pero no enviar archivos.
-export const team = stubTeamModule([
+export const members: Parameters<typeof stubTeamModule>[0] = [
   { id: "m-dayan", login: "dayan@dev", name: "Dayan", disabled: false, perms: ["requests.send", "files.send", "team.admin"] },
   { id: "m-maria", login: "maria@dev", name: "María", disabled: false, perms: ["requests.send", "files.send"] },
   { id: "m-leo", login: "leo@dev", name: "Leo", disabled: false, perms: ["requests.send"] },
-]);
+];
+export const team = stubTeamModule(members);
 
 export type Flow = Awaited<ReturnType<typeof setupFlow>>;
 

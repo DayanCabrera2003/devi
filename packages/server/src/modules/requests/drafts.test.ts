@@ -2,7 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_SETTINGS } from "@devi/protocol";
-import { type Flow, setupFlow } from "./fixture";
+import { type Flow, members, setupFlow } from "./fixture";
 
 let f: Flow;
 afterEach(() => f.cleanup());
@@ -209,4 +209,38 @@ describe("creación atómica de borradores", () => {
       expect(f.userEvents("m-dayan").some((e) => e.type === "request.timed_out")).toBe(true);
     });
   }
+});
+
+describe("autorizar re-comprueba permisos actuales", () => {
+  const revoke = async (login: string, perm: string, fn: () => Promise<void>) => {
+    const m = members.find((x) => x.login === login)!;
+    const saved = [...m.perms];
+    m.perms = m.perms.filter((p) => p !== perm);
+    try {
+      await fn();
+    } finally {
+      m.perms = saved;
+    }
+  };
+
+  test("sin requests.send → 403 y el borrador sigue awaiting", async () => {
+    f = await setupFlow();
+    const d = (await f.requestDraft()).data;
+    await revoke("dayan@dev", "requests.send", async () => {
+      const res = await f.call("dayan@dev", "POST", `/api/v1/drafts/${d.id}/authorize`);
+      expect(res.status).toBe(403);
+      expect(res.data).toMatchObject({ code: "missing_perm", perm: "requests.send" });
+    });
+    expect((await f.call("dayan@dev", "POST", `/api/v1/drafts/${d.id}/authorize`)).status).toBe(200);
+  });
+
+  test("con archivos y sin files.send → 403", async () => {
+    f = await setupFlow();
+    const d = (await f.requestDraft("x", [txt("a.txt", "a")])).data;
+    await revoke("dayan@dev", "files.send", async () => {
+      const res = await f.call("dayan@dev", "POST", `/api/v1/drafts/${d.id}/authorize`);
+      expect(res.status).toBe(403);
+      expect(res.data).toMatchObject({ code: "missing_perm", perm: "files.send" });
+    });
+  });
 });

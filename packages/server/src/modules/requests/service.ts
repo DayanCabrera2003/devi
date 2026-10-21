@@ -92,6 +92,11 @@ export class RequestsManager {
 
   authorize(access: Access, id: string): Draft {
     const d = this.authoredAwaiting(access, id);
+    // Los permisos pudieron revocarse desde que se creó el borrador: valen los de ahora.
+    const needs = ["requests.send", ...(this.files.forDraft(d.id).length > 0 ? ["files.send"] : [])] as const;
+    for (const perm of needs) {
+      if (!access.perms.has(perm)) throw new HttpError(403, `Te falta el permiso "${perm}"`, { code: "missing_perm", perm });
+    }
     const now = this.ctx.now();
     if (d.kind === "request") {
       const to = this.team.member(d.toMemberId!);
