@@ -1,9 +1,7 @@
-/devpost/learner-profile.md
 .env
 .env.*
 !.env.example
 node_modules/
-.superpowers/
 dist/
 /dist/
 apps/desktop/dist/
