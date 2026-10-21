@@ -92,18 +92,47 @@ Sin la extensión, Devi funciona igual: la **ventanita de la mascota** muestra e
 
      La PC servidor también se conecta por la URL `https://…ts.net`, nunca por `127.0.0.1`.
 3. **Conexión:** Devi prueba la conexión y muestra con qué login entraste. Si dice que tu login no está en el equipo, pide al admin que te añada (Admin → Personas → Invitar por login) y pulsa Reintentar.
-4. **Claude Code:** «Instalar integración» copia el binario `devi` a una ruta estable e instala el plugin de Claude Code (`devi@devi-local`). Necesitas Claude Code instalado.
+4. **Claude Code:** «Instalar integración» copia el binario `devi` a una ruta estable e instala el plugin de Claude Code (`devi@devi-local`). Necesitas Claude Code instalado. Con la casilla «Usar Devi automáticamente al escribir `claude` en la terminal» (marcada por defecto), además instala la función `claude` en tus perfiles de shell (ver la sección 4).
 5. **Listo:** «Comprobar todo» ejecuta `devi doctor`.
 
 ## 4. Usar Devi con Claude Code
 
-Lanza las sesiones con `devi claude`: abre Claude Code con el canal de Devi y empareja el estado trabajando/libre.
+Con la función `claude` instalada (casilla del paso 4 del asistente, o Ajustes → Terminal), basta con escribir `claude` en una terminal **nueva**: abre Claude Code con el canal de Devi y empareja el estado trabajando/libre. Los argumentos pasan tal cual (`claude -c`, `claude --resume`, `claude -n mi-sesion`…). La sesión se llama como la carpeta actual.
+
+`devi claude` sigue funcionando igual, y permite elegir el nombre de la sesión:
 
 **El canal es opcional.** Una sesión abierta con `claude` a secas (desde un IDE, o si tu organización no permite canales) también recibe solicitudes y respuestas: no llegan al momento, sino **cuando escribes algo en esa sesión** (o al abrirla), junto con tus archivos adjuntos ya descargados. En el selector «Enviar a sesión» de la app, cada sesión lo indica: «en tiempo real» (con canal) o «al escribir» (sin canal).
 
 ```bash
 devi claude --session frontend
+devi claude --session frontend -- -c   # args de claude después de --
 ```
+
+Si pasas tu propio `--name`/`-n` a claude, Devi no añade el suyo.
+
+**La función `claude`** también se gestiona desde la terminal:
+
+```bash
+devi shell-alias install        # o remove; status [--json] dice dónde está
+```
+
+Escribe un bloque entre `# >>> devi >>>` y `# <<< devi <<<` (nada fuera de las marcas; reinstalar lo reemplaza, `remove` lo quita) que llama al `devi` de la ruta estable. Antes de modificar un fichero por primera vez guarda una copia en `<fichero>.devi-backup`.
+
+| Shell | Fichero |
+|---|---|
+| zsh / bash | `~/.zshrc` y `~/.bashrc` si existen (y `~/.bash_profile` en macOS si existe); si no hay ninguno, el de tu `$SHELL` |
+| fish | `~/.config/fish/functions/claude.fish`, solo si existe `~/.config/fish` (no pisa una función `claude` tuya) |
+| PowerShell (Windows) | `%USERPROFILE%\Documents\PowerShell\Microsoft.PowerShell_profile.ps1` y `…\WindowsPowerShell\…`, se crean si faltan |
+| PowerShell (macOS/Linux) | `~/.config/powershell/Microsoft.PowerShell_profile.ps1`, solo si `pwsh` está instalado |
+
+Para usar el `claude` original sin Devi: `command claude …` (zsh/bash/fish), `claude.exe …` en PowerShell, o la variable `DEVI_NO_ALIAS=1` en cualquiera de ellos. Si el binario estable de `devi` no está, la función llama al `claude` original.
+
+Limitaciones:
+
+- Solo afecta a terminales nuevas; en las ya abiertas, recarga el perfil o abre otra.
+- Las sesiones abiertas desde un IDE o desde `cmd.exe` no pasan por la función: no tienen el canal en tiempo real, aunque siguen recibiendo las solicitudes cuando escribes.
+- Si OneDrive redirige tu carpeta Documentos, PowerShell lee el perfil desde la carpeta de OneDrive y no desde `%USERPROFILE%\Documents`: ese caso no está soportado (copia el bloque a mano en el fichero de `$PROFILE`).
+- Si tienes un `alias claude` en el perfil, el alias manda sobre la función.
 
 `devi` queda en una ruta estable tras el paso 4 del asistente. Si no está en tu `PATH`, usa la ruta completa:
 

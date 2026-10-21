@@ -57,7 +57,15 @@ Lanza una sesión con el canal de Devi y comprueba el entorno. La ruta del binar
 ~/.local/share/devi/bin/devi doctor
 ```
 
-La primera vez, Claude Code pide confirmar el canal en modo desarrollo. El estado trabajando/libre solo se empareja en sesiones lanzadas con `devi claude`.
+Para que escribir `claude` en la terminal haga lo mismo que `devi claude`, instala la función `claude` en tus perfiles de shell (la app lo hace en el asistente si dejas marcada la casilla):
+
+```bash
+~/.local/share/devi/bin/devi shell-alias install   # remove para quitarla; status --json para ver dónde está
+```
+
+Desde una terminal nueva, el uso normal es simplemente `claude` (`claude -c`, `claude --resume`… pasan tal cual); `devi claude` sigue funcionando. Para el `claude` original: `command claude` o `DEVI_NO_ALIAS=1 claude`. Detalles en [docs/instalacion.md](docs/instalacion.md#4-usar-devi-con-claude-code).
+
+La primera vez, Claude Code pide confirmar el canal en modo desarrollo. El estado trabajando/libre solo se empareja en sesiones lanzadas con `claude` (con la función instalada) o `devi claude`.
 
 La interfaz es la app de escritorio (`apps/desktop/`, `bun run --cwd apps/desktop tauri dev`).
 

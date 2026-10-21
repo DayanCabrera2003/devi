@@ -24,3 +24,24 @@ test("env de claude: DEVI_SESSION y DEVI_CHANNEL=1 solo si se pasa un flag de ca
   expect(claudeEnv(base, "api", buildClaudeArgs({ session: "api", mode: "dev", passthrough: [] })).DEVI_CHANNEL).toBe("1");
   expect(claudeEnv(base, "api", ["--name", "api"])).toEqual({ PATH: "/bin", DEVI_SESSION: "api" });
 });
+
+test("args de claude: si el usuario pasa su propio --name/-n, no se añade otro", () => {
+  for (const own of [["--name", "mio"], ["-n", "mio"], ["--name=mio"]]) {
+    expect(buildClaudeArgs({ session: "api", mode: "plugin", passthrough: ["-c", ...own] })).toEqual([
+      "--channels", "plugin:devi@devi-local", "-c", ...own,
+    ]);
+  }
+  // Después de un `--` de claude ya no son flags: --name se añade igual.
+  expect(buildClaudeArgs({ session: "api", mode: "plugin", passthrough: ["--", "-n"] })).toEqual([
+    "--channels", "plugin:devi@devi-local", "--name", "api", "--", "-n",
+  ]);
+});
+
+test("args de claude: -c y --resume se pasan tal cual", () => {
+  expect(buildClaudeArgs({ session: "web", mode: "plugin", passthrough: ["-c"] })).toEqual([
+    "--channels", "plugin:devi@devi-local", "--name", "web", "-c",
+  ]);
+  expect(buildClaudeArgs({ session: "web", mode: "plugin", passthrough: ["--resume", "abc"] })).toEqual([
+    "--channels", "plugin:devi@devi-local", "--name", "web", "--resume", "abc",
+  ]);
+});

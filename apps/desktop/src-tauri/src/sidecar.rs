@@ -1,5 +1,5 @@
 //! El binario `devi` empaquetado como sidecar. Desde la UI solo se permiten
-//! `install-integration [--json]` y `doctor`; el modo servidor tiene comandos propios y su proceso
+//! `install-integration [--json]`, `doctor` y `shell-alias install|remove|status --json`; el modo servidor tiene comandos propios y su proceso
 //! se mata al salir de la app.
 
 use serde::Serialize;
@@ -10,7 +10,14 @@ use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 
 /// Invocaciones exactas permitidas desde la UI (nunca `--from`, `--bin-dir`… ni `server`/`mcp`).
-const ALLOWED: [&[&str]; 3] = [&["install-integration"], &["install-integration", "--json"], &["doctor"]];
+const ALLOWED: [&[&str]; 6] = [
+    &["install-integration"],
+    &["install-integration", "--json"],
+    &["doctor"],
+    &["shell-alias", "install"],
+    &["shell-alias", "remove"],
+    &["shell-alias", "status", "--json"],
+];
 pub const LOG_LINES: usize = 200;
 pub const SERVER_PORT: u16 = 4747;
 
@@ -237,6 +244,12 @@ mod tests {
         assert!(check_args(&v(&["doctor"])).is_ok());
         assert!(check_args(&v(&["install-integration"])).is_ok());
         assert!(check_args(&v(&["install-integration", "--json"])).is_ok());
+        assert!(check_args(&v(&["shell-alias", "install"])).is_ok());
+        assert!(check_args(&v(&["shell-alias", "remove"])).is_ok());
+        assert!(check_args(&v(&["shell-alias", "status", "--json"])).is_ok());
+        assert!(check_args(&v(&["shell-alias", "status"])).is_err());
+        assert!(check_args(&v(&["shell-alias", "install", "--json"])).is_err());
+        assert!(check_args(&v(&["shell-alias"])).is_err());
         // --from instalaría otro binario: nunca desde el webview.
         assert!(check_args(&v(&["install-integration", "--from", "/tmp/x"])).is_err());
         assert!(check_args(&v(&["doctor", "--fix"])).is_err());

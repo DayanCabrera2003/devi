@@ -34,6 +34,12 @@ describe("parseCliArgs", () => {
     expect(parseCliArgs(["claude"], { DEVI_CHANNEL: "dev" })).toMatchObject({ channel: "dev" });
     // DEVI_CHANNEL=1 lo pone `devi claude` a su Claude Code: un `devi claude` anidado no debe fallar por eso.
     expect(parseCliArgs(["claude"], { DEVI_CHANNEL: "1" })).toMatchObject({ channel: "auto" });
+    // Lo que manda la función `claude` del shell: `devi claude -- "$@"`, también sin args.
+    expect(parseCliArgs(["claude", "--"])).toEqual({ cmd: "claude", session: undefined, channel: "auto", passthrough: [] });
+    expect(parseCliArgs(["claude", "--", "-c"])).toMatchObject({ session: undefined, passthrough: ["-c"] });
+    expect(parseCliArgs(["claude", "--", "--resume", "abc", "-n", "x", "--"])).toMatchObject({
+      session: undefined, passthrough: ["--resume", "abc", "-n", "x", "--"],
+    });
     expect(() => parseCliArgs(["claude", "--channel", "x"])).toThrow(CliArgError);
     expect(() => parseCliArgs(["claude", "--model", "opus"])).toThrow(/después de --/);
     expect(() => parseCliArgs(["claude", "--session"])).toThrow(/necesita un valor/);
@@ -47,6 +53,15 @@ describe("parseCliArgs", () => {
       cmd: "install-integration", from: "/a/devi", binDir: "/b", marketplaceDir: "/m", skipClaude: true, json: true,
     });
     expect(() => parseCliArgs(["install-integration", "--nope"])).toThrow(CliArgError);
+  });
+
+  test("shell-alias install|remove|status [--json]", () => {
+    expect(parseCliArgs(["shell-alias", "install"])).toEqual({ cmd: "shell-alias", action: "install", json: false });
+    expect(parseCliArgs(["shell-alias", "remove"])).toEqual({ cmd: "shell-alias", action: "remove", json: false });
+    expect(parseCliArgs(["shell-alias", "status", "--json"])).toEqual({ cmd: "shell-alias", action: "status", json: true });
+    expect(() => parseCliArgs(["shell-alias"])).toThrow(/install, remove o status/);
+    expect(() => parseCliArgs(["shell-alias", "borrar"])).toThrow(CliArgError);
+    expect(() => parseCliArgs(["shell-alias", "install", "--x"])).toThrow(CliArgError);
   });
 
   test("comando desconocido", () => {

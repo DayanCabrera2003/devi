@@ -58,6 +58,12 @@ export function notWholeMinutes(ms: number): string | null {
   return `${(ms / 1000).toLocaleString("es-ES", { maximumFractionDigits: 3 })} s`;
 }
 
+// Texto de error de una ejecución fallida de `devi` (stderr o stdout, sin el prefijo "[devi] ").
+export function deviFailure(out: { code: number | null; stdout: string; stderr: string }, fallback: string): string {
+  const text = (out.stderr.trim() || out.stdout.trim()).replace(/^\[devi\] /gm, "");
+  return text || `${fallback} (código ${out.code ?? "desconocido"})`;
+}
+
 // `devi install-integration --json` deja un objeto JSON en la última línea de stdout.
 export function lastJsonLine<T>(stdout: string): T | null {
   const line = stdout.trim().split(/\r?\n/).pop()?.trim() ?? "";

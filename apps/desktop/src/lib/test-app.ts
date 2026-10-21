@@ -8,7 +8,12 @@ import { ME, TEAM } from "./test-fixtures";
 
 // Conecta (team.refresh + subscribe con la API falsa) para que las acciones tengan API.
 // native: solo los comandos Rust que use el componente bajo prueba.
-export async function fakeApp(api: Record<string, unknown> = {}, native: Partial<Record<keyof Native, unknown>> = {}) {
+export async function fakeApp(api: Record<string, unknown> = {}, nativeOverrides: Partial<Record<keyof Native, unknown>> = {}) {
+  // Ajustes pregunta `devi shell-alias status --json` al montarse.
+  const native = {
+    runDevi: vi.fn(async () => ({ code: 0, stdout: '{"installed":false,"files":[]}', stderr: "" })),
+    ...nativeOverrides,
+  };
   const fullApi = {
     me: vi.fn(async () => ME),
     team: vi.fn(async () => TEAM),

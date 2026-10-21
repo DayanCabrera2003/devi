@@ -8,8 +8,17 @@ export function sessionNameFor(session: string | undefined, cwd: string): string
   return session ?? (basename(cwd) || "sesion");
 }
 
+// ¿El usuario ya pasa su propio --name/-n a claude? Solo cuentan los flags antes de un `--`.
+export function hasOwnName(passthrough: string[]): boolean {
+  const end = passthrough.indexOf("--");
+  const flags = end === -1 ? passthrough : passthrough.slice(0, end);
+  return flags.some((a) => a === "--name" || a === "-n" || a.startsWith("--name="));
+}
+
+// Con su propio --name no se añade el de Devi (DEVI_SESSION sigue saliendo de --session o la carpeta).
 export function buildClaudeArgs(opts: { session: string; mode: "plugin" | "dev"; passthrough: string[] }): string[] {
-  return [...channelArgs(opts.mode), "--name", opts.session, ...opts.passthrough];
+  const name = hasOwnName(opts.passthrough) ? [] : ["--name", opts.session];
+  return [...channelArgs(opts.mode), ...name, ...opts.passthrough];
 }
 
 const CHANNEL_FLAGS = new Set(["--channels", "--dangerously-load-development-channels"]);
