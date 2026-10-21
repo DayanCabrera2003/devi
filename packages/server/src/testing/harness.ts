@@ -23,6 +23,7 @@ export function createTestApp(opts: {
   db?: Database;
   clock?: FakeClock;
   dataDir?: string;
+  dev?: boolean; // por defecto true (testConfig)
 }) {
   const clock = opts.clock ?? new FakeClock();
   const dataDir = opts.dataDir ?? mkdtempSync(join(tmpdir(), "devi-test-"));
@@ -33,7 +34,7 @@ export function createTestApp(opts: {
     db: opts.db,
     now: clock.now,
     timers: clock,
-    config: testConfig({ dataDir, adminLogin: opts.adminLogin, importTeam: opts.importTeam }),
+    config: testConfig({ dataDir, adminLogin: opts.adminLogin, importTeam: opts.importTeam, dev: opts.dev ?? true }),
     log: () => {},
   });
 

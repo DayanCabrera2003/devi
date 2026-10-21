@@ -17,8 +17,8 @@ export type Flow = Awaited<ReturnType<typeof setupFlow>>;
 
 export const MODULES_UNDER_TEST = [team, settingsModule, sessionsModule, filesModule, requestsModule];
 
-export async function setupFlow() {
-  const t = createTestApp({ modules: MODULES_UNDER_TEST });
+export async function setupFlow(opts: { dev?: boolean } = {}) {
+  const t = createTestApp({ modules: MODULES_UNDER_TEST, dev: opts.dev });
   await t.app.start();
 
   // Registra una sesión y abre su SSE (queda viva).

@@ -344,7 +344,7 @@ export class RequestsManager {
     return out;
   }
 
-  // Solo para pruebas: mensaje "debug" a una sesión o a las sesiones vivas de una persona.
+  // Solo para pruebas (la ruta solo existe en modo dev): mensaje "debug" a una sesión o a las sesiones vivas de una persona.
   debugPush(access: Access, body: z.output<typeof API.debugPush.body>): number {
     const targets = body.sessionId ? [body.sessionId] : this.sessions.liveOf(body.memberId ?? access.memberId).map((s) => s.id);
     return targets.filter((id) => this.deliver(id, { kind: "debug", content: body.content, meta: {} })).length;

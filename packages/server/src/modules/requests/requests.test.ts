@@ -227,6 +227,12 @@ describe("app", () => {
     expect(f.deliveries(f.mariaApi.id).at(-1)).toEqual({ kind: "debug", content: "hola", meta: {} });
     expect((await post("maria@dev", "/api/v1/debug/push", {})).status).toBe(403);
   });
+
+  test("debugPush no existe fuera de dev: 404", async () => {
+    f = await setupFlow({ dev: false });
+    const res = await post("dayan@dev", "/api/v1/debug/push", { memberId: "m-maria" });
+    expect(res.status).toBe(404);
+  });
 });
 
 describe("la sesión desaparece", () => {

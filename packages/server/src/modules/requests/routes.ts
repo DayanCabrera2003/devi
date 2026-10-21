@@ -70,7 +70,10 @@ export function registerRequestRoutes(r: Router, ctx: ModuleContext, requests: R
     }),
   );
 
-  r.on(API.debugPush, async ({ request, access }) =>
-    json({ delivered: requests.debugPush(access, await readBody(request, API.debugPush.body)) }),
-  );
+  // Solo en modo dev: en producción la ruta no existe (404).
+  if (ctx.config.dev) {
+    r.on(API.debugPush, async ({ request, access }) =>
+      json({ delivered: requests.debugPush(access, await readBody(request, API.debugPush.body)) }),
+    );
+  }
 }
