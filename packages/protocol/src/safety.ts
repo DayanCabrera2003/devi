@@ -82,3 +82,140 @@ export function wrapUntrusted(kind: string, from: string, text: string, files: s
   const list = untrustedFilesBlock(files);
   return list ? `${body}\n${list}` : body;
 }
+
+// ---- detección heurística ----------------------------------------------------------------
+// Solo avisa: se puede esquivar (sinónimos, otro idioma, imágenes…). El control real sigue siendo
+// que una persona lee lo que llega y decide.
+
+export type InjectionLevel = "none" | "warn" | "high";
+export type InjectionScan = { level: InjectionLevel; reasons: string[] };
+
+type Rule = { level: "warn" | "high"; reason: string; test: (t: string) => boolean };
+const re = (r: RegExp) => (t: string) => r.test(t);
+
+// Palabras que piden algo (para distinguir "el token caduca" de "mándame tu token").
+const ASK = String.raw`(send|give|share|paste|post|upload|show|print|cat|read|leak|email|m[aá]nd(a|ame|e)|env[ií](a|ame|e)|p[aá]s(a|ame)|comparte|pega|sube|mu[eé]strame|dame|lee|imprime)`;
+const SECRET_WORDS = String.raw`(~\/\.ssh|\.ssh\/|id_rsa|id_ed25519|\.env\b|tokens?|passwords?|contrase[ñn]as?|credenciales|credentials|secret access key|aws (secret|access|credentials|keys?)|claves? (de AWS|privadas?|de API)|private keys?|api keys?)`;
+
+const INJECTION_RULES: Rule[] = [
+  {
+    level: "high",
+    reason: "Pide ignorar las instrucciones anteriores",
+    test: re(
+      /\b(ignore|disregard|forget|override)\b[^.\n]{0,30}\b(previous|prior|above|earlier|preceding|all)\b[^.\n]{0,20}\b(instructions?|prompts?|rules|directions)\b|\b(ignora|olvida|olv[ií]date de|omite|descarta)\b[^.\n]{0,25}\b(instrucciones|reglas|indicaciones|[oó]rdenes)\b[^.\n]{0,20}\b(anteriores|previas|de antes|que te dieron)\b|\b(ignora|olvida)\b (todo )?lo anterior\b/i,
+    ),
+  },
+  {
+    level: "high",
+    reason: "Pide ocultarle algo al usuario",
+    test: re(
+      /\b(do not|don't|dont|never)\s+(tell|inform|show|mention to|let)\s+(the\s+)?(user|human)\b|\bwithout (telling|asking) the user\b|\bno (le )?(digas|cuentes|muestres|avises|menciones)\b[^.\n]{0,15}\b(al )?usuario\b|\bsin que (el usuario|tu usuario) (lo )?(sepa|vea|se entere)\b/i,
+    ),
+  },
+  {
+    level: "high",
+    reason: "Descarga y ejecuta un script (curl/wget … | sh)",
+    test: re(/\b(curl|wget|iwr|invoke-webrequest)\b[^\n|]*\|\s*(sudo\s+)?(ba|z|k|da)?sh\b|\|\s*(iex|invoke-expression)\b/i),
+  },
+  { level: "high", reason: "Borrado masivo (rm -rf sobre / o ~)", test: re(/\brm\s+-[a-z]*(rf|fr)[a-z]*\s+(\/|~|\$HOME|\*)(\s|\/?$|\/\s|\/\*)/im) },
+  { level: "warn", reason: "Incluye un borrado recursivo (rm -rf)", test: re(/\brm\s+-[a-z]*(rf|fr)\b/i) },
+  {
+    level: "high",
+    reason: "Pide secretos o credenciales (claves SSH, .env, tokens, contraseñas)",
+    test: re(new RegExp(String.raw`\b${ASK}\b[^.\n]{0,60}${SECRET_WORDS}`, "i")),
+  },
+  {
+    level: "warn",
+    reason: "Menciona archivos de credenciales (~/.ssh, id_rsa, claves privadas)",
+    test: re(/~\/\.ssh|\bid_(rsa|ed25519|ecdsa)\b|\bprivate key\b|\bclave privada\b|aws_secret_access_key/i),
+  },
+  { level: "warn", reason: "Habla del system prompt", test: re(/\bsystem[ _-]?prompt\b|\bprompt del sistema\b/i) },
+  { level: "warn", reason: "Intenta cambiar tu papel (\"you are now\", \"eres ahora\")", test: re(/\byou are now\b|\b(eres|ser[aá]s) ahora\b|\bahora eres\b|\bact as (an? )?(unrestricted|jailbroken|DAN)\b|\bDAN\b mode/i) },
+  { level: "warn", reason: "Contiene un bloque largo en base64", test: re(/[A-Za-z0-9+/]{200,}={0,2}/) },
+  { level: "warn", reason: "Contiene una cadena hexadecimal muy larga", test: re(/\b[0-9a-fA-F]{100,}\b/) },
+  {
+    level: "warn",
+    reason: "Contiene código ofuscado (escapes, eval/atob, fromCharCode)",
+    test: re(/(\\x[0-9a-f]{2}){8,}|(\\u[0-9a-f]{4}){8,}|\beval\s*\(\s*(atob|unescape|decodeURIComponent)\b|String\.fromCharCode\s*\((\s*\d+\s*,){5,}|\bbase64\s+(-d|--decode)\b/i),
+  },
+  {
+    level: "warn",
+    reason: "Enlaza a un sitio de pegado en bruto (pastebin, paste.ee…)",
+    test: re(/https?:\/\/(www\.)?(pastebin\.com|paste\.ee|hastebin\.com|ghostbin\.\w+|termbin\.com|transfer\.sh|0x0\.st|rentry\.(co|org)|dpaste\.\w+|paste\.rs)\b/i),
+  },
+  {
+    level: "warn",
+    reason: "Enlaza a una dirección IP en vez de un dominio",
+    test: (t) => {
+      for (const m of t.matchAll(/https?:\/\/(\d{1,3}(?:\.\d{1,3}){3})(?=[:/\s]|$)/gi)) {
+        const ip = m[1]!;
+        if (!/^(127\.|0\.0\.0\.0$)/.test(ip)) return true;
+      }
+      return false;
+    },
+  },
+  { level: "warn", reason: "Enlaza a un dominio punycode (xn--), posible suplantación", test: re(/https?:\/\/[^\s/]*\bxn--/i) },
+  { level: "high", reason: "Contiene caracteres de control de dirección (bidi) que esconden texto", test: re(/[\u202A-\u202E\u2066-\u2069]/) },
+  { level: "warn", reason: "Contiene caracteres invisibles (zero-width)", test: re(/[\u200B-\u200D\u2060\uFEFF\u180E]/) },
+];
+
+export function scanForInjection(text: string): InjectionScan {
+  const hits = INJECTION_RULES.filter((r) => r.test(text));
+  // Un borrado peligroso ya cuenta como high: no se repite como aviso.
+  const reasons = [...new Set(hits.filter((h) => !(h.reason.startsWith("Incluye un borrado") && hits.some((x) => x.reason.startsWith("Borrado masivo")))).map((h) => h.reason))];
+  if (reasons.length === 0) return { level: "none", reasons: [] };
+  const high = hits.some((h) => h.level === "high") || reasons.length >= 3;
+  return { level: high ? "high" : "warn", reasons };
+}
+
+// ---- secretos en lo que sale ---------------------------------------------------------------
+
+export type SecretFinding = { label: string; excerpt: string };
+
+// Valores de ejemplo o referencias a variables: no son secretos.
+const PLACEHOLDER =
+  /^(string|number|boolean|null|undefined|none|true|false|required|optional|process\.env\b.*|env\b.*|os\.environ.*|getenv.*|\$.*|%.*%|<.*|\{.*|\[.*|\*+|x+|\.+|…|your[_-].*|tu[_-].*|changeme|example.*|ejemplo.*|placeholder.*|redacted|secret|password|contrase[ñn]a)$/i;
+
+type SecretRule = { label: string; pattern: RegExp; value?: (m: RegExpMatchArray) => string };
+
+const SECRET_RULES: SecretRule[] = [
+  { label: "Clave privada (BEGIN … PRIVATE KEY)", pattern: /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----/g },
+  { label: "Clave de acceso de AWS (AKIA…)", pattern: /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g },
+  { label: "Clave secreta de AWS", pattern: /aws_secret_access_key\s*[=:]\s*["']?[A-Za-z0-9/+]{30,}/gi },
+  { label: "Token de GitHub (ghp_…)", pattern: /\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{50,})\b/g },
+  { label: "Clave de API de Anthropic (sk-ant-…)", pattern: /\bsk-ant-[A-Za-z0-9_-]{20,}/g },
+  { label: "Clave de API (sk-…)", pattern: /\bsk-(?:proj-)?[A-Za-z0-9_-]{32,}/g },
+  { label: "Token de Slack (xox…)", pattern: /\bxox[abprs]-[A-Za-z0-9-]{20,}/g },
+  { label: "Clave de API de Google (AIza…)", pattern: /\bAIza[0-9A-Za-z_-]{35}\b/g },
+  { label: "Token JWT", pattern: /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g },
+  {
+    label: "Contraseña en claro (password=…)",
+    pattern: /\b[\w.-]*(?:password|passwd|pwd|contrase[ñn]a)\b["']?\s*[:=]\s*["']?([^\s"',;]{4,})/gi,
+    value: (m) => m[1]!,
+  },
+  {
+    label: "Clave o token en claro (api_key=…, secret=…)",
+    pattern: /\b[\w.-]*(?:api[_-]?key|secret[_-]?key|client[_-]?secret|access[_-]?token|auth[_-]?token|secret|token)\b["']?\s*[:=]\s*["']?([^\s"',;]{12,})/gi,
+    value: (m) => m[1]!,
+  },
+];
+
+const mask = (s: string) => (s.length <= 8 ? `${s.slice(0, 2)}…` : `${s.slice(0, 6)}…`);
+
+export function scanForSecrets(text: string): SecretFinding[] {
+  const out: SecretFinding[] = [];
+  const seen = new Set<string>();
+  for (const rule of SECRET_RULES) {
+    for (const m of text.matchAll(rule.pattern)) {
+      const value = rule.value ? rule.value(m) : m[0];
+      if (rule.value && (PLACEHOLDER.test(value) || /^(.)\1+$/.test(value))) continue;
+      if (seen.has(rule.label)) break;
+      // Un token ya reconocido por una regla específica no se repite como "clave en claro".
+      if (rule.value && out.some((o) => value.startsWith(o.excerpt.replace("…", "")))) continue;
+      seen.add(rule.label);
+      out.push({ label: rule.label, excerpt: mask(value) });
+      break;
+    }
+  }
+  return out;
+}
