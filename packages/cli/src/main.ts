@@ -38,6 +38,18 @@ async function main(argv: string[]): Promise<number | null> {
   }
 }
 
+// Qué imprimir y qué código devolver cuando algo lanza. Con `install-integration --json`
+// el contrato es una última línea JSON { ok:false, error, steps } y código 1, también ante errores de argumentos.
+export function fatalOutput(argv: string[], e: unknown): { code: number; stdout?: string; stderr?: string } {
+  const isArg = e instanceof CliArgError;
+  const message = isArg ? e.message : `[devi] ${(e as Error).message}`;
+  if (argv[0] === "hook") return { code: 0 };
+  if (argv[0] === "install-integration" && argv.includes("--json")) {
+    return { code: 1, stdout: JSON.stringify({ ok: false, error: isArg ? e.message : (e as Error).message, steps: [] }) };
+  }
+  return { code: isArg ? 2 : 1, stderr: message };
+}
+
 if (import.meta.main) {
   const argv = process.argv.slice(2);
   try {
@@ -45,8 +57,9 @@ if (import.meta.main) {
     if (code !== null) process.exit(code);
   } catch (e) {
     // `devi hook` nunca falla: ni siquiera con argumentos raros.
-    if (argv[0] === "hook") process.exit(0);
-    console.error(e instanceof CliArgError ? e.message : `[devi] ${(e as Error).message}`);
-    process.exit(e instanceof CliArgError ? 2 : 1);
+    const out = fatalOutput(argv, e);
+    if (out.stdout !== undefined) console.log(out.stdout);
+    if (out.stderr !== undefined) console.error(out.stderr);
+    process.exit(out.code);
   }
 }
