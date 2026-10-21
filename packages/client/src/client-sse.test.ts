@@ -60,7 +60,8 @@ describe("suscripciones", () => {
 
   test("subscribeUser reconecta tras una caída (espera inicial de 1 s)", async () => {
     let n = 0;
-    const srv = serve((req) => {
+    const srv = serve((req, url) => {
+      if (url.pathname === "/api/v1/presence/heartbeat") return Response.json({ ok: true });
       n++;
       return sseResponse([{ event: "team.updated", data: { type: "team.updated" } }], n === 1, req.signal);
     });
@@ -72,5 +73,59 @@ describe("suscripciones", () => {
     expect(n).toBe(2);
     expect(events.length).toBe(2);
     expect(statuses).toEqual(["connecting", "open", "reconnecting", "open"]);
+  });
+
+  const isBeat = (r: { path: string; method: string }) => r.path === "/api/v1/presence/heartbeat" && r.method === "POST";
+  const beatsOf = (srv: { seen: { path: string; method: string }[] }) => srv.seen.filter(isBeat);
+
+  test("subscribeUser manda heartbeat al conectar y cada heartbeatMs, y para al cancelar", async () => {
+    const bodies: unknown[] = [];
+    const srv = serve(async (req, url) => {
+      if (url.pathname === "/api/v1/presence/heartbeat") {
+        bodies.push(await req.json());
+        return Response.json({ ok: true });
+      }
+      return sseResponse([], false, req.signal);
+    });
+    const stop = createClient({ baseUrl: srv.url, heartbeatMs: 50 }).subscribeUser(() => {});
+    await Bun.sleep(230);
+    stop();
+    const n = beatsOf(srv).length;
+    expect(n).toBeGreaterThanOrEqual(4);
+    expect(bodies[0]).toEqual({});
+    await Bun.sleep(150);
+    expect(beatsOf(srv).length).toBe(n);
+  });
+
+  test("subscribeSession manda heartbeat con su sessionId", async () => {
+    const bodies: unknown[] = [];
+    const srv = serve(async (req, url) => {
+      if (url.pathname === "/api/v1/presence/heartbeat") {
+        bodies.push(await req.json());
+        return Response.json({ ok: true });
+      }
+      return sseResponse([], false, req.signal);
+    });
+    const stop = createClient({ baseUrl: srv.url, heartbeatMs: 1000 }).subscribeSession("s1", () => {});
+    await Bun.sleep(150);
+    stop();
+    expect(bodies).toEqual([{ sessionId: "s1" }]);
+  });
+
+  test("los errores del heartbeat se ignoran y el stream sigue", async () => {
+    const srv = serve((req, url) => {
+      if (url.pathname === "/api/v1/presence/heartbeat") return new Response("boom", { status: 500 });
+      return sseResponse([{ event: "team.updated", data: { type: "team.updated" } }], false, req.signal);
+    });
+    const events: UserEvent[] = [];
+    const statuses: SseStatus[] = [];
+    const stop = createClient({ baseUrl: srv.url, heartbeatMs: 30 }).subscribeUser((e) => events.push(e), {
+      onStatus: (s) => statuses.push(s),
+    });
+    await Bun.sleep(150);
+    stop();
+    expect(events).toEqual([{ type: "team.updated" }]);
+    expect(statuses).toEqual(["connecting", "open"]);
+    expect(beatsOf(srv).length).toBeGreaterThan(1);
   });
 });

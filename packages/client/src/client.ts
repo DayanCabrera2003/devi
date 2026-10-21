@@ -3,6 +3,7 @@ import {
   API_VERSION,
   DraftSchema,
   ErrorBodySchema,
+  PRESENCE,
   SESSION_EVENT,
   SessionDeliverySchema,
   UserEventSchema,
@@ -21,7 +22,10 @@ import { DeviApiError } from "./errors";
 import { subscribeSse, type FetchFn, type SseStatus } from "./sse";
 
 // requestTimeoutMs: opción interna (por defecto 15 s) para call, createDraft y downloadFile; los SSE no la usan.
-export type ClientOptions = { baseUrl: string; devUser?: string; fetch?: typeof fetch; requestTimeoutMs?: number };
+export type ClientOptions = { baseUrl: string; devUser?: string; fetch?: typeof fetch; requestTimeoutMs?: number;
+  // Opción interna (por defecto PRESENCE.heartbeatMs) para los tests: cada cuánto se manda el heartbeat de presencia.
+  heartbeatMs?: number;
+};
 
 // Rutas cuya respuesta no es JSON validable (z.any()): bytes, texto o SSE. Se listan por nombre
 // porque `instanceof z.ZodAny` no es fiable en zod 4 (los esquemas ya no son instancias de esa clase).
@@ -49,6 +53,7 @@ export function createClient(opts: ClientOptions): DeviClient {
     if (opts.devUser) h["X-Devi-Dev-User"] = opts.devUser;
     return h;
   };
+  const heartbeatMs = opts.heartbeatMs ?? PRESENCE.heartbeatMs;
   const timeoutMs = opts.requestTimeoutMs ?? 15_000;
   const urlFor = (path: string) => `${base}${path}`;
   // Los SSE llevan además versión y usuario de dev en la query (el servidor solo la mira en /events/*).
@@ -93,6 +98,29 @@ export function createClient(opts: ClientOptions): DeviClient {
     return r.data;
   }
 
+  // Presencia: mientras haya una suscripción, un heartbeat al conectar y cada heartbeatMs.
+  // Los errores se ignoran: nunca deben romper el stream.
+  function startHeartbeats(body: { sessionId?: string }) {
+    let timer: ReturnType<typeof setInterval> | null = null;
+    let stopped = false;
+    const beat = () => {
+      if (stopped) return;
+      send(API.heartbeat.method, API.heartbeat.path, { body: JSON.stringify(body), json: true }).then(
+        (res) => void res.body?.cancel().catch(() => {}),
+        () => {},
+      );
+    };
+    timer = setInterval(beat, heartbeatMs);
+    return {
+      beat,
+      stop() {
+        stopped = true;
+        if (timer) clearInterval(timer);
+        timer = null;
+      },
+    };
+  }
+
   return {
     async call(name, callOpts = {}) {
       const route = API[name];
@@ -116,30 +144,46 @@ export function createClient(opts: ClientOptions): DeviClient {
     },
 
     subscribeUser(onEvent, subOpts = {}) {
-      return subscribeSse({
+      const hb = startHeartbeats({});
+      const stopSse = subscribeSse({
         url: sseUrlFor(API.userEvents.path),
         headers: headers(),
         fetch: doFetch,
-        onStatus: subOpts.onStatus,
+        onStatus: (s) => {
+          if (s === "open") hb.beat();
+          subOpts.onStatus?.(s);
+        },
         onFrame: (f) => {
           const e = safeJson(f.data, UserEventSchema);
           if (e && e.type === f.event) onEvent(e);
         },
       });
+      return () => {
+        hb.stop();
+        stopSse();
+      };
     },
 
     subscribeSession(sessionId, onDelivery, subOpts = {}) {
-      return subscribeSse({
+      const hb = startHeartbeats({ sessionId });
+      const stopSse = subscribeSse({
         url: sseUrlFor(buildPath(API.sessionEvents.path, { id: sessionId })),
         headers: headers(),
         fetch: doFetch,
-        onStatus: subOpts.onStatus,
+        onStatus: (s) => {
+          if (s === "open") hb.beat();
+          subOpts.onStatus?.(s);
+        },
         onFrame: (f) => {
           if (f.event !== SESSION_EVENT) return;
           const d = safeJson(f.data, SessionDeliverySchema);
           if (d) onDelivery(d);
         },
       });
+      return () => {
+        hb.stop();
+        stopSse();
+      };
     },
   };
 }
