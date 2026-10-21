@@ -41,6 +41,19 @@ describe("loadClientConfig", () => {
     expect(loadClientConfig(sys())).rejects.toThrow(/Abre la app de Devi/);
   });
 
+  test("serverUrl vacío (o solo espacios) o ausente cuenta como falta: mensaje amable", async () => {
+    for (const cfg of [{ serverUrl: "" }, { serverUrl: "   " }, { devUser: "maria@dev" }]) {
+      writeFileSync(join(dir, "c.json"), JSON.stringify(cfg));
+      await expect(loadClientConfig(sys())).rejects.toThrow(/falta la URL del servidor.*Abre la app de Devi/);
+    }
+  });
+
+  test("serverUrl vacío en el fichero: DEVI_SERVER_URL lo sustituye", async () => {
+    writeFileSync(join(dir, "c.json"), JSON.stringify({ serverUrl: "", devUser: "maria@dev" }));
+    const c = await loadClientConfig(sys({ DEVI_SERVER_URL: "http://127.0.0.1:4848" }));
+    expect(c).toMatchObject({ serverUrl: "http://127.0.0.1:4848", devUser: "maria@dev" });
+  });
+
   test("JSON roto o URL inválida → ConfigError", async () => {
     writeFileSync(join(dir, "c.json"), "{");
     expect(loadClientConfig(sys())).rejects.toThrow(/no es JSON válido/);

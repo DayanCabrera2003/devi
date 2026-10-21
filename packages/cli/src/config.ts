@@ -5,8 +5,10 @@ import { clientConfigPath, defaultReceivedDir, type Sys } from "./paths";
 
 // <config del SO>/devi/config.json. La escribe la app de escritorio; la CLI solo la lee.
 // Las claves desconocidas se ignoran (la app puede guardar más cosas).
+// serverUrl vacío (la app aún no terminó el asistente) o ausente cuenta como "falta": así sale el
+// mensaje amable de abajo y DEVI_SERVER_URL puede sustituirlo.
 export const ClientConfigSchema = z.object({
-  serverUrl: z.url(),
+  serverUrl: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.url().optional()),
   devUser: z.string().min(1).optional(),
   receivedDir: z.string().min(1).optional(),
 });
