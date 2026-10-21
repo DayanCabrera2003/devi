@@ -392,6 +392,18 @@ export class DeviApp {
     this.phase = "wizard";
   }
 
+  // Al volver a ejecutar el asistente: mientras config.json siga completo (el paso 3 aún no lo
+  // ha reescrito con setupDone: false) se puede volver a la app sin cambiar nada.
+  get canCancelWizard(): boolean {
+    return !!this.config?.serverUrl && this.prefs.setupDone;
+  }
+
+  async cancelWizard(): Promise<void> {
+    if (!this.canCancelWizard) return;
+    this.phase = "app";
+    await this.connect();
+  }
+
   // Desde el tray (evento): solo estado local.
   setPaused(paused: boolean): void {
     this.paused = paused;

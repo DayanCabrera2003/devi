@@ -30,7 +30,7 @@ export function truncate(s: string, max = 140): string {
 export type UrlCheck = { ok: true; url: string } | { ok: false; error: string };
 
 // El servidor se publica con `tailscale serve` en https://<equipo>.<tailnet>.ts.net.
-// http solo se admite contra 127.0.0.1/localhost (servidor en modo dev).
+// http solo se admite contra 127.0.0.1, localhost o [::1] (servidor en modo dev), igual que en Rust.
 export function normalizeServerUrl(raw: string): UrlCheck {
   const text = raw.trim().replace(/\/+$/, "");
   let u: URL;
@@ -39,7 +39,7 @@ export function normalizeServerUrl(raw: string): UrlCheck {
   } catch {
     return { ok: false, error: "Escribe una URL completa, p. ej. https://pc.tu-tailnet.ts.net" };
   }
-  const local = u.hostname === "127.0.0.1" || u.hostname === "localhost";
+  const local = u.hostname === "127.0.0.1" || u.hostname === "localhost" || u.hostname === "[::1]";
   if (u.protocol === "http:" && local) return { ok: true, url: u.origin };
   if (u.protocol !== "https:") return { ok: false, error: "La URL debe empezar por https://" };
   if (!u.hostname.endsWith(".ts.net")) {
@@ -50,3 +50,14 @@ export function normalizeServerUrl(raw: string): UrlCheck {
 
 export const msToMinutes = (ms: number) => Math.round(ms / 60_000);
 export const minutesToMs = (min: number) => Math.round(min * 60_000);
+
+// `devi install-integration --json` deja un objeto JSON en la última línea de stdout.
+export function lastJsonLine<T>(stdout: string): T | null {
+  const line = stdout.trim().split(/\r?\n/).pop()?.trim() ?? "";
+  if (!line.startsWith("{")) return null;
+  try {
+    return JSON.parse(line) as T;
+  } catch {
+    return null;
+  }
+}

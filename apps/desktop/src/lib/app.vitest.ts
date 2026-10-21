@@ -340,6 +340,25 @@ describe("DeviApp", () => {
     expect(t.api.subscribe).toHaveBeenCalledOnce();
   });
 
+  test("volver a ejecutar el asistente se puede cancelar mientras la config siga completa", async () => {
+    const t = setup();
+    await t.app.boot();
+    t.app.restartWizard();
+    expect(t.app.phase).toBe("wizard");
+    expect(t.app.canCancelWizard).toBe(true);
+    await t.app.cancelWizard();
+    expect(t.app.phase).toBe("app");
+    expect(t.api.subscribe).toHaveBeenCalledTimes(2);
+  });
+
+  test("el primer arranque no se puede cancelar", async () => {
+    const t = setup(null);
+    await t.app.boot();
+    expect(t.app.canCancelWizard).toBe(false);
+    await t.app.cancelWizard();
+    expect(t.app.phase).toBe("wizard");
+  });
+
   describe("contrato con el cliente y tarjetas", () => {
     const mixed: UserEvent[] = [
       { type: "draft.awaiting", draft: draft() },

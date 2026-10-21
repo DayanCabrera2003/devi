@@ -1,3 +1,5 @@
+<script lang="ts"></script>
+
 <div class="command">
   <p>Falta publicar el servidor en tu tailnet. Ejecuta en una terminal de este equipo:</p>
   <p class="code">tailscale serve --bg 4747</p>
