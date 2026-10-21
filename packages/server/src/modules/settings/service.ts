@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { DEFAULT_SETTINGS, SettingsSchema, type Settings } from "@devi/protocol";
+import { HttpError } from "../../core/http";
 import type { SettingsService } from "../../core/services";
 import type { SettingsStore } from "./store";
 
@@ -19,6 +20,9 @@ export class SettingsManager implements SettingsService {
 
   update(patch: Partial<Settings>): Settings {
     const next = SettingsSchema.parse({ ...this.get(), ...patch });
+    if (next.fileMaxAgeDays < next.fileRetentionDays) {
+      throw new HttpError(400, "fileMaxAgeDays (tope de archivos) no puede ser menor que fileRetentionDays (retención)", { code: "invalid" });
+    }
     this.db.transaction(() => {
       for (const k of KEYS) if (patch[k] !== undefined) this.store.set(k, next[k]);
     })();

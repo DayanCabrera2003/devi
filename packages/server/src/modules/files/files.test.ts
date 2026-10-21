@@ -92,7 +92,7 @@ describe("archivos", () => {
 
     t.cleanup();
     const again = await setup();
-    (t.app.ctx.services.get("settings") as SettingsManager).update({ fileMaxAgeDays: 1 });
+    (t.app.ctx.services.get("settings") as SettingsManager).update({ fileRetentionDays: 1, fileMaxAgeDays: 1 });
     t.clock.advance(DAY);
     expect((await download("a@dev", again.metas[0]!.id)).status).toBe(410);
   });
