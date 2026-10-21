@@ -17,6 +17,13 @@ describe("loadClientConfig", () => {
     });
   });
 
+  test("acepta y ignora claves desconocidas (la app guarda las suyas bajo `app`)", async () => {
+    writeFileSync(join(dir, "c.json"), JSON.stringify({ serverUrl: "https://pc.tail.ts.net", app: { theme: "dark", nested: { a: 1 } }, other: 1 }));
+    expect(await loadClientConfig(sys())).toEqual({
+      serverUrl: "https://pc.tail.ts.net", devUser: undefined, receivedDir: "/home/a/Devi/recibidos", path: join(dir, "c.json"),
+    });
+  });
+
   test("receivedDir del fichero", async () => {
     writeFileSync(join(dir, "c.json"), JSON.stringify({ serverUrl: "https://pc.tail.ts.net", receivedDir: "/r" }));
     expect((await loadClientConfig(sys())).receivedDir).toBe("/r");
