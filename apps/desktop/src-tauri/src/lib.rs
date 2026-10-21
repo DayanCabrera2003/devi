@@ -4,6 +4,7 @@
 // Módulos nativos (se añaden en las tareas 5 a 9).
 mod config;
 mod files;
+mod sidecar;
 mod tailscale;
 
 use tauri::{Manager, WindowEvent};
@@ -25,6 +26,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
+        .manage(sidecar::ServerState::default())
         .on_window_event(|window, event| {
             // Cerrar una ventana la oculta: Devi sigue vivo en la bandeja del sistema.
             if let WindowEvent::CloseRequested { api, .. } = event {
@@ -41,6 +43,10 @@ pub fn run() {
             files::save_db_export,
             tailscale::tailscale_self_login,
             tailscale::tailscale_serve_configured,
+            sidecar::run_devi,
+            sidecar::start_server,
+            sidecar::stop_server,
+            sidecar::server_status,
         ])
         .run(tauri::generate_context!())
         .expect("no se pudo iniciar Devi");
