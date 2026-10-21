@@ -1,5 +1,5 @@
-import { readFile, stat } from "node:fs/promises";
-import { basename, isAbsolute, resolve } from "node:path";
+import { readFile, realpath, stat } from "node:fs/promises";
+import { basename, isAbsolute, relative, resolve, sep } from "node:path";
 import { FILE_LIMITS } from "@devi/protocol";
 
 export type LocalFile = { name: string; content: string };
@@ -17,9 +17,27 @@ export async function readLocalFiles(paths: string[], cwd: string): Promise<File
   const errors: string[] = [];
   const files: LocalFile[] = [];
   const seen = new Set<string>();
+  let realCwd: string;
+  try {
+    realCwd = await realpath(cwd);
+  } catch {
+    return { ok: false, error: `No existe la carpeta de la sesión (${cwd}).` };
+  }
   for (const p of paths) {
     const full = isAbsolute(p) ? p : resolve(cwd, p);
     const name = basename(full);
+    let real: string;
+    try {
+      real = await realpath(full);
+    } catch {
+      errors.push(`${p}: no existe`);
+      continue;
+    }
+    const rel = relative(realCwd, real);
+    if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+      errors.push(`${p}: Solo se pueden adjuntar archivos dentro del proyecto (${cwd})`);
+      continue;
+    }
     if (seen.has(name)) {
       errors.push(`${p}: ya hay otro archivo llamado "${name}" (renómbralo)`);
       continue;
@@ -27,7 +45,7 @@ export async function readLocalFiles(paths: string[], cwd: string): Promise<File
     seen.add(name);
     let info;
     try {
-      info = await stat(full);
+      info = await stat(real);
     } catch {
       errors.push(`${p}: no existe`);
       continue;
@@ -40,7 +58,7 @@ export async function readLocalFiles(paths: string[], cwd: string): Promise<File
       errors.push(`${p}: ocupa ${kb(info.size)} (máximo ${kb(FILE_LIMITS.maxBytes)})`);
       continue;
     }
-    const bytes = await readFile(full);
+    const bytes = await readFile(real);
     if (bytes.includes(0)) {
       errors.push(`${p}: parece binario (tiene bytes NUL); solo se admiten archivos de texto`);
       continue;

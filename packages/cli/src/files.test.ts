@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readLocalFiles, safeFileName } from "./files";
@@ -53,4 +53,34 @@ test("safeFileName quita rutas y caracteres peligrosos", () => {
   expect(safeFileName("..")).toBe("archivo");
   expect(safeFileName(".env")).toBe("env");
   expect(safeFileName("")).toBe("archivo");
+});
+
+describe("readLocalFiles: confinamiento al cwd", () => {
+  const outside = mkdtempSync(join(tmpdir(), "devi-outside-"));
+  writeFileSync(join(outside, "secreto.txt"), "clave");
+  const project = mkdtempSync(join(tmpdir(), "devi-proj-"));
+  writeFileSync(join(project, "ok.txt"), "ok");
+  symlinkSync(join(outside, "secreto.txt"), join(project, "enlace.txt"));
+
+  test("rechaza una ruta absoluta fuera del proyecto", async () => {
+    const r = await readLocalFiles([join(outside, "secreto.txt")], project);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toContain("Solo se pueden adjuntar archivos dentro del proyecto");
+  });
+
+  test("rechaza ../ que escapa", async () => {
+    const r = await readLocalFiles([`../${outside.split("/").pop()}/secreto.txt`], project);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toContain("Solo se pueden adjuntar archivos dentro del proyecto");
+  });
+
+  test("rechaza un symlink que apunta fuera", async () => {
+    const r = await readLocalFiles(["enlace.txt"], project);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toContain("Solo se pueden adjuntar archivos dentro del proyecto");
+  });
+
+  test("acepta un archivo relativo normal", async () => {
+    expect(await readLocalFiles(["ok.txt"], project)).toEqual({ ok: true, files: [{ name: "ok.txt", content: "ok" }] });
+  });
 });
