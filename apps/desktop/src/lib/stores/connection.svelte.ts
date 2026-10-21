@@ -1,4 +1,4 @@
-import { classifyError } from "../api";
+import { classifyError, isApiFailure } from "../api";
 
 export type ConnState =
   | { status: "connecting" }
@@ -6,8 +6,12 @@ export type ConnState =
   | { status: "reconnecting" }
   | { status: "unknown_login"; login: string }
   | { status: "update_required"; minVersion: string }
-  | { status: "blocked"; message: string }; // 403 origin, 401 sin identidad
+  | { status: "blocked"; message: string }; // 403 origin, missing_perm u otro 401/403: reintentar no sirve
 
+const GENERIC_BLOCK = "El servidor de Devi cerró la conexión y no se volverá a intentar sola. Pulsa Reintentar.";
+
+// Error al conectar (team.refresh) o "failed" del cliente. Solo los fallos de red y los 5xx
+// reconectan solos; un 401/403/426 necesita que alguien haga algo.
 export function fromError(e: unknown): ConnState {
   const k = classifyError(e);
   switch (k.kind) {
@@ -17,19 +21,25 @@ export function fromError(e: unknown): ConnState {
       return { status: "update_required", minVersion: k.minVersion };
     case "origin":
     case "no_identity":
+    case "missing_perm":
       return { status: "blocked", message: k.message };
     default:
+      if (isApiFailure(e) && (e.status === 401 || e.status === 403)) return { status: "blocked", message: k.message };
       return { status: "reconnecting" };
   }
 }
 
-// Traduce onStatus de @devi/client. Si cambian los nombres de estado del cliente, solo se toca esto.
+// Traduce onStatus de @devi/client ("connecting" | "open" | "reconnecting" | "failed").
+// "failed" es terminal: el cliente ya no reintenta, así que nunca se muestra como "reconectando".
 export function fromClient(status: string, err?: unknown): ConnState {
-  if (err !== undefined) {
-    const s = fromError(err);
-    if (s.status !== "reconnecting") return s;
+  if (status === "failed") {
+    const s = err === undefined ? null : fromError(err);
+    if (s && s.status !== "reconnecting") return s;
+    return { status: "blocked", message: err === undefined ? GENERIC_BLOCK : classifyError(err).message || GENERIC_BLOCK };
   }
-  return status === "open" || status === "connected" ? { status: "connected" } : { status: "reconnecting" };
+  if (status === "open" || status === "connected") return { status: "connected" };
+  if (status === "connecting") return { status: "connecting" };
+  return { status: "reconnecting" };
 }
 
 export function statusLabel(s: ConnState): string {

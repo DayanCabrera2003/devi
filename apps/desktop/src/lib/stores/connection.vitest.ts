@@ -13,6 +13,39 @@ describe("conexión", () => {
     expect(fromClient("failed", fatal(401, {})).status).toBe("blocked");
   });
 
+  test("failed nunca es reconnecting: missing_perm bloquea con un mensaje legible", () => {
+    const s = fromClient("failed", fatal(403, { code: "missing_perm", perm: "requests.send" }));
+    expect(s.status).toBe("blocked");
+    expect(s.status === "blocked" && s.message).toContain("permiso");
+  });
+
+  test("failed con 401 bloquea", () => {
+    expect(fromClient("failed", fatal(401, { code: "no_identity" })).status).toBe("blocked");
+  });
+
+  test("failed con cualquier otro 403 bloquea con el texto del servidor", () => {
+    expect(fromClient("failed", fatal(403, { code: "forbidden", error: "Estás desactivado" }))).toEqual({
+      status: "blocked",
+      message: "Estás desactivado",
+    });
+  });
+
+  test("failed con code version va a la pantalla de actualizar", () => {
+    expect(fromClient("failed", fatal(426, { code: "version", minVersion: "3.0.0" }))).toEqual({
+      status: "update_required",
+      minVersion: "3.0.0",
+    });
+  });
+
+  test("failed sin un error reconocible tampoco es reconnecting", () => {
+    expect(fromClient("failed").status).toBe("blocked");
+    expect(fromClient("failed", new Error("raro")).status).toBe("blocked");
+  });
+
+  test("un 403 missing_perm al conectar bloquea", () => {
+    expect(fromError(fatal(403, { code: "missing_perm", perm: "requests.send" })).status).toBe("blocked");
+  });
+
   test("un error de red reconecta", () => {
     expect(fromError(new TypeError("Failed to fetch"))).toEqual({ status: "reconnecting" });
   });

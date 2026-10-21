@@ -1,5 +1,6 @@
 <script lang="ts">
-  // 403 origin o 401 sin identidad: el servidor rechaza la conexión por cómo se llega a él.
+  // Bloqueo genérico: 403 origin, missing_perm u otro 401/403, o un "failed" terminal del cliente.
+  // Reintentar no es automático: lo decide la persona.
   import Devi from "../components/Devi.svelte";
   import { useApp } from "../lib/context";
 

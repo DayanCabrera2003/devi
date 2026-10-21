@@ -10,6 +10,7 @@ const CONFIG: ClientConfig = { serverUrl: "https://pc.t.ts.net", app: { notifica
 function setup(config: ClientConfig | null = CONFIG) {
   let onEvent: (e: UserEvent) => void = () => {};
   let onStatus: (s: string, err?: unknown) => void = () => {};
+  const live = { subs: 0, unsubscribes: 0 };
   const api = {
     me: vi.fn(async () => ME),
     team: vi.fn(async () => TEAM),
@@ -18,7 +19,14 @@ function setup(config: ClientConfig | null = CONFIG) {
     subscribe: vi.fn((ev: (e: UserEvent) => void, st: (s: string, err?: unknown) => void) => {
       onEvent = ev;
       onStatus = st;
-      return () => {};
+      live.subs++;
+      let done = false;
+      return () => {
+        if (done) return;
+        done = true;
+        live.subs--;
+        live.unsubscribes++;
+      };
     }),
   };
   const native = {
@@ -39,6 +47,12 @@ function setup(config: ClientConfig | null = CONFIG) {
     app, api, native, notify, emitMascot,
     event: (e: UserEvent) => onEvent(e),
     status: (s: string, err?: unknown) => onStatus(s, err),
+    get liveSubs() {
+      return live.subs;
+    },
+    get unsubscribes() {
+      return live.unsubscribes;
+    },
   };
 }
 
@@ -106,6 +120,34 @@ describe("DeviApp", () => {
     t.api.me.mockRejectedValue({ status: 403, body: { error: "x", code: "origin" } });
     await t.app.boot();
     expect(t.app.conn.state.status).toBe("blocked");
+  });
+
+  test("failed + missing_perm: bloqueada (nunca reconectando) y se cancela la suscripción", async () => {
+    const t = setup();
+    await t.app.boot();
+    t.status("open");
+    t.status("failed", { status: 403, body: { error: "x", code: "missing_perm", perm: "requests.send" } });
+    expect(t.app.conn.state.status).toBe("blocked");
+    expect(t.app.conn.label).not.toContain("reconectando");
+    expect(t.unsubscribes).toBe(1);
+  });
+
+  test("failed + 401: bloqueada", async () => {
+    const t = setup();
+    await t.app.boot();
+    t.status("failed", { status: 401, body: { error: "x", code: "no_identity" } });
+    expect(t.app.conn.state.status).toBe("blocked");
+  });
+
+  test("connect() con 403 missing_perm: bloqueada, sin reintentos ni suscripción", async () => {
+    vi.useFakeTimers();
+    const t = setup();
+    t.api.me.mockRejectedValue({ status: 403, body: { error: "x", code: "missing_perm", perm: "requests.send" } });
+    await t.app.boot();
+    expect(t.app.conn.state.status).toBe("blocked");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(t.api.me).toHaveBeenCalledOnce();
+    expect(t.api.subscribe).not.toHaveBeenCalled();
   });
 
   test("sin red reintenta con espera", async () => {

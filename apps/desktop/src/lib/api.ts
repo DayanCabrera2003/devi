@@ -87,7 +87,7 @@ export function classifyError(e: unknown): ErrorInfo {
           "El servidor no sabe quién eres. Conéctate con la URL https://<equipo>.<tailnet>.ts.net (no con 127.0.0.1), con Tailscale activo y `tailscale serve` configurado en el servidor.",
       };
     }
-    if (e.status === 426) return { kind: "update_required", minVersion: b.minVersion ?? "", message: msg };
+    if (e.status === 426 || b.code === "version") return { kind: "update_required", minVersion: b.minVersion ?? "", message: msg };
     if (e.status === 409) return { kind: "conflict", message: msg };
     return { kind: "other", message: msg };
   }
