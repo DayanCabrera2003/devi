@@ -1,0 +1,23 @@
+import { API } from "@devi/protocol";
+import { readBody } from "../../core/body";
+import { json } from "../../core/http";
+import type { ModuleContext } from "../../core/module";
+import type { Router } from "../../core/router";
+import type { SettingsManager } from "./service";
+
+export function registerSettingsRoutes(r: Router, ctx: ModuleContext, settings: SettingsManager): void {
+  r.on(API.getSettings, () => json(settings.get()));
+
+  r.on(API.updateSettings, async ({ request }) => json(settings.update(await readBody(request, API.updateSettings.body))));
+
+  // Copia completa de la base de datos (también funciona con :memory:).
+  r.on(API.exportDb, () => {
+    const day = new Date(ctx.now()).toISOString().slice(0, 10);
+    return new Response(ctx.db.serialize(), {
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "Content-Disposition": `attachment; filename="devi-${day}.db"`,
+      },
+    });
+  });
+}
