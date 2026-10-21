@@ -1,0 +1,54 @@
+{
+  "name": "devi",
+  "version": "1.0.0",
+  "description": "Devi: conecta las sesiones de Claude Code de tu equipo (solicitudes, respuestas y archivos con autorización humana)",
+  "author": {
+    "name": "Devi"
+  },
+  "mcpServers": {
+    "devi": {
+      "command": "devi",
+      "args": [
+        "mcp"
+      ]
+    }
+  },
+  "channels": [
+    {
+      "server": "devi",
+      "displayName": "Devi"
+    }
+  ],
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "devi",
+            "args": [
+              "hook",
+              "working"
+            ],
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "devi",
+            "args": [
+              "hook",
+              "idle"
+            ],
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
