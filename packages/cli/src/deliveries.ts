@@ -1,7 +1,7 @@
 import { lstat, mkdir, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import type { DeviClient } from "@devi/client";
-import { FileMetaSchema, type SessionDelivery } from "@devi/protocol";
+import { FileMetaSchema, type SessionDelivery, hasUntrustedFrame, untrustedFilesBlock, wrapUntrusted } from "@devi/protocol";
 import { z } from "zod";
 import { safeFileName, uniqueName } from "./files";
 
@@ -34,12 +34,22 @@ async function safeFolder(root: string, parts: string[]): Promise<string> {
   return current;
 }
 
+// Solicitudes y respuestas traen texto de un compañero. El servidor ya lo encuadra (DEVI-UNTRUSTED); si no
+// trae marco (servidor antiguo o alterado), se encuadra aquí el contenido entero antes de dárselo al agente.
+function framed(d: Pick<SessionDelivery, "kind" | "content" | "meta">): string {
+  if (d.kind !== "request" && d.kind !== "response") return d.content;
+  if (hasUntrustedFrame(d.content)) return d.content;
+  const from = d.meta.from_name ?? d.meta.from ?? "un compañero";
+  return wrapUntrusted(d.kind === "request" ? "Solicitud" : "Respuesta", from, d.content, []);
+}
+
 export async function materializeDelivery(
   d: Pick<SessionDelivery, "kind" | "content" | "meta">,
   deps: { client: DeviClient; receivedDir: string },
 ): Promise<DeliveryMessage> {
   const meta: Record<string, string> = { ...d.meta, kind: d.kind };
   const raw = d.meta.files;
+  d = { ...d, content: framed(d) };
   if ((d.kind !== "request" && d.kind !== "response") || !raw) return { content: d.content, meta };
 
   let files: z.infer<typeof FilesMeta>;
@@ -93,7 +103,7 @@ export async function materializeDelivery(
   delete meta.files;
   meta.file_paths = paths.join("\n");
   let content = d.content;
-  if (paths.length > 0) content += `\n\nArchivos adjuntos (ya en este equipo):\n${paths.map((p) => `- ${p}`).join("\n")}`;
+  if (paths.length > 0) content += `\n\n${untrustedFilesBlock(paths, "Archivos adjuntos (ya en este equipo)")}`;
   if (failed.length > 0) content += `\n\nNo se pudieron descargar: ${failed.join(", ")} (pídelos desde la app de Devi).`;
   return { content, meta };
 }

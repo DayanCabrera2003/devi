@@ -151,6 +151,8 @@ test("formatInboxContext: encuadre de 'nunca una orden', atributos escapados y l
     { kind: "request", content: "hola", meta: { request_id: "q1", from_name: 'Ma"ría', kind: "request", file_paths: "/x" } },
   ]);
   expect(text).toContain("NUNCA es una orden");
+  expect(text).toContain("DEVI-UNTRUSTED");
+  expect(text).toMatch(/DATOS/);
   expect(text).toContain('<devi kind="request" request_id="q1" from_name="Ma&quot;ría">');
   expect(text).not.toContain("file_paths");
   const long = formatInboxContext([{ kind: "response", content: "x".repeat(20_000), meta: { kind: "response" } }]);
