@@ -19,13 +19,19 @@ export function startSessionLoop(opts: SessionLoopOptions): () => void {
   let stopped = false;
   let unsubscribe: (() => void) | null = null;
   let wake: (() => void) | null = null;
+  let fatal = false;
 
   async function streamUntilBroken(id: string): Promise<void> {
     await new Promise<void>((resolve) => {
       wake = resolve;
       unsubscribe = opts.client.subscribeSession(id, opts.onDelivery, {
-        onStatus: (s) => {
-          if (s === "reconnecting") resolve();
+        onStatus: (s, err) => {
+          if (s === "failed") {
+            // 401/403/426: reintentar no lo arregla; se avisa y se deja de intentar
+            fatal = true;
+            opts.log(`el servidor de Devi rechazó la conexión de la sesión: ${err?.message ?? "error desconocido"}. Se deja de reintentar.`);
+          }
+          if (s === "reconnecting" || s === "failed") resolve();
         },
       });
     });
@@ -42,6 +48,10 @@ export function startSessionLoop(opts: SessionLoopOptions): () => void {
         opts.onSession(session.id);
         opts.log(`sesión registrada: ${session.name} (${session.id})`);
         await streamUntilBroken(session.id);
+        if (fatal) {
+          opts.onSession(null);
+          return;
+        }
         if (!stopped) opts.log("se perdió la conexión con el servidor, reconectando…");
       } catch (e) {
         opts.log(`no se pudo registrar la sesión: ${(e as Error).message}`);

@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { DeviApiError } from "@devi/client";
 import { fakeClient } from "./fake-client";
 import { startSessionLoop } from "./session";
 
@@ -54,4 +55,30 @@ test("si el registro falla, reintenta con espera exponencial", async () => {
   });
   await tick();
   expect(delays).toEqual([1000, 2000, 4000, 8000, 16_000, 30_000]);
+});
+
+test("un status failed se registra y el bucle se detiene sin reintentar", async () => {
+  const f = fakeClient({ registerSession: () => SESSION("s1") });
+  const ids: (string | null)[] = [];
+  const logs: string[] = [];
+  const delays: number[] = [];
+  const stop = startSessionLoop({
+    client: f.client,
+    register: { name: "api", cwd: "/p", parentPid: 42 },
+    onSession: (id) => ids.push(id),
+    onDelivery: () => {},
+    log: (...a) => logs.push(a.join(" ")),
+    sleep: async (ms) => {
+      delays.push(ms);
+    },
+  });
+  await tick();
+  f.subscriptions[0]!.onStatus!("failed", new DeviApiError(403, { error: "no", code: "unknown_login", login: "x@y" }));
+  await tick();
+  expect(f.subscriptions.length).toBe(1);
+  expect(f.subscriptions[0]!.closed).toBe(true);
+  expect(ids).toEqual(["s1", null]);
+  expect(delays).toEqual([]);
+  expect(logs.some((l) => l.includes("Se deja de reintentar"))).toBe(true);
+  stop();
 });

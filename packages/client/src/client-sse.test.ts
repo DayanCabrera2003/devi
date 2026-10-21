@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { API_VERSION, type SessionDelivery, type UserEvent } from "@devi/protocol";
 import { createClient } from "./client";
+import { DeviApiError } from "./errors";
 import { fakeServer, sseResponse } from "./fake-server";
 import type { SseStatus } from "./sse";
 
@@ -127,5 +128,30 @@ describe("suscripciones", () => {
     expect(events).toEqual([{ type: "team.updated" }]);
     expect(statuses).toEqual(["connecting", "open"]);
     expect(beatsOf(srv).length).toBeGreaterThan(1);
+  });
+
+  test("un 403 en el SSE da status failed con DeviApiError y no reintenta", async () => {
+    let sse = 0;
+    const srv = serve((_req, url) => {
+      if (url.pathname === "/api/v1/presence/heartbeat") return Response.json({ ok: true });
+      sse++;
+      return Response.json({ error: "no", code: "unknown_login", login: "x@y" }, { status: 403 });
+    });
+    const got: [SseStatus, unknown][] = [];
+    const stop = createClient({ baseUrl: srv.url, heartbeatMs: 30 }).subscribeUser(() => {}, {
+      onStatus: (s, err) => got.push([s, err]),
+    });
+    await Bun.sleep(200);
+    stop();
+    expect(sse).toBe(1);
+    expect(got.map((g) => g[0])).toEqual(["connecting", "failed"]);
+    const err = got[1]![1] as DeviApiError;
+    expect(err).toBeInstanceOf(DeviApiError);
+    expect(err.status).toBe(403);
+    expect(err.body.code).toBe("unknown_login");
+    // tras fallar no quedan heartbeats corriendo
+    const n = beatsOf(srv).length;
+    await Bun.sleep(100);
+    expect(beatsOf(srv).length).toBe(n);
   });
 });

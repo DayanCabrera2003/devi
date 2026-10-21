@@ -1,4 +1,4 @@
-import { DeviApiError, type DeviClient } from "@devi/client";
+import { DeviApiError, type DeviClient, type SseStatus } from "@devi/client";
 import type { SessionDelivery } from "@devi/protocol";
 
 // DeviClient falso para los tests del MCP: cada llamada se apunta y responde lo que diga `responses`.
@@ -7,7 +7,7 @@ export type FakeCall = { name: string; opts?: unknown };
 export function fakeClient(responses: Record<string, unknown | ((opts: unknown) => unknown)> = {}) {
   const calls: FakeCall[] = [];
   const drafts: { meta: unknown; files: { name: string; content: string }[] }[] = [];
-  const subscriptions: { sessionId: string; onDelivery: (d: SessionDelivery) => void; onStatus?: (s: "connecting" | "open" | "reconnecting") => void; closed: boolean }[] = [];
+  const subscriptions: { sessionId: string; onDelivery: (d: SessionDelivery) => void; onStatus?: (s: SseStatus, err?: DeviApiError) => void; closed: boolean }[] = [];
   const answer = (name: string, opts?: unknown) => {
     calls.push({ name, opts });
     const r = responses[name];

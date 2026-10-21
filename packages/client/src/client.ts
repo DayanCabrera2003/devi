@@ -31,7 +31,7 @@ export type ClientOptions = { baseUrl: string; devUser?: string; fetch?: typeof 
 // porque `instanceof z.ZodAny` no es fiable en zod 4 (los esquemas ya no son instancias de esa clase).
 const RAW_ROUTES: ReadonlySet<ApiRoute> = new Set<ApiRoute>(["exportDb", "downloadFile", "userEvents", "sessionEvents"]);
 
-type SubscribeOpts = { onStatus?: (s: SseStatus) => void };
+type SubscribeOpts = { onStatus?: (s: SseStatus, err?: DeviApiError) => void };
 
 export interface DeviClient {
   call<R extends ApiRoute>(
@@ -149,9 +149,10 @@ export function createClient(opts: ClientOptions): DeviClient {
         url: sseUrlFor(API.userEvents.path),
         headers: headers(),
         fetch: doFetch,
-        onStatus: (s) => {
+        onStatus: (s, err) => {
           if (s === "open") hb.beat();
-          subOpts.onStatus?.(s);
+          if (s === "failed") hb.stop();
+          subOpts.onStatus?.(s, err);
         },
         onFrame: (f) => {
           const e = safeJson(f.data, UserEventSchema);
@@ -170,9 +171,10 @@ export function createClient(opts: ClientOptions): DeviClient {
         url: sseUrlFor(buildPath(API.sessionEvents.path, { id: sessionId })),
         headers: headers(),
         fetch: doFetch,
-        onStatus: (s) => {
+        onStatus: (s, err) => {
           if (s === "open") hb.beat();
-          subOpts.onStatus?.(s);
+          if (s === "failed") hb.stop();
+          subOpts.onStatus?.(s, err);
         },
         onFrame: (f) => {
           if (f.event !== SESSION_EVENT) return;

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { DeviApiError } from "./errors";
 import { fakeServer, sseResponse } from "./fake-server";
 import { subscribeSse, type SseFrame, type SseStatus } from "./sse";
 
@@ -117,5 +118,46 @@ describe("subscribeSse", () => {
     await Bun.sleep(100);
     srv.stop();
     expect(got).toEqual(["1"]);
+  });
+});
+
+describe("errores fatales", () => {
+  for (const status of [401, 403, 426]) {
+    test(`${status} da failed con el error y no reintenta`, async () => {
+      let n = 0;
+      const srv = fakeServer(() => {
+        n++;
+        return Response.json({ error: "x", code: "c" }, { status });
+      });
+      const got: [string, unknown][] = [];
+      const stop = subscribeSse({
+        url: `${srv.url}/e`, headers: {}, fetch: (u, i) => fetch(u, i), onFrame: () => {},
+        onStatus: (s, err) => got.push([s, err]), baseDelayMs: 10, maxDelayMs: 20,
+      });
+      await Bun.sleep(150);
+      stop();
+      srv.stop();
+      expect(n).toBe(1);
+      expect(got.map((g) => g[0])).toEqual(["connecting", "failed"]);
+      expect((got[1]![1] as DeviApiError).status).toBe(status);
+    });
+  }
+
+  test("un 500 sigue reconectando", async () => {
+    let n = 0;
+    const srv = fakeServer(() => {
+      n++;
+      return new Response("x", { status: 500 });
+    });
+    const statuses: string[] = [];
+    const stop = subscribeSse({
+      url: `${srv.url}/e`, headers: {}, fetch: (u, i) => fetch(u, i), onFrame: () => {},
+      onStatus: (s) => statuses.push(s), baseDelayMs: 10, maxDelayMs: 20,
+    });
+    await Bun.sleep(150);
+    stop();
+    srv.stop();
+    expect(n).toBeGreaterThan(1);
+    expect(statuses).not.toContain("failed");
   });
 });
