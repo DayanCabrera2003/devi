@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import {
   PERMS,
+  loginInDomains,
   type CreateMemberBody,
   type CreateRoleBody,
   type Me,
@@ -37,6 +38,7 @@ export class TeamManager implements TeamService {
     private db: Database,
     private now: () => number,
     private changed: () => void, // avisa a las apps (team.updated)
+    private domains: () => readonly string[] = () => [], // ajuste allowedDomains
   ) {}
 
   // ---- acceso ---------------------------------------------------------------
@@ -79,6 +81,7 @@ export class TeamManager implements TeamService {
   // ---- personas -------------------------------------------------------------
 
   createMember(body: CreateMember): Member {
+    this.assertLoginInDomains(body.login);
     this.assertLoginFree(body.login);
     this.assertRolesExist(body.roleIds);
     const id = crypto.randomUUID();
@@ -95,7 +98,10 @@ export class TeamManager implements TeamService {
   // Solo cambia los campos enviados.
   updateMember(id: string, patch: UpdateMember): Member {
     const current = this.memberOr404(id);
-    if (patch.login !== undefined && patch.login !== current.login) this.assertLoginFree(patch.login);
+    if (patch.login !== undefined && patch.login !== current.login) {
+      this.assertLoginInDomains(patch.login);
+      this.assertLoginFree(patch.login);
+    }
     if (patch.roleIds) this.assertRolesExist(patch.roleIds);
     this.guarded(() => {
       const disabledAt =
@@ -183,6 +189,9 @@ export class TeamManager implements TeamService {
   // Devuelve qué hizo (el módulo lo registra en el log); nunca falla si ya hay un admin.
   ensureAdmin(adminLogin: string | undefined): "created" | "granted" | "already_admin" | "admins_exist" {
     let outcome: "created" | "granted" | "already_admin" | "admins_exist" = "admins_exist";
+    if (adminLogin && !loginInDomains(adminLogin, this.domains())) {
+      throw new Error(`--admin ${adminLogin} no es de un dominio permitido (${this.domains().join(", ")})`);
+    }
     if (adminLogin) {
       this.db.transaction(() => {
         let role = this.store.roleByName(ADMIN_ROLE_NAME);
@@ -240,6 +249,12 @@ export class TeamManager implements TeamService {
     const r = this.store.role(id);
     if (!r) throw new HttpError(404, "Rol desconocido", { code: "not_found" });
     return r;
+  }
+
+  private assertLoginInDomains(login: string): void {
+    if (!loginInDomains(login, this.domains())) {
+      throw new HttpError(400, `El login ${login} no es de un dominio permitido (${this.domains().join(", ")})`, { code: "domain" });
+    }
   }
 
   private assertLoginFree(login: string): void {

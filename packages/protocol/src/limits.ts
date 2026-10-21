@@ -6,6 +6,7 @@ export const DEFAULT_SETTINGS = {
   draftTtlMs: 900_000, // 15 min para autorizar un borrador
   fileRetentionDays: 7, // tras cerrar la solicitud o descartar el borrador
   fileMaxAgeDays: 30, // tope absoluto desde la subida
+  allowedDomains: [] as string[], // vacío = cualquier login de la tailnet (luego se mira el equipo)
 } as const;
 
 // Presencia. Un SSE abierto no basta: si el cliente se cae sin cerrar la conexión, Bun.serve puede

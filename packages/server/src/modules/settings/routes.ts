@@ -8,7 +8,9 @@ import type { SettingsManager } from "./service";
 export function registerSettingsRoutes(r: Router, ctx: ModuleContext, settings: SettingsManager): void {
   r.on(API.getSettings, () => json(settings.get()));
 
-  r.on(API.updateSettings, async ({ request }) => json(settings.update(await readBody(request, API.updateSettings.body))));
+  r.on(API.updateSettings, async ({ request, principal }) =>
+    json(settings.update(await readBody(request, API.updateSettings.body), principal.login)),
+  );
 
   // Copia completa (los bytes de devi.db) de la base de datos (también funciona con :memory:).
   r.on(API.exportDb, () => {

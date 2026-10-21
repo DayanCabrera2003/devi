@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { API, API_VERSION, PRESENCE, VERSION_HEADER, VERSION_QUERY, isCompatible } from "@devi/protocol";
+import { API, API_VERSION, PRESENCE, VERSION_HEADER, VERSION_QUERY, isCompatible, loginInDomains } from "@devi/protocol";
 import { ZodError } from "zod";
 import type { AccessResolver, IdentityProvider } from "./auth";
 import { Bus } from "./bus";
@@ -69,6 +69,15 @@ export function createApp(opts: AppOptions) {
 
     const principal = opts.identity.identify(req);
     if (!principal) throw new HttpError(401, "No se pudo identificar quién llama (¿estás en la tailnet?)", { code: "no_identity" });
+
+    // Dominios permitidos (ajuste allowedDomains): se comprueba antes de mirar el equipo.
+    const domains = ctx.services.find("settings")?.get().allowedDomains ?? [];
+    if (!loginInDomains(principal.login, domains)) {
+      throw new HttpError(403, `Tu login (${principal.login}) no es de un dominio permitido en este servidor de Devi`, {
+        code: "domain",
+        login: principal.login,
+      });
+    }
 
     const access = resolveAccess(principal.login);
     if (!access) {

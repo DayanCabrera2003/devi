@@ -38,7 +38,9 @@ function listen(cfg: ServerConfig, fetch: (req: Request) => Promise<Response>) {
   const common = { idleTimeout: 0, maxRequestBodySize: MAX_BODY, fetch };
   if (!cfg.socket) return Bun.serve({ ...common, port: cfg.port, hostname: cfg.host });
   prepareSocketPath(cfg.socket);
-  const server = Bun.serve({ ...common, unix: cfg.socket });
+  // Los tipos de Bun no admiten idleTimeout con unix, pero Bun lo respeta (comprobado con 1.3): sin él,
+  // corta los SSE a los 10 s sin datos. Por eso el cast.
+  const server = Bun.serve({ ...common, unix: cfg.socket } as unknown as Parameters<typeof Bun.serve>[0]);
   // Solo el dueño (el usuario del servicio) y root (tailscaled) pueden conectarse.
   chmodSync(cfg.socket, 0o600);
   return server;

@@ -1,4 +1,5 @@
 import { tmpdir } from "node:os";
+import { DomainSchema } from "@devi/protocol";
 import { join, win32 } from "node:path";
 
 export type ServerConfig = {
@@ -12,6 +13,8 @@ export type ServerConfig = {
   dev: boolean;
   adminLogin: string | undefined;
   importTeam: string | undefined;
+  // --allowed-domain (repetible): se añaden al ajuste persistido allowedDomains al arrancar.
+  allowedDomains: string[];
 };
 
 type Env = Record<string, string | undefined>;
@@ -22,7 +25,8 @@ export function defaultDataDir(platform: NodeJS.Platform, env: Env, home: string
   return join(env.XDG_DATA_HOME ?? join(home, ".local", "share"), "devi");
 }
 
-// devi server [--port N | --socket RUTA] [--data-dir DIR] [--admin LOGIN] [--import team.json] [--dev]
+// devi server [--port N | --socket RUTA] [--data-dir DIR] [--admin LOGIN] [--allowed-domain DOMINIO]...
+//             [--import team.json] [--dev]
 export function parseServerArgs(argv: string[], sys: { platform: NodeJS.Platform; env: Env; home: string }): ServerConfig {
   const cfg: ServerConfig = {
     port: 4747,
@@ -32,6 +36,7 @@ export function parseServerArgs(argv: string[], sys: { platform: NodeJS.Platform
     adminLogin: undefined,
     importTeam: undefined,
     socket: undefined,
+    allowedDomains: [],
   };
   let portGiven = false;
   const value = (i: number, flag: string) => {
@@ -47,6 +52,12 @@ export function parseServerArgs(argv: string[], sys: { platform: NodeJS.Platform
       cfg.port = n;
       portGiven = true;
     } else if (a === "--socket") cfg.socket = value(i++, a);
+    else if (a === "--allowed-domain") {
+      const raw = value(i++, a);
+      const d = DomainSchema.safeParse(raw);
+      if (!d.success) throw new Error(`--allowed-domain: dominio inválido "${raw}" (p. ej. empresa.com, sin @)`);
+      if (!cfg.allowedDomains.includes(d.data)) cfg.allowedDomains.push(d.data);
+    }
     else if (a === "--data-dir") cfg.dataDir = value(i++, a);
     else if (a === "--admin") cfg.adminLogin = value(i++, a);
     else if (a === "--import") cfg.importTeam = value(i++, a);
@@ -67,6 +78,7 @@ export function testConfig(overrides: Partial<ServerConfig> = {}): ServerConfig 
     adminLogin: undefined,
     importTeam: undefined,
     socket: undefined,
+    allowedDomains: [],
     ...overrides,
   };
 }

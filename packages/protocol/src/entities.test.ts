@@ -42,3 +42,25 @@ describe("entidades", () => {
     expect(FILE_LIMITS).toEqual({ maxBytes: 1_048_576, maxFiles: 5 });
   });
 });
+
+describe("dominios permitidos", () => {
+  test("SettingsSchema normaliza y valida allowedDomains", async () => {
+    const { SettingsSchema, DEFAULT_SETTINGS } = await import("./index");
+    expect(DEFAULT_SETTINGS.allowedDomains).toEqual([]);
+    const s = SettingsSchema.parse({ ...DEFAULT_SETTINGS, allowedDomains: [" ASAI.digital "] });
+    expect(s.allowedDomains).toEqual(["asai.digital"]);
+    for (const bad of ["", "@asai.digital", "asai", "a b.com", "-x.com"]) {
+      expect(SettingsSchema.safeParse({ ...DEFAULT_SETTINGS, allowedDomains: [bad] }).success).toBe(false);
+    }
+  });
+
+  test("loginInDomains: sin dominios, todo vale; si no, @dominio exacto sin distinguir mayúsculas", async () => {
+    const { loginInDomains } = await import("./index");
+    expect(loginInDomains("x@y.com", [])).toBe(true);
+    expect(loginInDomains("Dayan@ASAI.digital", ["asai.digital"])).toBe(true);
+    expect(loginInDomains("x@evil-asai.digital", ["asai.digital"])).toBe(false);
+    expect(loginInDomains("x@sub.asai.digital", ["asai.digital"])).toBe(false);
+    expect(loginInDomains("asai.digital", ["asai.digital"])).toBe(false);
+    expect(loginInDomains("x@asai.digital.evil.com", ["asai.digital"])).toBe(false);
+  });
+});

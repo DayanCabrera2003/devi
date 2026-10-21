@@ -18,7 +18,9 @@ export const teamModule: DeviModule = {
     const broadcast = () => {
       for (const id of team.memberIds()) pushUser(ctx.sse, id, { type: "team.updated" });
     };
-    const team = new TeamManager(new TeamStore(ctx.db), ctx.db, ctx.now, broadcast);
+    const team = new TeamManager(
+      new TeamStore(ctx.db), ctx.db, ctx.now, broadcast, () => ctx.services.find("settings")?.get().allowedDomains ?? [],
+    );
     managers.set(ctx, team);
     ctx.services.provide("team", team);
     ctx.setAccessResolver((login) => team.resolveAccess(login));

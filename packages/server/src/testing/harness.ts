@@ -25,6 +25,7 @@ export function createTestApp(opts: {
   clock?: FakeClock;
   dataDir?: string;
   dev?: boolean; // por defecto true (testConfig)
+  allowedDomains?: string[]; // como --allowed-domain
 }) {
   const clock = opts.clock ?? new FakeClock();
   const dataDir = opts.dataDir ?? mkdtempSync(join(tmpdir(), "devi-test-"));
@@ -35,7 +36,7 @@ export function createTestApp(opts: {
     db: opts.db,
     now: clock.now,
     timers: clock,
-    config: testConfig({ dataDir, adminLogin: opts.adminLogin, importTeam: opts.importTeam, dev: opts.dev ?? true }),
+    config: testConfig({ dataDir, adminLogin: opts.adminLogin, importTeam: opts.importTeam, dev: opts.dev ?? true, allowedDomains: opts.allowedDomains ?? [] }),
     log: () => {},
   });
 
