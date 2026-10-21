@@ -1,7 +1,7 @@
 import {
   API,
   API_VERSION,
-  DraftSchema,
+  CreateDraftResult,
   ErrorBodySchema,
   PRESENCE,
   SESSION_EVENT,
@@ -12,7 +12,6 @@ import {
   buildPath,
   type ApiRoute,
   type CreateDraftMeta,
-  type Draft,
   type ErrorBody,
   type SessionDelivery,
   type UserEvent,
@@ -41,7 +40,8 @@ export interface DeviClient {
     name: R,
     opts?: { params?: Record<string, string>; body?: unknown; query?: Record<string, string> },
   ): Promise<z.infer<(typeof API)[R]["response"]>>;
-  createDraft(meta: z.infer<typeof CreateDraftMeta>, files: { name: string; content: string }[]): Promise<Draft>;
+  // meta.approval es opcional ("app" por defecto); el resultado dice cómo se aprobó y, si ya salió, a quién.
+  createDraft(meta: z.input<typeof CreateDraftMeta>, files: { name: string; content: string }[]): Promise<CreateDraftResult>;
   downloadFile(id: string): Promise<string>;
   subscribeUser(onEvent: (e: UserEvent) => void, opts?: SubscribeOpts): () => void;
   subscribeSession(sessionId: string, onDelivery: (d: SessionDelivery) => void, opts?: SubscribeOpts): () => void;
@@ -140,7 +140,7 @@ export function createClient(opts: ClientOptions): DeviClient {
       form.append("meta", JSON.stringify(meta));
       for (const f of files) form.append("files", new File([f.content], f.name, { type: "text/plain;charset=utf-8" }));
       const res = await send(API.createDraft.method, API.createDraft.path, { body: form });
-      return parsed(res, DraftSchema);
+      return parsed(res, CreateDraftResult);
     },
 
     async downloadFile(id) {

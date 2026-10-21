@@ -71,3 +71,41 @@ describe("auditoría", () => {
     expect(AUDIT_ACTIONS).toContain("login.rejected");
   });
 });
+
+describe("aprobación en el chat", () => {
+  test("CreateDraftMeta: approval app|chat, por defecto app", async () => {
+    const { CreateDraftMeta } = await import("./api");
+    const req = { kind: "request", sessionId: "s1", to: "m2", message: "hola" };
+    expect(CreateDraftMeta.parse(req)).toMatchObject({ approval: "app" });
+    expect(CreateDraftMeta.parse({ ...req, approval: "chat" })).toMatchObject({ approval: "chat" });
+    expect(CreateDraftMeta.parse({ kind: "response", sessionId: "s1", requestId: "q1", message: "ok", approval: "chat" })).toMatchObject({ approval: "chat" });
+    expect(CreateDraftMeta.safeParse({ ...req, approval: "auto" }).success).toBe(false);
+  });
+
+  test("createDraft no es humana y su respuesta dice por dónde se aprobó", () => {
+    expect("human" in API.createDraft).toBe(false);
+    const draft = {
+      id: "d1", kind: "request", toMemberId: "m2", authorMemberId: "m1", authorSessionId: "s1", message: "hola",
+      status: "authorized", files: [], createdAt: 1, expiresAt: 2,
+    };
+    const chat = API.createDraft.response.parse({ ...draft, approval: "chat", sent: { requestId: "q1", toName: "María", sentAt: 1, deadline: 9 } });
+    expect(chat).toMatchObject({ approval: "chat", sent: { requestId: "q1", toName: "María", deadline: 9 } });
+    const app = API.createDraft.response.parse({ ...draft, status: "awaiting", approval: "app" });
+    expect(app.sent).toBeUndefined();
+    expect(API.createDraft.response.safeParse(draft).success).toBe(false); // approval es obligatorio
+  });
+
+  test("la acción de auditoría draft.approved_in_chat existe", async () => {
+    const { AUDIT_ACTIONS } = await import("./audit");
+    expect(AUDIT_ACTIONS).toContain("draft.approved_in_chat");
+  });
+
+  test("ajuste chatApproval: booleano, activado por defecto", async () => {
+    const { SettingsSchema } = await import("./entities");
+    const { DEFAULT_SETTINGS } = await import("./limits");
+    expect(DEFAULT_SETTINGS.chatApproval).toBe(true);
+    expect(SettingsSchema.parse(DEFAULT_SETTINGS).chatApproval).toBe(true);
+    expect(SettingsSchema.safeParse({ ...DEFAULT_SETTINGS, chatApproval: "sí" }).success).toBe(false);
+    expect(SettingsSchema.safeParse({ ...DEFAULT_SETTINGS, chatApproval: undefined }).success).toBe(false);
+  });
+});

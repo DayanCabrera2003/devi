@@ -122,6 +122,9 @@ export const SettingsSchema = z.object({
   fileMaxAgeDays: z.number().int().min(1).max(30),
   // Si no está vacío, solo entran logins @<uno de estos dominios> (403 "domain" antes de mirar el equipo).
   allowedDomains: z.array(DomainSchema).max(20),
+  // Aprobar envíos en el chat: si está activo, lo que el usuario aprueba en el aviso de permisos de
+  // Claude Code se envía sin pasar por la app. Desactivado, todo queda en borrador para la app.
+  chatApproval: z.boolean(),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 

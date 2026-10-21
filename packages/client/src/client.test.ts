@@ -143,13 +143,14 @@ describe("createDraft y downloadFile", () => {
       const form = await req.formData();
       meta = JSON.parse(String(form.get("meta")));
       files = await Promise.all((form.getAll("files") as File[]).map(async (f) => [f.name, await f.text()] as [string, string]));
-      return Response.json(DRAFT);
+      return Response.json({ ...DRAFT, approval: "chat", sent: { requestId: "q1", toName: "María", sentAt: 1, deadline: 2 } });
     });
     const draft = await createClient({ baseUrl: srv.url }).createDraft(
       { kind: "request", sessionId: "s1", to: "m2", message: "hola" },
       [{ name: "a.txt", content: "ñandú" }],
     );
     expect(draft.id).toBe("d1");
+    expect(draft).toMatchObject({ approval: "chat", sent: { requestId: "q1", toName: "María" } }); // no se pierde al validar
     expect(srv.seen[0]!.path).toBe("/api/v1/drafts");
     expect(srv.seen[0]!.headers.get("X-Devi-Version")).toBe(API_VERSION);
     expect(meta).toEqual({ kind: "request", sessionId: "s1", to: "m2", message: "hola" });

@@ -21,7 +21,9 @@ describe("borradores de solicitud", () => {
       expiresAt: f.clock.now() + DEFAULT_SETTINGS.draftTtlMs,
     });
     expect(res.data.files).toEqual([{ id: expect.any(String), name: "error.log", size: 5, direction: "request" }]);
-    expect(f.userEvents("m-dayan")).toContainEqual({ type: "draft.awaiting", draft: res.data });
+    const { approval, ...draft } = res.data;
+    expect(approval).toBe("app");
+    expect(f.userEvents("m-dayan")).toContainEqual({ type: "draft.awaiting", draft });
     expect(f.userEvents("m-maria").some((e) => e.type === "request.incoming")).toBe(false);
   });
 
@@ -107,7 +109,7 @@ describe("borradores de solicitud", () => {
 
   test("la app recibe al conectar los borradores pendientes", async () => {
     f = await setupFlow();
-    const d = (await f.requestDraft()).data;
+    const { approval: _, ...d } = (await f.requestDraft()).data;
     const before = f.userEvents("m-dayan").length;
     await f.openStream("dayan@dev", "/api/v1/events/user");
     const replay = f.userEvents("m-dayan").slice(before);
