@@ -21,7 +21,7 @@ pub fn show_main(app: &AppHandle) {
     }
 }
 
-pub fn create(app: &AppHandle) -> tauri::Result<()> {
+pub fn create(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let open = MenuItem::with_id(app, "open", "Abrir", true, None::<&str>)?;
     let pause = CheckMenuItem::with_id(app, "pause", "Pausar avisos", true, false, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "Ajustes", true, None::<&str>)?;
@@ -30,7 +30,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     let menu = Menu::with_items(app, &[&open, &pause, &settings, &separator, &quit])?;
     app.manage(TrayState { pause: pause.clone() });
 
-    let icon = app.default_window_icon().cloned().expect("falta el icono de la app");
+    let icon = app.default_window_icon().cloned().ok_or("falta el icono de la app")?;
     TrayIconBuilder::with_id("devi")
         .icon(icon)
         .tooltip("Devi")

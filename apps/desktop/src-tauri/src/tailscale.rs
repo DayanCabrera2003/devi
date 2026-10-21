@@ -40,7 +40,12 @@ pub fn parse_self(json: &str) -> Result<TailscaleSelf, String> {
 
 /// ¿`tailscale serve status --json` tiene un proxy hacia 127.0.0.1:<port>?
 pub fn serve_points_to(json: &str, port: u16) -> bool {
-    json.contains(&format!("127.0.0.1:{port}")) || json.contains(&format!("localhost:{port}"))
+    // El puerto debe ser exacto: tras "127.0.0.1:4747" no puede seguir otro dígito (47470).
+    ["127.0.0.1", "localhost"].iter().any(|host| {
+        let needle = format!("{host}:{port}");
+        json.match_indices(&needle)
+            .any(|(i, _)| !json[i + needle.len()..].starts_with(|c: char| c.is_ascii_digit()))
+    })
 }
 
 fn candidates() -> Vec<PathBuf> {
@@ -137,5 +142,8 @@ mod tests {
         assert!(serve_points_to(serve, 4747));
         assert!(!serve_points_to(serve, 5000));
         assert!(!serve_points_to("{}", 4747));
+        // Solo el puerto exacto: 47470 no es 4747.
+        assert!(!serve_points_to(&serve.replace(":4747", ":47470"), 4747));
+        assert!(serve_points_to(&serve.replace("127.0.0.1:4747", "localhost:4747/"), 4747));
     }
 }
