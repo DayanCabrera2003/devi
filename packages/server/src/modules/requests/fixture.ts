@@ -1,5 +1,6 @@
 import { PRESENCE } from "@devi/protocol";
 import type { DeviModule } from "../../core/module";
+import type { RateLimits } from "../../core/ratelimit";
 import { createTestApp, stubTeamModule } from "../../testing/harness";
 import { filesModule } from "../files/index";
 import { sessionsModule } from "../sessions/index";
@@ -18,8 +19,8 @@ export type Flow = Awaited<ReturnType<typeof setupFlow>>;
 
 export const MODULES_UNDER_TEST = [team, settingsModule, sessionsModule, filesModule, requestsModule];
 
-export async function setupFlow(opts: { dev?: boolean; extraModules?: DeviModule[] } = {}) {
-  const t = createTestApp({ modules: [...MODULES_UNDER_TEST, ...(opts.extraModules ?? [])], dev: opts.dev });
+export async function setupFlow(opts: { dev?: boolean; extraModules?: DeviModule[]; rateLimits?: Partial<RateLimits> } = {}) {
+  const t = createTestApp({ modules: [...MODULES_UNDER_TEST, ...(opts.extraModules ?? [])], dev: opts.dev, rateLimits: opts.rateLimits });
   await t.app.start();
 
   // Registra una sesión y abre su SSE (queda viva).

@@ -9,6 +9,7 @@ import { migrate, openDb } from "./db";
 import { HttpError, corsHeaders, errorResponse, isAllowedOrigin, isSseRoute, json } from "./http";
 import type { DeviModule, ModuleContext } from "./module";
 import { Presence } from "./presence";
+import { RateLimiter, type RateLimits } from "./ratelimit";
 import { Router } from "./router";
 import { ServiceRegistry } from "./services";
 import { SseHub } from "./sse";
@@ -22,6 +23,7 @@ export type AppOptions = {
   now?: () => number;
   log?: (...a: unknown[]) => void;
   timers?: Timers; // por defecto RealTimers; los tests pasan un FakeClock
+  rateLimits?: Partial<RateLimits>; // por defecto DEFAULT_RATE_LIMITS
 };
 
 export function createApp(opts: AppOptions) {
@@ -39,6 +41,7 @@ export function createApp(opts: AppOptions) {
     timers: opts.timers ?? new RealTimers(),
     presence: new Presence(sse, bus, now),
     services: new ServiceRegistry(),
+    rateLimit: new RateLimiter(now, opts.rateLimits),
     setAccessResolver: (r) => {
       resolveAccess = r;
     },
@@ -100,6 +103,9 @@ export function createApp(opts: AppOptions) {
     if (match.route.perm && !access.perms.has(match.route.perm)) {
       throw new HttpError(403, `Te falta el permiso "${match.route.perm}"`, { code: "missing_perm", perm: match.route.perm });
     }
+    // Límites de ritmo por persona: borradores aparte; el latido de presencia no cuenta; las lecturas tampoco.
+    if (match.route === API.createDraft) ctx.rateLimit.take("draft", access.memberId);
+    else if (req.method !== "GET" && match.route !== API.heartbeat) ctx.rateLimit.take("mutation", access.memberId);
     return match.handler({ request: req, url, params: match.params, principal, access });
   }
 

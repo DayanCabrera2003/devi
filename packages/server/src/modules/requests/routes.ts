@@ -35,6 +35,7 @@ async function readDraftForm(request: Request) {
 export function registerRequestRoutes(r: Router, ctx: ModuleContext, requests: RequestsManager): void {
   r.on(API.createDraft, async ({ request, access }) => {
     const { meta, files } = await readDraftForm(request);
+    if (files.length > 0) ctx.rateLimit.take("draftFiles", access.memberId);
     return json(await requests.createDraft(access, meta, files));
   });
   r.on(API.authorizeDraft, ({ params, access }) => json(requests.authorize(access, params.id!)));
