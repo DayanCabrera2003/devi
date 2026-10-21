@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 import { join, win32 } from "node:path";
 
 export type ServerConfig = {
@@ -45,4 +46,17 @@ export function parseServerArgs(argv: string[], sys: { platform: NodeJS.Platform
     else throw new Error(`argumento desconocido: ${a}`);
   }
   return cfg;
+}
+
+// Config para tests: puerto efímero, dev activo y un dataDir único que NO se crea aquí.
+export function testConfig(overrides: Partial<ServerConfig> = {}): ServerConfig {
+  return {
+    port: 0,
+    host: "127.0.0.1",
+    dataDir: join(tmpdir(), `devi-test-${crypto.randomUUID()}`),
+    dev: true,
+    adminLogin: undefined,
+    importTeam: undefined,
+    ...overrides,
+  };
 }

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { defaultDataDir, parseServerArgs } from "./config";
+import { existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { defaultDataDir, parseServerArgs, testConfig } from "./config";
 
 describe("defaultDataDir", () => {
   test("por sistema operativo", () => {
@@ -31,5 +33,17 @@ describe("parseServerArgs", () => {
   test("rechaza flags desconocidos y puertos inválidos", () => {
     expect(() => parseServerArgs(["--nope"], base)).toThrow();
     expect(() => parseServerArgs(["--port", "abc"], base)).toThrow();
+  });
+});
+
+describe("testConfig", () => {
+  test("valores por defecto y dataDir único sin crear", () => {
+    const a = testConfig();
+    const b = testConfig({ dev: false });
+    expect(a).toMatchObject({ port: 0, host: "127.0.0.1", dev: true, adminLogin: undefined, importTeam: undefined });
+    expect(a.dataDir.startsWith(tmpdir())).toBe(true);
+    expect(a.dataDir).not.toBe(b.dataDir);
+    expect(existsSync(a.dataDir)).toBe(false);
+    expect(b.dev).toBe(false);
   });
 });

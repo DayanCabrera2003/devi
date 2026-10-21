@@ -16,6 +16,7 @@ export async function startServer(cfg: ServerConfig, modules: DeviModule[] = MOD
   const app = createApp({
     identity: cfg.dev ? new DevIdentity() : new TailscaleServeIdentity(),
     modules,
+    config: cfg,
     allowedOrigins: cfg.dev ? [...TAURI_ORIGINS, "http://localhost:1420"] : TAURI_ORIGINS,
     db: openDb(join(cfg.dataDir, "devi.db")),
   });

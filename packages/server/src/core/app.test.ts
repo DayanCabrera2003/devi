@@ -3,6 +3,7 @@ import { API, API_VERSION } from "@devi/protocol";
 import { z } from "zod";
 import { createApp } from "./app";
 import { DevIdentity } from "./auth";
+import { testConfig } from "./config";
 import { HttpError, json } from "./http";
 import type { DeviModule } from "./module";
 
@@ -123,6 +124,15 @@ describe("createApp", () => {
     expect(res.headers.get("Access-Control-Allow-Origin")).toBe("tauri://localhost");
     const evil = await call(app, "GET", "/api/v1/me", { Origin: "https://evil.example", "X-Devi-Dev-User": "maria@dev" });
     expect(evil.headers.get("Access-Control-Allow-Origin")).toBeNull();
+  });
+
+  test("los módulos ven ctx.config", () => {
+    const config = testConfig({ adminLogin: "root@dev" });
+    let seen: unknown;
+    const m: DeviModule = { name: "cfg", migrations: [], routes: (_r, ctx) => void (seen = ctx.config) };
+    createApp({ identity: new DevIdentity(), modules: [m], allowedOrigins: [], config });
+    expect(seen).toBe(config);
+    expect(make().ctx.config.port).toBe(0);
   });
 
   test("aplica las migraciones de los módulos al arrancar", async () => {

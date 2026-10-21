@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type { AccessResolver } from "./auth";
 import type { Bus } from "./bus";
+import type { ServerConfig } from "./config";
 import type { Migration } from "./db";
 import type { Router } from "./router";
 import type { SseHub } from "./sse";
@@ -8,6 +9,7 @@ import type { SseHub } from "./sse";
 // Todo lo que un módulo puede usar del núcleo.
 export interface ModuleContext {
   db: Database;
+  config: ServerConfig;
   bus: Bus;
   sse: SseHub;
   now: () => number;

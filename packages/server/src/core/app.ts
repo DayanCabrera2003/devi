@@ -3,6 +3,7 @@ import { API, API_VERSION, VERSION_HEADER, VERSION_QUERY, isCompatible } from "@
 import { ZodError } from "zod";
 import type { AccessResolver, IdentityProvider } from "./auth";
 import { Bus } from "./bus";
+import { testConfig, type ServerConfig } from "./config";
 import { migrate, openDb } from "./db";
 import { HttpError, corsHeaders, errorResponse, isAllowedOrigin, isSseRoute, json } from "./http";
 import type { DeviModule, ModuleContext } from "./module";
@@ -13,6 +14,7 @@ export type AppOptions = {
   identity: IdentityProvider;
   modules: DeviModule[];
   allowedOrigins: string[];
+  config?: ServerConfig; // por defecto testConfig(): startServer pasa la real
   db?: Database;
   now?: () => number;
   log?: (...a: unknown[]) => void;
@@ -22,6 +24,7 @@ export function createApp(opts: AppOptions) {
   let resolveAccess: AccessResolver = () => null;
   const ctx: ModuleContext = {
     db: opts.db ?? openDb(),
+    config: opts.config ?? testConfig(),
     bus: new Bus(),
     sse: new SseHub(),
     now: opts.now ?? Date.now,
