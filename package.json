@@ -1,6 +1,6 @@
 {
   "name": "devi",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Devi: la mascota que conecta las sesiones de Claude Code de un equipo",
   "type": "module",
   "private": true,
@@ -12,7 +12,8 @@
     "typecheck": "bunx tsc -p packages/protocol && bunx tsc -p packages/server && bunx tsc -p packages/client && bunx tsc -p packages/cli",
     "devi": "bun packages/cli/src/main.ts",
     "build:cli": "bun scripts/build-cli.ts",
-    "build:devi": "bun scripts/build-cli.ts --target"
+    "build:devi": "bun scripts/build-cli.ts --target",
+    "version:set": "bun scripts/set-version.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
