@@ -56,6 +56,17 @@ export class FileManager implements FilesService {
     });
   }
 
+  // Atajo: write + record (sin atomicidad con otras tablas).
+  store(input: { draftId: string; direction: "request" | "response"; authorMemberId: string; peerMemberId: string; files: ValidFile[] }): FileMeta[] {
+    const written = this.write(input.files);
+    try {
+      return this.record({ ...input, written });
+    } catch (e) {
+      this.removeWritten(written);
+      throw e;
+    }
+  }
+
   removeWritten(written: WrittenFile[]): void {
     for (const w of written) rmSync(join(this.dataDir, w.path), { force: true });
   }
