@@ -5,6 +5,7 @@ import {
 } from "./entities";
 import type { Perm } from "./perms";
 import { AuditPageSchema } from "./audit";
+import { ConversationPageSchema, ConversationsResponseSchema, SendFromAppMeta } from "./conversations";
 
 // Quién puede llamar una ruta además del permiso (lo comprueba el módulo, no el núcleo):
 // any = cualquier miembro; admin = team.admin; author = autor del borrador;
@@ -102,6 +103,13 @@ export const API = {
   forwardResponse: route({ human: true, method: "POST", path: "/api/v1/requests/:id/response/forward", perm: null, actor: "sender", body: z.object({ sessionId: z.string() }), response: DeviRequestSchema }),
   resendRequest: route({ human: true, method: "POST", path: "/api/v1/requests/:id/resend", perm: null, actor: "sender", body: Empty, response: DeviRequestSchema }),
   ignoreRequest: route({ human: true, method: "POST", path: "/api/v1/requests/:id/ignore", perm: null, actor: "sender", body: Empty, response: DeviRequestSchema }),
+
+  // Enviar desde la app (multipart: "meta" = SendFromAppMeta + 0..5 "files"; con archivos pide además files.send).
+  // La escribe una persona: sale directamente como pending, sin borrador.
+  sendFromApp: route({ human: true, method: "POST", path: "/api/v1/requests", perm: "requests.send", actor: "any", body: SendFromAppMeta, response: DeviRequestSchema }),
+  // Conversaciones por persona: solo las solicitudes entre quien llama y :memberId (query: ConversationQuery).
+  conversations: route({ method: "GET", path: "/api/v1/conversations", perm: null, actor: "any", body: Empty, response: ConversationsResponseSchema }),
+  conversation: route({ method: "GET", path: "/api/v1/conversations/:memberId", perm: null, actor: "party", body: Empty /* query: ConversationQuery */, response: ConversationPageSchema }),
 
   downloadFile: route({ method: "GET", path: "/api/v1/files/:id", perm: null, actor: "party", body: Empty, response: z.any() /* text/plain */ }),
 

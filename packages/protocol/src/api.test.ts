@@ -17,6 +17,7 @@ describe("catálogo de la API", () => {
     expect(human).toEqual([
       "acceptRequest", "acceptResponse", "authorizeDraft", "createMember", "createRole", "deleteMember", "deleteRole",
       "discardDraft", "exportDb", "forwardRequest", "forwardResponse", "ignoreRequest", "rejectRequest", "resendRequest",
+      "sendFromApp",
       "updateMember", "updateRole", "updateSettings",
     ]);
   });

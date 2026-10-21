@@ -7,6 +7,7 @@ export const AUDIT_ACTIONS = [
   "draft.authorized",
   "draft.discarded",
   "draft.expired",
+  "request.sent_from_app",
   "request.forwarded",
   "request.accepted",
   "request.rejected",
