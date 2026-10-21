@@ -1,7 +1,7 @@
 // Compila el binario `devi` para los 5 targets, uno detrás de otro (cada binario ocupa ~90 MB
 // y la compilación cruzada descarga el runtime de Bun de cada target: en paralelo se dispara la RAM).
 // Salida: dist/bin/devi-<target>[.exe] y la copia con nombre de sidecar de Tauri devi-<rust-triple>[.exe].
-// Uso: bun scripts/build-cli.ts [--only <target>]... [--current]
+// Uso: bun scripts/build-cli.ts [--only <bun-target>]... [--target <rust-triple>]... [--current]
 import { copyFileSync, mkdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
@@ -35,7 +35,13 @@ export function selectTargets(argv: string[]): Target[] {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--current") picked.push(currentTarget());
-    else if (a === "--only") {
+    else if (a === "--target") {
+      // Triple de Rust/Tauri (lo que pasa la app de escritorio): `bun run build:devi <triple>`.
+      const triple = argv[++i];
+      const t = TARGETS.find((x) => x.rust === triple);
+      if (!t) throw new Error(`target desconocido: ${triple} (válidos: ${TARGETS.map((x) => x.rust).join(", ")})`);
+      picked.push(t);
+    } else if (a === "--only") {
       const name = argv[++i];
       const t = TARGETS.find((x) => x.bun === name);
       if (!t) throw new Error(`target desconocido: ${name} (válidos: ${TARGETS.map((x) => x.bun).join(", ")})`);
