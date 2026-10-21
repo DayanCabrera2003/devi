@@ -10,5 +10,7 @@ export default defineConfig({
     include: ["src/**/*.vitest.ts"],
     maxWorkers: 2,
     passWithNoTests: true,
+    // fonts.vitest.ts lee styles.css?raw; sin esto Vitest lo devuelve vacío.
+    css: { include: [/styles\.css/] },
   },
 });

@@ -8,17 +8,48 @@
   --ok: #4ade80;
   --no: #f87171;
   --warn: #fbbf24;
-  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  --hover: #45454e;
+  --focus: #55555f;
+  --sans: "Inter Variable", "Inter", system-ui, sans-serif;
+  --mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+  color-scheme: dark;
 }
 
-* { box-sizing: border-box; }
+/* ---- base: igual en WebView2, WKWebView y WebKitGTK ---- */
+
+*, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
 html, body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 15px/1.45 var(--sans);
+  overscroll-behavior: none;
 }
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  font-synthesis: none;
+}
+
+/* La interfaz no se selecciona; el contenido (mensajes, vistas previas, campos) sí. */
+body, button { -webkit-user-select: none; user-select: none; }
+input, textarea, select, .card-msg, .preview, .mono, td, .selectable { -webkit-user-select: text; user-select: text; }
+.code { -webkit-user-select: all; user-select: all; }
+
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* ---- scrollbars finas iguales en los tres motores ---- */
+
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background-color: var(--hover); }
 
 body { max-width: 560px; margin: 0 auto; padding: 18px 16px 32px; min-height: 100vh; }
 
@@ -71,7 +102,10 @@ body { max-width: 560px; margin: 0 auto; padding: 18px 16px 32px; min-height: 10
 .actions.center { justify-content: center; }
 
 button {
+  -webkit-appearance: none;
+  appearance: none;
   font: inherit;
+  line-height: inherit;
   font-size: 14px;
   border-radius: 10px;
   padding: 9px 14px;
@@ -80,7 +114,7 @@ button {
   color: var(--text);
   cursor: pointer;
 }
-button:hover:not(:disabled) { border-color: #45454e; }
+button:hover:not(:disabled) { border-color: var(--hover); }
 button:disabled { opacity: 0.4; cursor: not-allowed; }
 button.primary { background: var(--white); color: var(--bg); border-color: var(--white); font-weight: 600; }
 button.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
@@ -89,9 +123,13 @@ button.ghost { font-size: 12px; padding: 6px 10px; color: var(--muted); }
 
 /* ---- formularios ---- */
 
-input:not([type="checkbox"]):not([type="radio"]):not([type="color"]), textarea {
+input:not([type="checkbox"]):not([type="radio"]):not([type="color"]), textarea, select {
+  -webkit-appearance: none;
+  appearance: none;
   width: 100%;
+  margin: 0;
   font: inherit;
+  line-height: inherit;
   color: var(--text);
   background: var(--bg);
   border: 1px solid var(--border);
@@ -99,8 +137,48 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="color"]), textarea {
   padding: 9px 10px;
 }
 textarea { resize: vertical; min-height: 64px; margin-bottom: 10px; }
-input:focus, textarea:focus { outline: none; border-color: #55555f; }
-input[type="color"] { width: 44px; height: 32px; padding: 0; border: 1px solid var(--border); border-radius: 8px; background: none; }
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+input:focus, textarea:focus, select:focus { outline: none; border-color: var(--focus); }
+input:focus-visible, textarea:focus-visible, select:focus-visible { outline: none; border-color: var(--focus); box-shadow: 0 0 0 1px var(--focus); }
+input:disabled, textarea:disabled, select:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* sin flechas en los números */
+input[type="number"] { -moz-appearance: textfield; }
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* flecha propia del select */
+select {
+  padding-right: 32px; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5l3 3 3-3' fill='none' stroke='%238b8b94' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center; background-size: 12px;
+}
+
+/* casillas y radios propios */
+input[type="checkbox"], input[type="radio"] {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  width: 16px; height: 16px; margin: 0;
+  border: 1px solid var(--hover);
+  background: var(--bg) no-repeat center / 12px;
+  cursor: pointer;
+  vertical-align: middle;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+input[type="checkbox"] { border-radius: 4px; }
+input[type="radio"] { border-radius: 50%; }
+input[type="checkbox"]:hover:not(:disabled), input[type="radio"]:hover:not(:disabled) { border-color: var(--muted); }
+input[type="checkbox"]:checked {
+  background-color: var(--white); border-color: var(--white);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2l2.3 2.3 4.7-5' fill='none' stroke='%23121214' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+input[type="radio"]:checked { border-color: var(--white); background-color: var(--bg); box-shadow: inset 0 0 0 4px var(--white); }
+input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+input[type="checkbox"]:disabled, input[type="radio"]:disabled { opacity: 0.4; cursor: not-allowed; }
+input[type="color"] { -webkit-appearance: none; appearance: none; cursor: pointer; width: 44px; height: 32px; padding: 0; border: 1px solid var(--border); border-radius: 8px; background: none; }
+input[type="color"]::-webkit-color-swatch-wrapper { padding: 3px; }
+input[type="color"]::-webkit-color-swatch { border: none; border-radius: 5px; }
 .field { display: flex; flex-direction: column; gap: 6px; margin: 0 0 14px; border: none; padding: 0; }
 .field label, .label { font-size: 13px; color: var(--muted); }
 .check { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }
@@ -166,7 +244,7 @@ table.people td { text-align: left; padding: 8px 6px; border-top: 1px solid var(
 
 /* ---- ventana mascota ---- */
 
-body.mascota { max-width: none; margin: 0; padding: 0; min-height: 0; overflow: hidden; user-select: none; }
+body.mascota { max-width: none; margin: 0; padding: 0; min-height: 0; overflow: hidden; -webkit-user-select: none; user-select: none; }
 .mascot { height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
 .mascot-devi svg { pointer-events: none; } /* los clics llegan al div arrastrable */
 .mascot-pill { font-size: 11px; padding: 4px 10px; border-radius: 999px; }
