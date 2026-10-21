@@ -56,4 +56,66 @@ describe("subscribeSse", () => {
     srv.stop();
     expect(connections).toBe(1);
   });
+
+  test("un onFrame que lanza no reconecta ni deja la conexión abierta", async () => {
+    let connections = 0;
+    let aborted = 0;
+    const srv = fakeServer((req) => {
+      connections++;
+      req.signal.addEventListener("abort", () => aborted++);
+      return sseResponse([{ event: "deliver", data: 1 }, { event: "deliver", data: 2 }], false, req.signal);
+    });
+    const frames: SseFrame[] = [];
+    const orig = console.error;
+    console.error = () => {};
+    const stop = subscribeSse({
+      url: `${srv.url}/s`, headers: {}, fetch: (u, i) => fetch(u, i), baseDelayMs: 10, maxDelayMs: 20,
+      onFrame: (f) => {
+        frames.push(f);
+        if (f.data === "1") throw new Error("boom");
+      },
+    });
+    await Bun.sleep(100);
+    stop();
+    await Bun.sleep(30);
+    console.error = orig;
+    srv.stop();
+    expect(frames.map((f) => f.data)).toEqual(["1", "2"]);
+    expect(connections).toBe(1);
+    expect(aborted).toBe(1); // se cerró solo por el stop()
+  });
+
+  test("el watchdog de inactividad aborta y reconecta", async () => {
+    let connections = 0;
+    const srv = fakeServer((req) => {
+      connections++;
+      return sseResponse([], false, req.signal); // solo ": connected" y silencio
+    });
+    const statuses: SseStatus[] = [];
+    const stop = subscribeSse({
+      url: `${srv.url}/s`, headers: {}, fetch: (u, i) => fetch(u, i), onFrame: () => {},
+      onStatus: (s) => statuses.push(s), baseDelayMs: 10, maxDelayMs: 20, idleTimeoutMs: 100,
+    });
+    await Bun.sleep(450);
+    stop();
+    srv.stop();
+    expect(connections).toBeGreaterThanOrEqual(2);
+    expect(statuses.slice(0, 3)).toEqual(["connecting", "open", "reconnecting"]);
+  });
+
+  test("unsubscribe dentro de un handler corta el resto de frames del trozo", async () => {
+    const srv = fakeServer(() => sseResponse([{ event: "d", data: 1 }, { event: "d", data: 2 }, { event: "d", data: 3 }], true));
+    const got: string[] = [];
+    let stop = () => {};
+    stop = subscribeSse({
+      url: `${srv.url}/s`, headers: {}, fetch: (u, i) => fetch(u, i), baseDelayMs: 10, maxDelayMs: 20,
+      onFrame: (f) => {
+        got.push(f.data);
+        stop();
+      },
+    });
+    await Bun.sleep(100);
+    srv.stop();
+    expect(got).toEqual(["1"]);
+  });
 });
