@@ -1,3 +1,4 @@
+import { PRESENCE } from "@devi/protocol";
 import { createTestApp, stubTeamModule } from "../../testing/harness";
 import { filesModule } from "../files/index";
 import { sessionsModule } from "../sessions/index";
@@ -24,7 +25,10 @@ export async function setupFlow() {
   async function session(login: string, name: string, parentPid: number) {
     const s = (await t.call(login, "POST", "/api/v1/sessions", { name, cwd: `/repo/${name}`, parentPid })).data;
     const stream = await t.openStream(login, `/api/v1/events/session/${s.id}`);
-    return { id: s.id as string, close: stream.close };
+    // Latidos como los del MCP: sin ellos, una espera larga dejaría la sesión obsoleta.
+    const key = `session:${s.id}`;
+    const stopHeartbeat = t.clock.every(PRESENCE.heartbeatMs, () => t.app.ctx.presence.touch(key));
+    return { id: s.id as string, close: stream.close, stopHeartbeat };
   }
 
   const dayanFront = await session("dayan@dev", "frontend", 100);

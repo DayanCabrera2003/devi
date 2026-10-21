@@ -32,6 +32,7 @@ describe("acciones de B", () => {
     expect((await fwd("dayan@dev", f.dayanFront.id)).status).toBe(403);
     expect((await fwd("maria@dev", f.dayanFront.id)).data.code).toBe("session_gone");
     expect((await fwd("maria@dev", "nope")).status).toBe(409);
+    f.mariaApi.stopHeartbeat();
     f.clock.advance(PRESENCE.staleMs + 1); // la sesión de María no manda latidos: ya no está viva
     expect((await fwd("maria@dev", f.mariaApi.id)).status).toBe(409);
     await post("maria@dev", "/api/v1/presence/heartbeat", { sessionId: f.mariaApi.id });
@@ -185,5 +186,61 @@ describe("app", () => {
     expect(res.data).toEqual({ delivered: 1 });
     expect(f.deliveries(f.mariaApi.id).at(-1)).toEqual({ kind: "debug", content: "hola", meta: {} });
     expect((await post("maria@dev", "/api/v1/debug/push", {})).status).toBe(403);
+  });
+});
+
+describe("la sesión desaparece", () => {
+  test("cerrada con la solicitud reenviada: vuelve a pending con plazo nuevo y aviso a B", async () => {
+    f = await setupFlow();
+    const r = await f.forwardedRequest();
+    f.clock.advance(10 * 60_000);
+    const before = f.userEvents("m-maria").length;
+    await f.call("maria@dev", "DELETE", `/api/v1/sessions/${f.mariaApi.id}`);
+    const ev = f.userEvents("m-maria").slice(before).findLast((e) => e.type === "request.updated");
+    expect(ev.request).toMatchObject({ id: r.id, status: "pending", deadline: f.clock.now() + DEFAULT_SETTINGS.requestTimeoutMs });
+    expect(ev.request.forwardedSessionId).toBeUndefined();
+    // el plazo nuevo corre: vence a su hora y no antes
+    f.clock.advance(DEFAULT_SETTINGS.requestTimeoutMs - 1);
+    expect(f.userEvents("m-dayan").some((e) => e.type === "request.timed_out")).toBe(false);
+    f.clock.advance(1);
+    expect(f.userEvents("m-dayan").some((e) => e.type === "request.timed_out")).toBe(true);
+  });
+
+  test("sin latidos (obsoleta): también vuelve a pending", async () => {
+    f = await setupFlow();
+    const r = await f.forwardedRequest();
+    f.mariaApi.stopHeartbeat();
+    f.clock.advance(PRESENCE.staleMs + PRESENCE.sweepMs);
+    const ev = f.userEvents("m-maria").findLast((e) => e.type === "request.updated" && e.request.id === r.id);
+    expect(ev.request.status).toBe("pending");
+  });
+
+  test("con borrador de respuesta esperando no se toca la solicitud", async () => {
+    f = await setupFlow();
+    const r = await f.forwardedRequest();
+    await f.responseDraft(r.id);
+    await f.call("maria@dev", "DELETE", `/api/v1/sessions/${f.mariaApi.id}`);
+    const ev = f.userEvents("m-maria").findLast((e) => e.type === "request.updated" && e.request.id === r.id);
+    expect(ev.request.status).toBe("forwarded");
+  });
+
+  test("otra sesión de B no afecta", async () => {
+    f = await setupFlow();
+    const r = await f.forwardedRequest();
+    const other = await f.session("maria@dev", "otra", 999);
+    await f.call("maria@dev", "DELETE", `/api/v1/sessions/${other.id}`);
+    const ev = f.userEvents("m-maria").findLast((e) => e.type === "request.updated" && e.request.id === r.id);
+    expect(ev.request.status).toBe("forwarded");
+  });
+
+  test("sin la sesión del autor no se entregan draft_authorized ni draft_discarded", async () => {
+    f = await setupFlow();
+    const d1 = (await f.requestDraft("uno")).data;
+    const d2 = (await f.requestDraft("dos")).data;
+    await f.call("dayan@dev", "DELETE", `/api/v1/sessions/${f.dayanFront.id}`);
+    const before = f.deliveries(f.dayanFront.id).length;
+    expect((await f.call("dayan@dev", "POST", `/api/v1/drafts/${d1.id}/authorize`)).status).toBe(200);
+    expect((await f.call("dayan@dev", "POST", `/api/v1/drafts/${d2.id}/discard`)).status).toBe(200);
+    expect(f.deliveries(f.dayanFront.id).length).toBe(before);
   });
 });

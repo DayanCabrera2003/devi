@@ -117,7 +117,7 @@ export class RequestsManager {
       const view = this.requestView(r);
       this.push(r.toMemberId, { type: "request.incoming", request: view });
       this.push(r.fromMemberId, { type: "request.updated", request: view });
-      this.deliver(d.authorSessionId, {
+      this.deliverToAuthor(d, {
         kind: "draft_authorized",
         content: authorizedContent({ kind: "request", toName: to.name, requestId: r.id }),
         meta: { draft_id: d.id, request_id: r.id },
@@ -138,7 +138,7 @@ export class RequestsManager {
       const view = this.requestView(r);
       this.push(r.fromMemberId, { type: "response.incoming", request: view });
       this.push(r.toMemberId, { type: "request.updated", request: view });
-      this.deliver(d.authorSessionId, {
+      this.deliverToAuthor(d, {
         kind: "draft_authorized",
         content: authorizedContent({ kind: "response", fromName: this.team.nameOf(r.fromMemberId), requestId: r.id }),
         meta: { draft_id: d.id, request_id: r.id },
@@ -174,7 +174,7 @@ export class RequestsManager {
       d.kind === "request"
         ? ({ kind: "request", toName: this.team.nameOf(d.toMemberId!) } as const)
         : ({ kind: "response", requestId: d.requestId! } as const);
-    this.deliver(d.authorSessionId, {
+    this.deliverToAuthor(d, {
       kind: "draft_discarded",
       content: discardedContent(target, reason, Math.round(this.settings.draftTtlMs / 60_000)),
       meta: { draft_id: d.id, reason, ...(d.requestId ? { request_id: d.requestId } : {}) },
@@ -313,6 +313,21 @@ export class RequestsManager {
     }
   }
 
+  // La sesión a la que se reenvió desapareció (cerrada, sustituida u obsoleta): si nadie tiene un borrador de
+  // respuesta esperando, la tarjeta vuelve a pending con plazo nuevo y B la vuelve a ver.
+  onSessionClosed(sessionId: string): void {
+    for (const r of this.store.forwardedVia(sessionId)) {
+      if (this.store.awaitingResponseDraft(r.id)) continue;
+      r.status = "pending";
+      r.forwardedSessionId = null;
+      r.deadline = this.ctx.now() + this.settings.requestTimeoutMs;
+      this.store.saveRequest(r);
+      this.schedule(r);
+      this.ctx.log(`la sesión ${sessionId} desapareció: la solicitud ${r.id} vuelve a pending`);
+      this.pushBoth(r, "request.updated");
+    }
+  }
+
   // ---- app y pruebas --------------------------------------------------------
 
   // Tarjetas abiertas de una persona: se reenvían cada vez que su app (re)conecta.
@@ -361,6 +376,11 @@ export class RequestsManager {
 
   private push(memberId: string, event: UserEvent): void {
     pushUser(this.ctx.sse, memberId, event);
+  }
+
+  // Entrega a la sesión del autor solo si sigue existiendo (pudo cerrarse o ser sustituida).
+  private deliverToAuthor(d: DraftRecord, delivery: SessionDelivery): void {
+    if (this.sessions.get(d.authorSessionId)) this.deliver(d.authorSessionId, delivery);
   }
 
   private deliver(sessionId: string, d: SessionDelivery): boolean {

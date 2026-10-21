@@ -15,6 +15,7 @@ export class SessionManager implements SessionsService {
     private presence: Presence,
     private now: () => number,
     private changed: (memberId: string) => void, // sessions.updated a la app de esa persona
+    private removed: (sessionId: string) => void = () => {}, // cierra su SSE y avisa por el bus
   ) {}
 
   // El MCP registra su sesión. Idempotente: si ya existe una con la misma persona, nombre y pid padre
@@ -105,6 +106,7 @@ export class SessionManager implements SessionsService {
   private remove(id: string): void {
     this.store.delete(id);
     this.presence.forget(sessionKey(id));
+    this.removed(id);
   }
 
   private toSession(r: SessionRecord): Session {

@@ -114,3 +114,35 @@ describe("sesiones", () => {
     expect((await t.openStream("dayan@dev", `/api/v1/events/session/${s.id}`)).status).toBe(404);
   });
 });
+
+describe("cerrar o sustituir una sesión cierra su SSE", () => {
+  test("DELETE cierra el stream y avisa por el bus", async () => {
+    await setup();
+    const s = (await register("dayan@dev", "frontend", 100)).data;
+    await t.openStream("dayan@dev", `/api/v1/events/session/${s.id}`);
+    const closed: string[] = [];
+    t.app.ctx.bus.on("session.closed", ({ sessionId }) => closed.push(sessionId));
+    expect(t.app.ctx.sse.isOpen(`session:${s.id}`)).toBe(true);
+    await t.call("dayan@dev", "DELETE", `/api/v1/sessions/${s.id}`);
+    expect(t.app.ctx.sse.isOpen(`session:${s.id}`)).toBe(false);
+    expect(closed).toContain(s.id);
+  });
+
+  test("sustituirla (mismo nombre, otro pid) cierra el stream de la anterior", async () => {
+    await setup();
+    const a = (await register("dayan@dev", "frontend", 100)).data;
+    await t.openStream("dayan@dev", `/api/v1/events/session/${a.id}`);
+    await register("dayan@dev", "frontend", 200);
+    expect(t.app.ctx.sse.isOpen(`session:${a.id}`)).toBe(false);
+  });
+
+  test("session.closed también al quedar sin latidos (obsoleta)", async () => {
+    await setup();
+    const s = (await register("dayan@dev", "frontend", 100)).data;
+    await t.openStream("dayan@dev", `/api/v1/events/session/${s.id}`);
+    const closed: string[] = [];
+    t.app.ctx.bus.on("session.closed", ({ sessionId }) => closed.push(sessionId));
+    t.clock.advance(PRESENCE.staleMs + PRESENCE.sweepMs);
+    expect(closed).toEqual([s.id]);
+  });
+});

@@ -168,6 +168,12 @@ export class RequestsStore {
       .all() as RequestRecord[];
   }
 
+  forwardedVia(sessionId: string): RequestRecord[] {
+    return this.db
+      .query(`SELECT ${REQUEST_COLS} FROM requests WHERE status = 'forwarded' AND forwarded_session = $sessionId`)
+      .all({ sessionId }) as RequestRecord[];
+  }
+
   // Lo que la app de una persona tiene que mostrar como tarjeta.
   cardsFor(memberId: string): RequestRecord[] {
     return this.db

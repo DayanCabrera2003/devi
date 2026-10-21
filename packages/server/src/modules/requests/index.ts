@@ -8,6 +8,7 @@ declare module "../../core/bus" {
   interface BusEvents {
     "draft.discarded": { draftId: string };
     "request.closed": { requestId: string };
+    "session.closed": { sessionId: string };
   }
 }
 
@@ -22,6 +23,7 @@ export const requestsModule: DeviModule = {
   routes(r, ctx) {
     const requests = new RequestsManager(new RequestsStore(ctx.db), ctx);
     managers.set(ctx, requests);
+    ctx.bus.on("session.closed", ({ sessionId }) => requests.onSessionClosed(sessionId));
     registerRequestRoutes(r, ctx, requests);
   },
 
