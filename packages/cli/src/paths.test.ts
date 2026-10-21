@@ -27,6 +27,14 @@ describe("rutas por sistema operativo", () => {
     expect(appDataDir({ ...linux, env: { XDG_DATA_HOME: "/d" } })).toBe("/d/devi");
   });
 
+  test("XDG_CONFIG_HOME / XDG_DATA_HOME vacías o relativas se ignoran (como el crate dirs de Rust)", () => {
+    for (const bad of ["", "rel/dir", "./x", "~/.config"]) {
+      expect(clientConfigPath({ ...linux, env: { XDG_CONFIG_HOME: bad } })).toBe("/home/a/.config/devi/config.json");
+      expect(stableBinPath({ ...linux, env: { XDG_DATA_HOME: bad } })).toBe("/home/a/.local/share/devi/bin/devi");
+    }
+    expect(stableBinPath({ ...linux, env: { XDG_DATA_HOME: "/d" } })).toBe("/d/devi/bin/devi");
+  });
+
   test("carpeta de recibidos por defecto", () => {
     expect(defaultReceivedDir(linux)).toBe("/home/a/Devi/recibidos");
     expect(defaultReceivedDir(win)).toBe("C:\\Users\\a\\Devi\\recibidos");

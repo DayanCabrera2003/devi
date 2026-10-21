@@ -8,11 +8,16 @@ export const MARKETPLACE_NAME = "devi-local";
 export const PLUGIN_NAME = "devi";
 export const PLUGIN_ID = `${PLUGIN_NAME}@${MARKETPLACE_NAME}`;
 
+// Variable XDG_* utilizable: como el crate dirs de Rust, se ignora si está vacía o no es absoluta.
+function xdgDir(value: string | undefined): string | undefined {
+  return value && posix.isAbsolute(value) ? value : undefined;
+}
+
 // Directorio de configuración del SO (el mismo que dirs::config_dir() en Rust/Tauri).
 export function osConfigDir({ platform, env, home }: Sys): string {
   if (platform === "win32") return env.APPDATA ?? win32.join(home, "AppData", "Roaming");
   if (platform === "darwin") return posix.join(home, "Library", "Application Support");
-  return env.XDG_CONFIG_HOME ?? posix.join(home, ".config");
+  return xdgDir(env.XDG_CONFIG_HOME) ?? posix.join(home, ".config");
 }
 
 // Configuración del cliente: <config del SO>/devi/config.json. DEVI_CONFIG la sustituye (tests, varias cuentas).
@@ -26,7 +31,7 @@ export function clientConfigPath(sys: Sys): string {
 export function appDataDir({ platform, env, home }: Sys): string {
   if (platform === "win32") return win32.join(env.LOCALAPPDATA ?? win32.join(home, "AppData", "Local"), "Devi");
   if (platform === "darwin") return posix.join(home, "Library", "Application Support", "Devi");
-  return posix.join(env.XDG_DATA_HOME ?? posix.join(home, ".local", "share"), "devi");
+  return posix.join(xdgDir(env.XDG_DATA_HOME) ?? posix.join(home, ".local", "share"), "devi");
 }
 
 export function binaryName(platform: NodeJS.Platform): string {
