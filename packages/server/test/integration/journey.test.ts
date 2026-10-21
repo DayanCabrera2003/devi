@@ -102,7 +102,7 @@ describe("recorrido completo", () => {
     const auth = await dayanSession.waitFor((e) => e.data.kind === "draft_authorized", "draft_authorized en la sesión de Dayan");
     const incoming = await mariaApp.waitFor((e) => e.event === "request.incoming", "solicitud en la app de María");
     const req = incoming.data.request;
-    expect(auth.data.meta).toEqual({ draft_id: draft.data.id, request_id: req.id });
+    expect(auth.data.meta).toEqual({ draft_id: draft.data.id, request_id: req.id, inbox_id: expect.any(String) });
     expect(req).toMatchObject({ status: "pending", fromSessionName: "frontend", message: "¿Me ayudas con este error del PR #12?" });
 
     // Vista previa: María descarga los archivos; Leo no puede.

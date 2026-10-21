@@ -1,4 +1,4 @@
-import { API } from "@devi/protocol";
+import { API, InboxQuery } from "@devi/protocol";
 import { readBody } from "../../core/body";
 import { json } from "../../core/http";
 import type { ModuleContext } from "../../core/module";
@@ -20,6 +20,16 @@ export function registerSessionRoutes(r: Router, ctx: ModuleContext, sessions: S
 
   r.on(API.sessionHook, async ({ request, access }) => {
     sessions.hook(access.memberId, await readBody(request, API.sessionHook.body));
+    return ok();
+  });
+
+  // Bandeja (entregas sin canal): la recoge el hook de la propia sesión y la confirma después.
+  r.on(API.sessionInbox, ({ url, access }) =>
+    json(sessions.inbox(access.memberId, InboxQuery.parse(Object.fromEntries(url.searchParams)))),
+  );
+
+  r.on(API.ackInbox, async ({ request, access }) => {
+    sessions.ack(access.memberId, (await readBody(request, API.ackInbox.body)).ids);
     return ok();
   });
 

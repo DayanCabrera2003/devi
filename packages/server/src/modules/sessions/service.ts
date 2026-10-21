@@ -1,4 +1,4 @@
-import type { HookBody, RegisterSessionBody, Session } from "@devi/protocol";
+import type { HookBody, InboxItem, InboxQuery, RegisterSessionBody, Session, SessionDelivery } from "@devi/protocol";
 import type { z } from "zod";
 import { HttpError } from "../../core/http";
 import type { Presence } from "../../core/presence";
@@ -8,6 +8,9 @@ import type { SessionRecord, SessionsStore } from "./store";
 
 // Una sesión sin señales en 24 h se borra (la poda corre cada hora).
 export const SESSION_PRUNE_MS = 24 * 3_600_000;
+// Las entregas sin confirmar de la bandeja caducan a los 7 días.
+export const INBOX_TTL_MS = 7 * 86_400_000;
+const INBOX_KINDS: ReadonlySet<string> = new Set(["request", "response", "draft_authorized", "draft_discarded"]);
 
 export class SessionManager implements SessionsService {
   constructor(
@@ -24,13 +27,13 @@ export class SessionManager implements SessionsService {
   register(memberId: string, body: z.output<typeof RegisterSessionBody>): Session {
     const existing = this.store.same(memberId, body.name, body.parentPid);
     if (existing) {
-      this.store.updateCwd(existing.id, body.cwd, this.now());
+      this.store.updateOnReregister(existing.id, body.cwd, body.channel, this.now());
       return this.toSession(this.store.get(existing.id)!);
     }
     for (const id of this.store.replacedBy(memberId, body.name, body.parentPid)) this.remove(id);
     const rec: SessionRecord = {
       id: crypto.randomUUID(), memberId, name: body.name, cwd: body.cwd, parentPid: body.parentPid,
-      status: "idle", claudeSessionId: null, lastSeen: this.now(),
+      status: "idle", claudeSessionId: null, lastSeen: this.now(), channel: body.channel,
     };
     this.store.insert(rec);
     this.changed(memberId);
@@ -67,6 +70,39 @@ export class SessionManager implements SessionsService {
     if (!rec) throw new HttpError(404, "sesión desconocida", { code: "not_found" });
     if (rec.memberId !== memberId) throw new HttpError(403, "esta sesión no es tuya", { code: "forbidden" });
     return this.toSession(rec);
+  }
+
+  // ---- bandeja --------------------------------------------------------------
+
+  // Guarda la entrega en la bandeja de la sesión (salvo debug) y la devuelve con meta.inbox_id.
+  // Se llama dentro de la transacción del cambio de estado que la provoca.
+  enqueue(sessionId: string, d: SessionDelivery): SessionDelivery {
+    if (!INBOX_KINDS.has(d.kind)) return d;
+    const id = crypto.randomUUID();
+    const meta = { ...d.meta, inbox_id: id };
+    this.store.insertInbox({
+      id, sessionId, kind: d.kind as InboxItem["kind"], content: d.content, meta: JSON.stringify(meta), createdAt: this.now(),
+    });
+    return { ...d, meta };
+  }
+
+  // Entregas sin confirmar de la sesión de quien llama, emparejada como en los hooks. Sin pareja: [].
+  inbox(memberId: string, q: z.output<typeof InboxQuery>): InboxItem[] {
+    const rec = this.store.findForHook(memberId, q.parentPid, q.claudeSessionId);
+    if (!rec) return [];
+    const cutoff = this.now() - INBOX_TTL_MS;
+    return this.store
+      .unacked(rec.id)
+      .filter((r) => r.createdAt >= cutoff)
+      .map((r) => ({ id: r.id, kind: r.kind, content: r.content, meta: JSON.parse(r.meta) as Record<string, string>, createdAt: r.createdAt }));
+  }
+
+  ack(memberId: string, ids: string[]): void {
+    this.store.ack(memberId, ids, this.now());
+  }
+
+  sweepInbox(): number {
+    return this.store.sweepInbox(this.now() - INBOX_TTL_MS);
   }
 
   opened(id: string): void {
@@ -111,6 +147,6 @@ export class SessionManager implements SessionsService {
 
   private toSession(r: SessionRecord): Session {
     const seen = this.presence.lastSeenOf(sessionKey(r.id)) ?? 0;
-    return { id: r.id, memberId: r.memberId, name: r.name, cwd: r.cwd, status: r.status, lastSeen: Math.max(r.lastSeen, seen) };
+    return { id: r.id, memberId: r.memberId, name: r.name, cwd: r.cwd, status: r.status, lastSeen: Math.max(r.lastSeen, seen), channel: r.channel };
   }
 }

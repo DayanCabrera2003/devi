@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { API, CreateRoleBody, UpdateMemberBody, UpdateRoleBody, buildPath, matchPath } from "./api";
+import { API, CreateRoleBody, InboxQuery, RegisterSessionBody, UpdateMemberBody, UpdateRoleBody, buildPath, matchPath } from "./api";
 
 describe("catálogo de la API", () => {
   test("todas las rutas cuelgan de /api/v1 y no se repiten", () => {
@@ -39,6 +39,18 @@ describe("catálogo de la API", () => {
 
   test("matchPath con escapes inválidos no rompe", () => {
     expect(matchPath("/api/v1/files/:id", "/api/v1/files/%E0%A4%A")).toBeNull();
+  });
+
+  test("bandeja de sesión: no es humana (la usan los hooks y el MCP) y registrar sesión lleva channel", () => {
+    expect(API.sessionInbox).toMatchObject({ method: "GET", path: "/api/v1/sessions/inbox", actor: "owner" });
+    expect(API.ackInbox).toMatchObject({ method: "POST", path: "/api/v1/sessions/inbox/ack", actor: "owner" });
+    expect("human" in API.sessionInbox).toBe(false);
+    expect("human" in API.ackInbox).toBe(false);
+    expect(InboxQuery.parse({ parentPid: "12", claudeSessionId: "c1" })).toEqual({ parentPid: 12, claudeSessionId: "c1" });
+    expect(API.ackInbox.body.safeParse({ ids: ["a"] }).success).toBe(true);
+    expect(API.ackInbox.body.safeParse({}).success).toBe(false);
+    expect(RegisterSessionBody.parse({ name: "a", cwd: "/", parentPid: 1 }).channel).toBe(false);
+    expect(RegisterSessionBody.parse({ name: "a", cwd: "/", parentPid: 1, channel: true }).channel).toBe(true);
   });
 
   test("los cuerpos validan", () => {

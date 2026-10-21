@@ -41,6 +41,10 @@ export const sessionsModule: DeviModule = {
   onStart(ctx) {
     const sessions = managers.get(ctx)!;
     sessions.prune();
-    ctx.timers.every(HOUR, () => sessions.prune());
+    sessions.sweepInbox();
+    ctx.timers.every(HOUR, () => {
+      sessions.prune();
+      sessions.sweepInbox();
+    });
   },
 };

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import {
-  DeviRequestSchema, DraftSchema, MeSchema, MemberSchema, PermSchema, RoleSchema,
+  DeviRequestSchema, DraftSchema, InboxItemSchema, MeSchema, MemberSchema, PermSchema, RoleSchema,
   SessionSchema, SessionStatusSchema, SettingsSchema, TeamViewSchema,
 } from "./entities";
 import type { Perm } from "./perms";
@@ -41,10 +41,18 @@ export const CreateRoleBody = RoleFields.extend({
 });
 export const UpdateRoleBody = RoleFields.partial();
 
-export const RegisterSessionBody = z.object({ name: NonEmpty, cwd: z.string(), parentPid: z.number().int() });
+// channel: la sesión tiene el canal de Claude Code cargado (recibe las entregas en tiempo real).
+// Sin canal, las entregas esperan en la bandeja de la sesión hasta que un hook las recoge.
+export const RegisterSessionBody = z.object({
+  name: NonEmpty, cwd: z.string(), parentPid: z.number().int(), channel: z.boolean().default(false),
+});
 export const HookBody = z.object({
   claudeSessionId: z.string(), cwd: z.string(), parentPid: z.number().int(), status: SessionStatusSchema,
 });
+
+// GET /sessions/inbox va con query: el hook se identifica igual que en POST /sessions/hook.
+export const InboxQuery = z.object({ parentPid: z.coerce.number().int(), claudeSessionId: z.string() });
+export const AckInboxBody = z.object({ ids: z.array(z.string()).max(200) });
 
 // POST /drafts es multipart: campo "meta" (JSON de este esquema) + 0..5 campos "files".
 export const CreateDraftMeta = z.discriminatedUnion("kind", [
@@ -71,6 +79,10 @@ export const API = {
   registerSession: route({ method: "POST", path: "/api/v1/sessions", perm: null, actor: "any", body: RegisterSessionBody, response: SessionSchema }),
   closeSession: route({ method: "DELETE", path: "/api/v1/sessions/:id", perm: null, actor: "owner", body: Empty, response: Ok }),
   sessionHook: route({ method: "POST", path: "/api/v1/sessions/hook", perm: null, actor: "any", body: HookBody, response: Ok }),
+  // Bandeja de la sesión (entregas sin canal). No son humanas: las usan los hooks y el MCP.
+  sessionInbox: route({ method: "GET", path: "/api/v1/sessions/inbox", perm: null, actor: "owner", body: Empty /* query: InboxQuery */,
+    response: z.array(InboxItemSchema) }),
+  ackInbox: route({ method: "POST", path: "/api/v1/sessions/inbox/ack", perm: null, actor: "owner", body: AckInboxBody, response: Ok }),
   memberSessions: route({ method: "GET", path: "/api/v1/members/:id/sessions", perm: null, actor: "any", body: Empty, response: z.array(SessionSchema) }),
   // Latido de presencia: la app lo manda sin sessionId; el MCP, con el de su sesión. Ver PRESENCE.
   heartbeat: route({ method: "POST", path: "/api/v1/presence/heartbeat", perm: null, actor: "any",

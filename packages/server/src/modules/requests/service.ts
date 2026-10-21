@@ -72,9 +72,13 @@ export class RequestsManager {
     // insertan el borrador y sus archivos; solo tras el commit hay temporizadores y eventos. Si algo falla,
     // se borra lo escrito y no cambia nada más.
     const written = this.files.write(valid);
+    let previousStaged: SessionDelivery | null = null;
     try {
       this.store.transaction(() => {
-        if (previous) this.store.setDraftStatus(previous.id, "discarded");
+        if (previous) {
+          this.store.setDraftStatus(previous.id, "discarded");
+          previousStaged = this.stageForAuthor(previous, this.discardedDelivery(previous, "replaced"));
+        }
         this.store.insertDraft(d);
         this.files.record({ draftId: d.id, direction: d.kind, authorMemberId: access.memberId, peerMemberId: peer, written });
       });
@@ -82,7 +86,7 @@ export class RequestsManager {
       this.files.removeWritten(written);
       throw e;
     }
-    if (previous) this.afterDiscard(previous, "replaced");
+    if (previous) this.afterDiscard(previous, "replaced", previousStaged);
     if (request) this.timers.cancel(requestKey(request.id)); // el plazo se pausa mientras haya borrador de respuesta
     this.timers.at(draftKey(d.id), d.expiresAt, () => this.expire(d.id));
     const view = this.draftView(d);
@@ -107,31 +111,39 @@ export class RequestsManager {
         forwardedSessionId: null, outcome: null, outcomeText: null, createdAt: now, sentAt: now,
         deadline: now + this.settings.requestTimeoutMs,
       };
+      let staged: SessionDelivery | null = null;
       this.store.transaction(() => {
         this.store.insertRequest(r);
         this.store.setDraftStatus(d.id, "authorized");
         this.files.attachToRequest(d.id, r.id);
+        staged = this.stageForAuthor(d, {
+          kind: "draft_authorized",
+          content: authorizedContent({ kind: "request", toName: to.name, requestId: r.id }),
+          meta: { draft_id: d.id, request_id: r.id },
+        });
       });
       this.timers.cancel(draftKey(d.id));
       this.schedule(r);
       const view = this.requestView(r);
       this.push(r.toMemberId, { type: "request.incoming", request: view });
       this.push(r.fromMemberId, { type: "request.updated", request: view });
-      this.deliverToAuthor(d, {
-        kind: "draft_authorized",
-        content: authorizedContent({ kind: "request", toName: to.name, requestId: r.id }),
-        meta: { draft_id: d.id, request_id: r.id },
-      });
+      this.sendStaged(d, staged);
     } else {
       const r = this.requestOr404(d.requestId!);
       if (r.status !== "forwarded") throw conflict(`la solicitud ya está ${r.status}`);
       r.status = "answered";
       r.outcome = "answered";
       r.outcomeText = d.message;
+      let staged: SessionDelivery | null = null;
       this.store.transaction(() => {
         this.store.saveRequest(r);
         this.store.setDraftStatus(d.id, "authorized");
         this.files.attachToRequest(d.id, r.id);
+        staged = this.stageForAuthor(d, {
+          kind: "draft_authorized",
+          content: authorizedContent({ kind: "response", fromName: this.team.nameOf(r.fromMemberId), requestId: r.id }),
+          meta: { draft_id: d.id, request_id: r.id },
+        });
       });
       this.timers.cancel(draftKey(d.id));
       this.timers.cancel(requestKey(r.id));
@@ -139,11 +151,7 @@ export class RequestsManager {
       this.push(r.fromMemberId, { type: "response.incoming", request: view });
       this.push(r.fromMemberId, { type: "request.updated", request: view });
       this.push(r.toMemberId, { type: "request.updated", request: view });
-      this.deliverToAuthor(d, {
-        kind: "draft_authorized",
-        content: authorizedContent({ kind: "response", fromName: this.team.nameOf(r.fromMemberId), requestId: r.id }),
-        meta: { draft_id: d.id, request_id: r.id },
-      });
+      this.sendStaged(d, staged);
     }
     return this.draftView(this.store.getDraft(d.id)!);
   }
@@ -163,23 +171,32 @@ export class RequestsManager {
   }
 
   private discard(d: DraftRecord, reason: DiscardReason): void {
-    this.store.setDraftStatus(d.id, "discarded");
-    this.afterDiscard(d, reason);
+    let staged: SessionDelivery | null = null;
+    this.store.transaction(() => {
+      this.store.setDraftStatus(d.id, "discarded");
+      staged = this.stageForAuthor(d, this.discardedDelivery(d, reason));
+    });
+    this.afterDiscard(d, reason, staged);
   }
 
-  // Efectos de un borrador ya descartado en la BD (temporizadores, avisos, plazo de la solicitud).
-  private afterDiscard(d: DraftRecord, reason: DiscardReason): void {
-    this.timers.cancel(draftKey(d.id));
-    this.push(d.authorMemberId, { type: "draft.discarded", draftId: d.id });
+  private discardedDelivery(d: DraftRecord, reason: DiscardReason): SessionDelivery {
     const target =
       d.kind === "request"
         ? ({ kind: "request", toName: this.team.nameOf(d.toMemberId!) } as const)
         : ({ kind: "response", requestId: d.requestId! } as const);
-    this.deliverToAuthor(d, {
+    return {
       kind: "draft_discarded",
       content: discardedContent(target, reason, Math.round(this.settings.draftTtlMs / 60_000)),
       meta: { draft_id: d.id, reason, ...(d.requestId ? { request_id: d.requestId } : {}) },
-    });
+    };
+  }
+
+  // Efectos de un borrador ya descartado en la BD (temporizadores, avisos, plazo de la solicitud).
+  // `staged`: el aviso draft_discarded ya guardado en la bandeja de la sesión autora (o null si no existe).
+  private afterDiscard(d: DraftRecord, reason: DiscardReason, staged: SessionDelivery | null): void {
+    this.timers.cancel(draftKey(d.id));
+    this.push(d.authorMemberId, { type: "draft.discarded", draftId: d.id });
+    this.sendStaged(d, staged);
     this.ctx.bus.emit("draft.discarded", { draftId: d.id });
     // Respuesta descartada o caducada: la solicitud sigue en forwarded con un plazo nuevo completo.
     // Si se sustituye, el borrador nuevo vuelve a pausarlo enseguida.
@@ -202,19 +219,23 @@ export class RequestsManager {
     const s = this.sessions.get(sessionId);
     if (!s || s.memberId !== r.toMemberId || !this.sessions.isAlive(s.id)) throw sessionGone();
     const files = this.files.forRequest(r.id).files;
-    const delivered = this.deliver(s.id, {
+    const delivery: SessionDelivery = {
       kind: "request",
       content: requestContent({ id: r.id, fromName: this.team.nameOf(r.fromMemberId), fromSessionName: r.fromSessionName, message: r.message, files }),
       meta: {
         request_id: r.id, from: r.fromMemberId, from_name: this.team.nameOf(r.fromMemberId),
         from_session: r.fromSessionName, files: filesMeta(files),
       },
+    };
+    // Bandeja + estado en una transacción. Si la sesión se cerró justo ahora (no hay stream), se deshace todo:
+    // la solicitud sigue pendiente y la app avisa.
+    this.store.transaction(() => {
+      const staged = this.sessions.enqueue(s.id, delivery);
+      r.status = "forwarded";
+      r.forwardedSessionId = s.id;
+      this.store.saveRequest(r);
+      if (!this.deliver(s.id, staged)) throw sessionGone();
     });
-    // Si la sesión se cerró justo ahora, la solicitud sigue pendiente y la app avisa.
-    if (!delivered) throw sessionGone();
-    r.status = "forwarded";
-    r.forwardedSessionId = s.id;
-    this.store.saveRequest(r);
     return this.pushBoth(r, "request.updated");
   }
 
@@ -249,14 +270,18 @@ export class RequestsManager {
     const s = this.sessions.get(sessionId);
     if (!s || s.memberId !== r.fromMemberId || !this.sessions.isAlive(s.id)) throw sessionGone();
     const files = this.files.forRequest(r.id).responseFiles;
-    const delivered = this.deliver(s.id, {
+    const delivery: SessionDelivery = {
       kind: "response",
       content: responseContent({
         toName: this.team.nameOf(r.toMemberId), message: r.message, outcome: r.outcome!, outcomeText: r.outcomeText, files,
       }),
       meta: { request_id: r.id, from: r.toMemberId, outcome: r.outcome ?? "", files: filesMeta(files) },
+    };
+    this.store.transaction(() => {
+      if (!this.deliver(s.id, this.sessions.enqueue(s.id, delivery))) throw sessionGone();
+      r.status = "closed";
+      this.store.saveRequest(r);
     });
-    if (!delivered) throw sessionGone();
     return this.close(r);
   }
 
@@ -379,9 +404,14 @@ export class RequestsManager {
     pushUser(this.ctx.sse, memberId, event);
   }
 
-  // Entrega a la sesión del autor solo si sigue existiendo (pudo cerrarse o ser sustituida).
-  private deliverToAuthor(d: DraftRecord, delivery: SessionDelivery): void {
-    if (this.sessions.get(d.authorSessionId)) this.deliver(d.authorSessionId, delivery);
+  // Aviso a la sesión del autor, solo si sigue existiendo (pudo cerrarse o ser sustituida). En dos pasos:
+  // stageForAuthor lo guarda en su bandeja dentro de la transacción; sendStaged lo empuja tras el commit.
+  private stageForAuthor(d: DraftRecord, delivery: SessionDelivery): SessionDelivery | null {
+    return this.sessions.get(d.authorSessionId) ? this.sessions.enqueue(d.authorSessionId, delivery) : null;
+  }
+
+  private sendStaged(d: DraftRecord, staged: SessionDelivery | null): void {
+    if (staged) this.deliver(d.authorSessionId, staged);
   }
 
   private deliver(sessionId: string, d: SessionDelivery): boolean {

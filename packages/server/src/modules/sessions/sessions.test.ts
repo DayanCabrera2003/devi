@@ -36,6 +36,16 @@ describe("sesiones", () => {
     expect(await sessionsOf("m-dayan")).toEqual([]);
   });
 
+  test("channel: se guarda al registrar (por defecto false) y se expone en la sesión", async () => {
+    await setup();
+    const a = (await register("dayan@dev", "frontend", 100)).data;
+    expect(a.channel).toBe(false);
+    const b = (await t.call("dayan@dev", "POST", "/api/v1/sessions", { name: "api", cwd: "/r", parentPid: 200, channel: true })).data;
+    expect(b.channel).toBe(true);
+    await t.openStream("dayan@dev", `/api/v1/events/session/${b.id}`);
+    expect((await sessionsOf("m-dayan"))[0]).toMatchObject({ id: b.id, channel: true });
+  });
+
   test("el SSE de una sesión ajena → 403; desconocida → 404", async () => {
     await setup();
     const s = (await register("dayan@dev", "frontend", 100)).data;

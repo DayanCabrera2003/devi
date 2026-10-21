@@ -1,4 +1,4 @@
-import type { FileMeta, Session, Settings } from "@devi/protocol";
+import type { FileMeta, Session, SessionDelivery, Settings } from "@devi/protocol";
 
 // Servicios que un módulo ofrece a los demás a través de ModuleContext.services.
 // Así ningún módulo importa a otro: solo dependen de estas interfaces del núcleo.
@@ -20,6 +20,8 @@ export interface SessionsService {
   isAlive(id: string): boolean;
   liveOf(memberId: string): Session[];
   hasLive(memberId: string): boolean;
+  // Guarda la entrega en la bandeja de la sesión (salvo debug) y la devuelve con meta.inbox_id.
+  enqueue(sessionId: string, d: SessionDelivery): SessionDelivery;
 }
 
 // Archivo ya validado (nombre saneado, bytes en memoria, hash calculado).

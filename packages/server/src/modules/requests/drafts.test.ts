@@ -87,7 +87,7 @@ describe("borradores de solicitud", () => {
     expect(f.deliveries(f.dayanFront.id)).toContainEqual({
       kind: "draft_discarded",
       content: "Tu usuario descartó el borrador de solicitud para María. No se envió nada.",
-      meta: { draft_id: d.id, reason: "discarded" },
+      meta: { draft_id: d.id, reason: "discarded", inbox_id: expect.any(String) },
     });
     expect(released).toEqual([d.id]);
   });
@@ -100,7 +100,7 @@ describe("borradores de solicitud", () => {
     f.clock.advance(1);
     expect(f.userEvents("m-dayan")).toContainEqual({ type: "draft.discarded", draftId: d.id });
     const last = f.deliveries(f.dayanFront.id).at(-1);
-    expect(last.meta).toEqual({ draft_id: d.id, reason: "expired" });
+    expect(last.meta).toEqual({ draft_id: d.id, reason: "expired", inbox_id: expect.any(String) });
     expect(last.content).toContain("no lo autorizó en 15 min");
     expect((await f.call("dayan@dev", "POST", `/api/v1/drafts/${d.id}/authorize`)).status).toBe(409);
   });
@@ -134,7 +134,7 @@ describe("borradores de respuesta", () => {
     const first = (await f.responseDraft(r.id, "primera")).data;
     const second = (await f.responseDraft(r.id, "segunda")).data;
     expect(f.deliveries(f.mariaApi.id).find((d) => d.kind === "draft_discarded")?.meta).toEqual({
-      draft_id: first.id, reason: "replaced", request_id: r.id,
+      draft_id: first.id, reason: "replaced", request_id: r.id, inbox_id: expect.any(String),
     });
     expect((await f.call("maria@dev", "POST", `/api/v1/drafts/${first.id}/authorize`)).status).toBe(409);
     expect((await f.call("maria@dev", "POST", `/api/v1/drafts/${second.id}/authorize`)).status).toBe(200);

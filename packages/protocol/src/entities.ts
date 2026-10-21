@@ -30,8 +30,19 @@ export const SessionSchema = z.object({
   cwd: z.string(),
   status: SessionStatusSchema,
   lastSeen: z.number(),
+  channel: z.boolean(), // canal de Claude Code cargado: las entregas llegan en tiempo real
 });
 export type Session = z.infer<typeof SessionSchema>;
+
+// Entrega guardada en la bandeja de una sesión hasta que se confirma (ack).
+export const InboxItemSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["request", "response", "draft_authorized", "draft_discarded"]),
+  content: z.string(),
+  meta: z.record(z.string(), z.string()),
+  createdAt: z.number(),
+});
+export type InboxItem = z.infer<typeof InboxItemSchema>;
 
 export const FileMetaSchema = z.object({
   id: z.string(),
