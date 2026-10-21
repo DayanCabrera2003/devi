@@ -1,4 +1,4 @@
-import type { UserEvent } from "@devi/protocol";
+import type { DeviRequest, UserEvent } from "@devi/protocol";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { DeviApi } from "./api";
 import { DeviApp, REPLAY_QUIET_MS } from "./app.svelte";
@@ -16,6 +16,12 @@ function setup(config: ClientConfig | null = CONFIG) {
     team: vi.fn(async () => TEAM),
     memberSessions: vi.fn(async () => []),
     rejectRequest: vi.fn(async () => req({ status: "rejected", outcome: "rejected", outcomeText: "no" })),
+    authorizeDraft: vi.fn(async () => draft({ status: "authorized" })),
+    discardDraft: vi.fn(async () => draft({ status: "discarded" })),
+    forwardRequest: vi.fn(async () => req({ status: "forwarded", forwardedSessionId: "s1" })),
+    acceptResponse: vi.fn(async () => mine({ status: "closed", outcome: "answered" })),
+    resendRequest: vi.fn(async () => mine({ status: "pending", sentAt: 9_000 })),
+    ignoreRequest: vi.fn(async () => mine({ status: "closed" })),
     subscribe: vi.fn((ev: (e: UserEvent) => void, st: (s: string, err?: unknown) => void) => {
       onEvent = ev;
       onStatus = st;
@@ -58,6 +64,9 @@ function setup(config: ClientConfig | null = CONFIG) {
 
 // Deja pasar la ventana del reenvío inicial (requiere vi.useFakeTimers()).
 const settle = () => vi.advanceTimersByTimeAsync(REPLAY_QUIET_MS * 10);
+
+// Solicitud que hice yo (m1) a María (m2).
+const mine = (over: Partial<DeviRequest> = {}) => req({ id: "q7", fromMemberId: "m1", toMemberId: "m2", ...over });
 
 const incoming: UserEvent = { type: "request.incoming", request: req() };
 
@@ -329,5 +338,88 @@ describe("DeviApp", () => {
     );
     expect(t.app.phase).toBe("app");
     expect(t.api.subscribe).toHaveBeenCalledOnce();
+  });
+
+  describe("contrato con el cliente y tarjetas", () => {
+    const mixed: UserEvent[] = [
+      { type: "draft.awaiting", draft: draft() },
+      incoming,
+      { type: "response.incoming", request: mine({ status: "answered", outcome: "answered", outcomeText: "Hecho" }) },
+      { type: "request.timed_out", request: req({ id: "q8", fromMemberId: "m1", toMemberId: "m2", status: "timed_out" }) },
+    ];
+
+    test("open llega antes que los frames reenviados: lo reenviado se queda en la bandeja", async () => {
+      vi.useFakeTimers();
+      const t = setup();
+      await t.app.boot();
+      t.status("open");
+      for (const ev of mixed) t.event(ev);
+      await settle();
+      expect(t.app.inbox.cards.map((c) => c.kind)).toEqual(["draft", "request", "response", "timeout"]);
+      expect(t.emitMascot).toHaveBeenLastCalledWith(expect.objectContaining({ online: true, pending: 4 }));
+    });
+
+    test("al reconectar se vacía la bandeja y se rehace con el reenvío (tipos mezclados)", async () => {
+      vi.useFakeTimers();
+      const t = setup();
+      await t.app.boot();
+      t.status("open");
+      for (const ev of mixed) t.event(ev);
+      await settle();
+      expect(t.notify).toHaveBeenCalledOnce(); // resumen
+      t.status("reconnecting");
+      expect(t.app.inbox.cards).toHaveLength(4); // mientras reconecta se ven las de antes
+      t.status("open");
+      expect(t.app.inbox.cards).toHaveLength(0);
+      // Entretanto se respondió la solicitud entrante y se autorizó el borrador: el servidor no las reenvía.
+      t.event(mixed[2]!);
+      t.event(mixed[3]!);
+      await settle();
+      expect(t.app.inbox.cards.map((c) => c.key)).toEqual(["response:q7", "timeout:q8"]);
+      expect(t.notify).toHaveBeenCalledOnce();
+    });
+
+    test("cada acción quita su tarjeta", async () => {
+      vi.useFakeTimers();
+      const t = setup();
+      await t.app.boot();
+      t.status("open");
+      await settle();
+      const fill = () => {
+        t.app.inbox.clear();
+        for (const ev of mixed) t.event(ev);
+        t.event({ type: "request.timed_out", request: mine({ id: "q9", status: "timed_out" }) });
+      };
+      const keys = () => t.app.inbox.cards.map((c) => c.key);
+
+      fill();
+      await t.app.authorizeDraft(draft());
+      expect(keys()).not.toContain("draft:d1");
+
+      fill();
+      await t.app.discardDraft(draft());
+      expect(keys()).not.toContain("draft:d1");
+
+      fill();
+      await t.app.forward(req(), "s1");
+      expect(t.api.forwardRequest).toHaveBeenCalledWith("q1", "s1");
+      expect(keys()).not.toContain("request:q1");
+
+      fill();
+      await t.app.acceptResponse(mine());
+      expect(keys()).not.toContain("response:q7");
+
+      fill();
+      t.api.resendRequest.mockResolvedValueOnce(req({ id: "q8", fromMemberId: "m1", toMemberId: "m2", status: "pending", sentAt: 9_000 }));
+      await t.app.resend(req({ id: "q8" }));
+      expect(keys()).not.toContain("timeout:q8");
+
+      fill();
+      t.api.ignoreRequest.mockResolvedValueOnce(mine({ id: "q9", status: "closed" }));
+      await t.app.ignore(mine({ id: "q9" }));
+      expect(keys()).not.toContain("timeout:q9");
+      expect(keys()).toHaveLength(4); // el resto sigue ahí
+      expect(t.emitMascot).toHaveBeenLastCalledWith(expect.objectContaining({ pending: 4 }));
+    });
   });
 });
