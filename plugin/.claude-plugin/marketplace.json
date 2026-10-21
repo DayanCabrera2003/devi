@@ -1,0 +1,17 @@
+{
+  "name": "devi-local",
+  "owner": {
+    "name": "Devi"
+  },
+  "metadata": {
+    "description": "Marketplace local de Devi (lo genera `devi install-integration`)"
+  },
+  "plugins": [
+    {
+      "name": "devi",
+      "source": "./devi",
+      "description": "Devi: conecta las sesiones de Claude Code de tu equipo (solicitudes, respuestas y archivos con autorización humana)",
+      "version": "1.0.0"
+    }
+  ]
+}
