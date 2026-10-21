@@ -126,6 +126,14 @@ describe("createApp", () => {
     expect(evil.headers.get("Access-Control-Allow-Origin")).toBeNull();
   });
 
+  test("preflight en producción no anuncia X-Devi-Dev-User", async () => {
+    const prod = createApp({ identity: new DevIdentity(), modules: [testModule], allowedOrigins: ["tauri://localhost"], config: testConfig({ dev: false }) });
+    const pre = await prod.fetch(new Request("http://127.0.0.1/api/v1/me", { method: "OPTIONS", headers: { Origin: "tauri://localhost" } }));
+    expect(pre.headers.get("Access-Control-Allow-Headers")).not.toContain("X-Devi-Dev-User");
+    const dev = await make().fetch(new Request("http://127.0.0.1/api/v1/me", { method: "OPTIONS", headers: { Origin: "tauri://localhost" } }));
+    expect(dev.headers.get("Access-Control-Allow-Headers")).toContain("X-Devi-Dev-User");
+  });
+
   test("los módulos ven ctx.config", () => {
     const config = testConfig({ adminLogin: "root@dev" });
     let seen: unknown;

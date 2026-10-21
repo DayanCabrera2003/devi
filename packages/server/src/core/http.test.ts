@@ -16,9 +16,14 @@ describe("http", () => {
   });
 
   test("corsHeaders refleja el origen permitido", () => {
-    const h = corsHeaders("tauri://localhost");
+    const h = corsHeaders("tauri://localhost", { dev: false });
     expect(h["Access-Control-Allow-Origin"]).toBe("tauri://localhost");
     expect(h["Access-Control-Allow-Headers"]).toContain("X-Devi-Version");
     expect(h["Vary"]).toBe("Origin");
+  });
+
+  test("X-Devi-Dev-User solo se permite con dev", () => {
+    expect(corsHeaders("tauri://localhost", { dev: false })["Access-Control-Allow-Headers"]).not.toContain("X-Devi-Dev-User");
+    expect(corsHeaders("tauri://localhost", { dev: true })["Access-Control-Allow-Headers"]).toContain("X-Devi-Dev-User");
   });
 });

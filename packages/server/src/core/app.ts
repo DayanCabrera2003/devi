@@ -78,7 +78,7 @@ export function createApp(opts: AppOptions) {
 
   async function fetch(req: Request): Promise<Response> {
     const origin = req.headers.get("Origin");
-    const cors = isAllowedOrigin(origin, opts.allowedOrigins) ? corsHeaders(origin!) : null;
+    const cors = isAllowedOrigin(origin, opts.allowedOrigins) ? corsHeaders(origin!, { dev: ctx.config.dev }) : null;
     if (req.method === "OPTIONS") return new Response(null, { status: cors ? 204 : 403, headers: cors ?? {} });
 
     let res: Response;

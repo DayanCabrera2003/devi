@@ -19,11 +19,12 @@ export const TAURI_ORIGINS = ["tauri://localhost", "http://tauri.localhost", "ht
 
 export const isAllowedOrigin = (origin: string | null, allowed: string[]) => !!origin && allowed.includes(origin);
 
-export function corsHeaders(origin: string): Record<string, string> {
+// X-Devi-Dev-User solo se anuncia en dev: en producción el preflight no debe invitar a usarla.
+export function corsHeaders(origin: string, opts: { dev: boolean }): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-Devi-Version, X-Devi-Dev-User",
+    "Access-Control-Allow-Headers": `Content-Type, X-Devi-Version${opts.dev ? ", X-Devi-Dev-User" : ""}`,
     "Access-Control-Max-Age": "600",
     Vary: "Origin",
   };
