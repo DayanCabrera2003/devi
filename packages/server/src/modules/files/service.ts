@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { FileMeta, Settings } from "@devi/protocol";
 import { HttpError } from "../../core/http";
@@ -91,7 +91,9 @@ export class FileManager implements FilesService {
     const party = memberId === f.authorMemberId || (f.requestId !== null && memberId === f.peerMemberId);
     if (!party) throw new HttpError(403, "No tienes acceso a este archivo", { code: "forbidden" });
     if (f.deletedAt !== null) throw new HttpError(410, "El archivo ya se borró del servidor (retención)", { code: "gone" });
-    return { absPath: join(this.dataDir, f.path), name: f.name, sha256: f.sha256 };
+    const absPath = join(this.dataDir, f.path);
+    if (!existsSync(absPath)) throw new HttpError(410, "El archivo ya no está en el servidor", { code: "gone" });
+    return { absPath, name: f.name, sha256: f.sha256 };
   }
 
   releaseDraft(draftId: string): void {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_SETTINGS } from "@devi/protocol";
 import { createTestApp, stubTeamModule } from "../../testing/harness";
@@ -54,6 +54,15 @@ describe("archivos", () => {
     expect((await download("b@dev", id)).status).toBe(200);
     expect((await download("c@dev", id)).status).toBe(403);
     expect((await download("a@dev", "nope")).status).toBe(404);
+  });
+
+  test("archivo borrado del disco (pero no marcado) → 410 en español", async () => {
+    const { metas } = await setup();
+    rmSync(join(t.dataDir, "files", metas[0]!.id));
+    const res = await download("a@dev", metas[0]!.id);
+    expect(res.status).toBe(410);
+    expect(res.data.code).toBe("gone");
+    expect(res.data.error).toContain("ya no está");
   });
 
   test("retención: 7 días tras cerrar la solicitud", async () => {
