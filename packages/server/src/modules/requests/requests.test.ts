@@ -244,3 +244,12 @@ describe("la sesión desaparece", () => {
     expect(f.deliveries(f.dayanFront.id).length).toBe(before);
   });
 });
+
+describe("tope de cuerpo JSON", () => {
+  test("más de 64 KB en una ruta JSON → 413", async () => {
+    f = await setupFlow();
+    const r = await f.pendingRequest();
+    const res = await post("maria@dev", `/api/v1/requests/${r.id}/reject`, { reason: "x".repeat(70_000) });
+    expect(res.status).toBe(413);
+  });
+});

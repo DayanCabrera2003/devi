@@ -1,5 +1,5 @@
 import { API, CreateDraftMeta, FILE_LIMITS } from "@devi/protocol";
-import { readBody } from "../../core/body";
+import { readBody, readLimited } from "../../core/body";
 import { HttpError, json } from "../../core/http";
 import type { ModuleContext } from "../../core/module";
 import { pushUser, userKey } from "../../core/push";
@@ -13,11 +13,11 @@ const invalid = (message: string) => new HttpError(400, message, { code: "invali
 
 // POST /drafts: multipart con el campo "meta" (JSON de CreateDraftMeta) y 0..5 campos "files".
 async function readDraftForm(request: Request) {
-  if (Number(request.headers.get("Content-Length") ?? 0) > MAX_DRAFT_BODY) {
-    throw new HttpError(413, "La solicitud es demasiado grande: como máximo 5 archivos de 1 MB", { code: "too_large" });
-  }
+  // Se cuenta mientras se lee (Content-Length y chunks); después se parsea el multipart desde memoria.
+  const bytes = await readLimited(request, MAX_DRAFT_BODY);
+  const contentType = request.headers.get("Content-Type") ?? "";
   // Sin anotar el tipo: el FormData de Bun y el de los tipos DOM no coinciden en tsc.
-  const form = await request.formData().catch(() => null);
+  const form = await new Response(bytes, { headers: { "Content-Type": contentType } }).formData().catch(() => null);
   if (!form) throw invalid('POST /drafts espera multipart/form-data con el campo "meta"');
   const metaRaw = form.get("meta");
   if (typeof metaRaw !== "string") throw invalid('Falta el campo "meta"');

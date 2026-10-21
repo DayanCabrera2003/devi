@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { DEFAULT_SETTINGS } from "@devi/protocol";
+import { API_VERSION, DEFAULT_SETTINGS } from "@devi/protocol";
+import { MAX_DRAFT_BODY } from "./routes";
 import { type Flow, members, setupFlow } from "./fixture";
 
 let f: Flow;
@@ -242,5 +243,33 @@ describe("autorizar re-comprueba permisos actuales", () => {
       expect(res.status).toBe(403);
       expect(res.data).toMatchObject({ code: "missing_perm", perm: "files.send" });
     });
+  });
+});
+
+describe("tope de cuerpo de POST /drafts", () => {
+  const post = (body: BodyInit, headers: Record<string, string> = {}) =>
+    f.app.fetch(
+      new Request("http://127.0.0.1/api/v1/drafts", {
+        method: "POST", body, duplex: "half", headers: { "X-Devi-Version": API_VERSION, "X-Devi-Dev-User": "dayan@dev", ...headers },
+      } as RequestInit),
+    );
+
+  test("Content-Length excesivo → 413", async () => {
+    f = await setupFlow();
+    const res = await post("x", { "Content-Type": "multipart/form-data; boundary=x", "Content-Length": String(MAX_DRAFT_BODY + 1) });
+    expect(res.status).toBe(413);
+  });
+
+  test("por chunks (sin Content-Length) → 413 y un cuerpo dentro del tope sigue pasando", async () => {
+    f = await setupFlow();
+    const stream = (size: number) =>
+      new ReadableStream({
+        start(c) {
+          for (let n = 0; n < size; n += 65_536) c.enqueue(new Uint8Array(Math.min(65_536, size - n)).fill(97));
+          c.close();
+        },
+      });
+    const res = await post(stream(MAX_DRAFT_BODY + 1), { "Content-Type": "multipart/form-data; boundary=x" });
+    expect(res.status).toBe(413);
   });
 });
