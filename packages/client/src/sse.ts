@@ -7,7 +7,11 @@ export type FetchFn = (url: string, init?: RequestInit) => Promise<Response>;
 // Parser incremental: recibe trozos de texto y emite un frame por cada bloque terminado en línea vacía.
 export function createSseParser(onFrame: (f: SseFrame) => void): (chunk: string) => void {
   let buf = "";
+  let heldCr = false; // un \r al final del trozo anterior: puede ser la mitad de un \r\n
   return (chunk) => {
+    if (heldCr) chunk = "\r" + chunk;
+    heldCr = chunk.endsWith("\r");
+    if (heldCr) chunk = chunk.slice(0, -1);
     buf += chunk.replace(/\r\n?/g, "\n");
     let i: number;
     while ((i = buf.indexOf("\n\n")) >= 0) {
@@ -24,7 +28,14 @@ export function createSseParser(onFrame: (f: SseFrame) => void): (chunk: string)
         if (field === "event") event = value;
         else if (field === "data") data.push(value);
       }
-      if (data.length > 0) onFrame({ event, data: data.join("\n") });
+      if (data.length > 0) {
+        try {
+          onFrame({ event, data: data.join("\n") });
+        } catch (e) {
+          // un handler defectuoso no debe tumbar el stream ni los frames que siguen
+          console.error("Error en el manejador de un frame SSE:", e);
+        }
+      }
     }
   };
 }
@@ -42,6 +53,8 @@ export type SubscribeSseOptions = {
   onStatus?: (s: SseStatus) => void;
   baseDelayMs?: number;
   maxDelayMs?: number;
+  // Opción interna: sin ningún trozo en este tiempo se aborta y se reconecta (el servidor hace ping cada 20 s).
+  idleTimeoutMs?: number;
 };
 
 // Abre el stream y lo reabre con espera exponencial si se cae o el servidor responde con error.
@@ -49,6 +62,7 @@ export type SubscribeSseOptions = {
 export function subscribeSse(opts: SubscribeSseOptions): () => void {
   const base = opts.baseDelayMs ?? 1000;
   const max = opts.maxDelayMs ?? 30_000;
+  const idleMs = opts.idleTimeoutMs ?? 45_000;
   let stopped = false;
   let ctrl: AbortController | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -59,10 +73,11 @@ export function subscribeSse(opts: SubscribeSseOptions): () => void {
   };
 
   async function connectOnce(): Promise<void> {
-    ctrl = new AbortController();
+    const own = new AbortController();
+    ctrl = own;
     const res = await opts.fetch(opts.url, {
       headers: { Accept: "text/event-stream", ...opts.headers },
-      signal: ctrl.signal,
+      signal: own.signal,
     });
     if (!res.ok || !res.body) {
       await res.body?.cancel().catch(() => {});
@@ -70,13 +85,28 @@ export function subscribeSse(opts: SubscribeSseOptions): () => void {
     }
     attempt = 0;
     status("open");
-    const parse = createSseParser(opts.onFrame);
+    // Si se canceló mientras llegaba la respuesta, ninguna entrega debe salir.
+    const parse = createSseParser((f) => {
+      if (!stopped) opts.onFrame(f);
+    });
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) return;
-      parse(decoder.decode(value, { stream: true }));
+    let idle: ReturnType<typeof setTimeout> | null = null;
+    const arm = () => {
+      if (idle) clearTimeout(idle);
+      idle = setTimeout(() => own.abort(), idleMs);
+    };
+    try {
+      arm();
+      while (!stopped) {
+        const { value, done } = await reader.read();
+        if (done) return;
+        arm();
+        parse(decoder.decode(value, { stream: true }));
+      }
+    } finally {
+      if (idle) clearTimeout(idle);
+      own.abort(); // siempre se cierra el stream viejo antes de reconectar
     }
   }
 
