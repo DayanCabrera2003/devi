@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { posix, win32 } from "node:path";
 import { z } from "zod";
 import { clientConfigPath, defaultReceivedDir, type Sys } from "./paths";
 
@@ -14,6 +15,14 @@ export type ClientConfig = z.infer<typeof ClientConfigSchema>;
 export type ResolvedConfig = { serverUrl: string; devUser: string | undefined; receivedDir: string; path: string };
 
 export class ConfigError extends Error {}
+
+// Una carpeta relativa dependería del cwd de cada sesión: se ignora (con aviso) y se usa la de por defecto.
+function validReceivedDir(dir: string | undefined, sys: Sys): string | undefined {
+  if (dir === undefined) return undefined;
+  if ((sys.platform === "win32" ? win32 : posix).isAbsolute(dir)) return dir;
+  console.error(`[devi] aviso: receivedDir "${dir}" no es una ruta absoluta; se ignora y se usa la carpeta por defecto.`);
+  return undefined;
+}
 
 // DEVI_SERVER_URL y DEVI_DEV_USER tienen prioridad sobre el fichero (tests y depuración).
 export async function loadClientConfig(sys: Sys): Promise<ResolvedConfig> {
@@ -45,7 +54,7 @@ export async function loadClientConfig(sys: Sys): Promise<ResolvedConfig> {
   return {
     serverUrl,
     devUser: sys.env.DEVI_DEV_USER || fromFile.devUser,
-    receivedDir: fromFile.receivedDir ?? defaultReceivedDir(sys),
+    receivedDir: validReceivedDir(fromFile.receivedDir, sys) ?? defaultReceivedDir(sys),
     path,
   };
 }

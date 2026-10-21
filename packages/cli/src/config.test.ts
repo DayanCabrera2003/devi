@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { defaultReceivedDir } from "./paths";
 import { ConfigError, loadClientConfig } from "./config";
 
 const dir = mkdtempSync(join(tmpdir(), "devi-config-"));
@@ -38,5 +39,17 @@ describe("loadClientConfig", () => {
     expect(loadClientConfig(sys())).rejects.toThrow(/no es JSON válido/);
     writeFileSync(join(dir, "c.json"), JSON.stringify({ serverUrl: "no es url" }));
     expect(loadClientConfig(sys())).rejects.toThrow(/serverUrl/);
+  });
+
+  test("receivedDir relativo: se ignora con aviso en stderr y se usa el de por defecto", async () => {
+    writeFileSync(join(dir, "c.json"), JSON.stringify({ serverUrl: "https://pc.tail.ts.net", receivedDir: "recibidos" }));
+    const spy = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect((await loadClientConfig(sys())).receivedDir).toBe(defaultReceivedDir(sys()));
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(String(spy.mock.calls[0]![0])).toContain("receivedDir");
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
