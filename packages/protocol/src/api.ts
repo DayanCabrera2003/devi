@@ -69,6 +69,9 @@ export const API = {
   closeSession: route({ method: "DELETE", path: "/api/v1/sessions/:id", perm: null, actor: "owner", body: Empty, response: Ok }),
   sessionHook: route({ method: "POST", path: "/api/v1/sessions/hook", perm: null, actor: "any", body: HookBody, response: Ok }),
   memberSessions: route({ method: "GET", path: "/api/v1/members/:id/sessions", perm: null, actor: "any", body: Empty, response: z.array(SessionSchema) }),
+  // Latido de presencia: la app lo manda sin sessionId; el MCP, con el de su sesión. Ver PRESENCE.
+  heartbeat: route({ method: "POST", path: "/api/v1/presence/heartbeat", perm: null, actor: "any",
+    body: z.object({ sessionId: z.string().optional() }), response: Ok }),
 
   createDraft: route({ method: "POST", path: "/api/v1/drafts", perm: "requests.send", actor: "any", body: CreateDraftMeta, response: DraftSchema }),
   authorizeDraft: route({ method: "POST", path: "/api/v1/drafts/:id/authorize", perm: null, actor: "author", body: Empty, response: DraftSchema }),

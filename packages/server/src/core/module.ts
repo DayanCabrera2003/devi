@@ -1,9 +1,12 @@
 import type { Database } from "bun:sqlite";
 import type { AccessResolver } from "./auth";
 import type { Bus } from "./bus";
+import type { Timers } from "./clock";
 import type { ServerConfig } from "./config";
 import type { Migration } from "./db";
+import type { Presence } from "./presence";
 import type { Router } from "./router";
+import type { ServiceRegistry } from "./services";
 import type { SseHub } from "./sse";
 
 // Todo lo que un módulo puede usar del núcleo.
@@ -14,6 +17,9 @@ export interface ModuleContext {
   sse: SseHub;
   now: () => number;
   log: (...a: unknown[]) => void;
+  timers: Timers; // programar con esto (no con setTimeout) para que los tests usen FakeClock
+  presence: Presence; // SSE abiertos + latidos → quién está conectado
+  services: ServiceRegistry; // servicios que los módulos se ofrecen entre sí
   // Solo el módulo team lo llama: decide quién es miembro y con qué permisos.
   setAccessResolver(resolver: AccessResolver): void;
 }

@@ -16,3 +16,23 @@ test("startServer arranca en un puerto efímero y responde al health por el sock
     rmSync(cfg.dataDir, { recursive: true, force: true });
   }
 });
+
+test("con los módulos reales: sin admin no arranca; con --admin sí, y el admin entra", async () => {
+  const cfg = testConfig();
+  try {
+    await expect(startServer(cfg)).rejects.toThrow("--admin");
+    const { server, app } = await startServer({ ...cfg, adminLogin: "dayan@dev" });
+    try {
+      const res = await fetch(`http://127.0.0.1:${server.port}/api/v1/me`, {
+        headers: { "X-Devi-Version": API_VERSION, "X-Devi-Dev-User": "dayan@dev" },
+      });
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as { perms: string[] }).perms).toContain("team.admin");
+    } finally {
+      server.stop(true);
+      app.stop();
+    }
+  } finally {
+    rmSync(cfg.dataDir, { recursive: true, force: true });
+  }
+});

@@ -20,7 +20,7 @@ La respuesta vuelve como notificación a quien preguntó, que puede **aceptarla*
  Claude Code (maria) ─stdio─ MCP devi ─HTTP/SSE─┘   team.json     └─SSE─ Ventana Devi (maria)
 ```
 
-- **Devi Hub** (`src/hub/`): servidor local, la única fuente de verdad. Conoce el equipo (`team.json`), quién está conectado, las sesiones y el ciclo de vida de cada solicitud, incluido el timeout.
+- **Servidor de Devi** (`packages/server/`): la única fuente de verdad. Módulos `team`, `settings`, `sessions`, `files` y `requests` sobre SQLite (ver `docs/superpowers/specs/2026-10-21-devi-produccion-design.md`).
 - **MCP de Devi** (`src/mcp/devi-channel.ts`): uno por sesión de Claude Code. Ofrece `list_teammates`, `send_request` y `respond_to_request`, y es un [**Claude Code channel**](https://code.claude.com/docs/en/channels-reference): empuja las solicitudes y respuestas dentro de la sesión abierta.
 - **Ventana de Devi** (`web/`): HTML, CSS y JS sin framework. Muestra las tarjetas y lanza notificaciones del sistema.
 - **Hooks** (`src/hooks/status.ts`): marcan cada sesión como *trabajando* o *libre*.
@@ -31,43 +31,28 @@ La respuesta vuelve como notificación a quien preguntó, que puede **aceptarla*
 - [Claude Code](https://code.claude.com) con **Channels** permitidos. Funcionan por defecto en Pro/Max y con API key de Console; en organizaciones Team o Enterprise, un Owner debe activar `channelsEnabled`.
 - Chromium o Firefox para la ventana de Devi.
 
-## Probarlo
+## Probarlo (servidor nuevo)
 
 ```bash
 bun install
-DEVI_TIMEOUT_MS=60000 bun run hub      # timeout de 1 min para la demo (por defecto, 1 h)
+bun run server:dev -- --admin dayan@dev --import team.json   # la primera vez: crea el admin e importa el equipo
+bun run server:dev                                           # las siguientes
 ```
 
-Abre una ventana de Devi por persona y pulsa **Activar avisos**:
+En modo dev la identidad va en la cabecera `X-Devi-Dev-User` (o en `?devUser=` en los SSE) y todas las peticiones llevan `X-Devi-Version: 1.0.0`:
 
 ```bash
-google-chrome --app="http://localhost:4747/?user=dayan"
-google-chrome --app="http://localhost:4747/?user=maria"
+curl -s -H "X-Devi-Version: 1.0.0" -H "X-Devi-Dev-User: dayan@dev" http://127.0.0.1:4747/api/v1/me
 ```
 
-Lanza una sesión de Claude Code por persona, en dos terminales:
-
-```bash
-bin/devi-claude --user dayan --session frontend
-bin/devi-claude --user maria --session backend-api
-```
-
-La primera vez, acepta el aviso de *development channels* y el del MCP. El launcher registra el servidor `devi` en el scope local de la carpeta donde lo ejecutas.
-
-Luego, en la sesión de Dayan: *"necesito que alguien me apruebe el PR #12"*.
+El MCP (`src/mcp/`) y la ventana (`web/`) del proof of concept se están migrando: la Fase 2 los sustituye por `devi mcp` y la Fase 3, por la app de escritorio.
 
 ## Tests
 
 ```bash
-bun test                                         # ciclo de vida de las solicitudes
-DEVI_PORT=4848 bun run hub &                     # hub de pruebas
-DEVI_HUB_URL=http://localhost:4848 bun scripts/smoke-mcp.ts
-DEVI_HUB_URL=http://localhost:4848 bun scripts/smoke-flow.ts
-# con DEVI_TIMEOUT_MS=1500 en el hub:
-DEVI_HUB_URL=http://localhost:4848 bun scripts/smoke-timeout.ts
+bun test packages/          # unitarios por módulo + recorrido completo por HTTP y SSE
+bun run typecheck
 ```
-
-Los scripts `smoke-*` hacen de "Claude Code falso" (un cliente MCP por stdio) y de "ventana falsa" (un lector SSE), y recorren el viaje completo.
 
 ## Simplificaciones (proof of concept)
 

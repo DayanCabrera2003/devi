@@ -81,11 +81,17 @@ export const DeviRequestSchema = z.object({
 });
 export type DeviRequest = z.infer<typeof DeviRequestSchema>;
 
+const MINUTE = 60_000;
+const HOUR = 3_600_000;
+const DAY = 86_400_000;
+
+// Rangos que acepta el servidor (la app los repite en sus controles). Que fileMaxAgeDays ≥ fileRetentionDays
+// lo valida el servicio de settings, porque en un parche parcial depende del valor guardado.
 export const SettingsSchema = z.object({
-  requestTimeoutMs: z.number().int().positive(),
-  draftTtlMs: z.number().int().positive(),
-  fileRetentionDays: z.number().int().positive(),
-  fileMaxAgeDays: z.number().int().positive(),
+  requestTimeoutMs: z.number().int().min(MINUTE).max(7 * DAY),
+  draftTtlMs: z.number().int().min(MINUTE).max(24 * HOUR),
+  fileRetentionDays: z.number().int().min(1).max(30),
+  fileMaxAgeDays: z.number().int().min(1).max(30),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 
