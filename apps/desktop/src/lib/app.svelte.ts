@@ -41,6 +41,8 @@ export class DeviApp {
   private unsubscribe: (() => void) | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private retries = 0;
+  // Cada connect()/disconnect() la sube; un connect() que despierta con otra generación se retira.
+  private generation = 0;
   private readonly notified = new Set<string>();
 
   constructor(deps: AppDeps) {
@@ -74,7 +76,8 @@ export class DeviApp {
   }
 
   async connect(): Promise<void> {
-    this.disconnect();
+    this.disconnect(); // sube la generación: cualquier connect() anterior queda obsoleto
+    const gen = this.generation;
     const config = this.config;
     if (!config?.serverUrl) return;
     const api = this.deps.makeApi(config);
@@ -83,20 +86,33 @@ export class DeviApp {
     try {
       await this.team.refresh(api);
     } catch (e) {
+      if (gen !== this.generation) return;
       this.conn.fail(e);
       if (this.conn.state.status === "reconnecting") this.scheduleRetry();
       this.publishMascot();
       return;
     }
+    if (gen !== this.generation) return;
     this.retries = 0;
-    this.unsubscribe = api.subscribe(
-      (ev) => this.onEvent(ev),
-      (status, err) => this.onStatus(status, err),
+    const off = api.subscribe(
+      (ev) => {
+        if (gen === this.generation) this.onEvent(ev);
+      },
+      (status, err) => {
+        if (gen === this.generation) this.onStatus(status, err);
+      },
     );
+    // subscribe() es síncrono, pero si algo desconectó entretanto no se deja colgando.
+    if (gen !== this.generation) {
+      off();
+      return;
+    }
+    this.unsubscribe = off;
     this.publishMascot();
   }
 
   disconnect(): void {
+    this.generation++;
     this.unsubscribe?.();
     this.unsubscribe = null;
     if (this.retryTimer) clearTimeout(this.retryTimer);

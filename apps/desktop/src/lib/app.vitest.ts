@@ -150,6 +150,54 @@ describe("DeviApp", () => {
     expect(t.api.subscribe).not.toHaveBeenCalled();
   });
 
+  test("dos connect() solapados acaban con una sola suscripción viva", async () => {
+    const t = setup();
+    const gates: Array<() => void> = [];
+    t.api.me.mockImplementation(() => new Promise((ok) => gates.push(() => ok(ME))));
+    t.app.config = CONFIG;
+    const first = t.app.connect();
+    const second = t.app.connect();
+    // Se resuelven en orden inverso: el connect viejo llega tarde.
+    while (gates.length < 2) await Promise.resolve();
+    for (const g of [...gates].reverse()) g();
+    await Promise.all([first, second]);
+    expect(t.liveSubs).toBe(1);
+    expect(t.api.subscribe).toHaveBeenCalledOnce();
+    t.app.disconnect();
+    expect(t.liveSubs).toBe(0);
+  });
+
+  test("disconnect() durante connect(): no queda ninguna suscripción", async () => {
+    const t = setup();
+    await t.app.boot();
+    t.app.disconnect();
+    let release: () => void = () => {};
+    t.api.me.mockImplementation(() => new Promise((ok) => (release = () => ok(ME))));
+    const p = t.app.connect();
+    t.app.disconnect();
+    release();
+    await p;
+    expect(t.liveSubs).toBe(0);
+  });
+
+  test("un connect() viejo que falla no pisa el estado del nuevo ni programa reintentos", async () => {
+    vi.useFakeTimers();
+    const t = setup();
+    await t.app.boot();
+    let failOld: () => void = () => {};
+    t.api.me.mockImplementationOnce(() => new Promise((_, ko) => (failOld = () => ko(new TypeError("Failed to fetch")))));
+    const old = t.app.connect();
+    await t.app.connect();
+    t.status("open");
+    failOld();
+    await old;
+    expect(t.app.conn.state.status).toBe("connected");
+    const calls = t.api.me.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(t.api.me.mock.calls.length).toBe(calls);
+    expect(t.liveSubs).toBe(1);
+  });
+
   test("sin red reintenta con espera", async () => {
     vi.useFakeTimers();
     const t = setup();
