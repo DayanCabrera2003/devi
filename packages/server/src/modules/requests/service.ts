@@ -61,18 +61,28 @@ export class RequestsManager {
     // Tras el await, la solicitud pudo cambiar: se vuelve a comprobar.
     const request = meta.kind === "response" ? this.forwardedTo(access, meta.requestId) : null;
 
-    if (request) {
-      const previous = this.store.awaitingResponseDraft(request.id);
-      if (previous) this.discard(previous, "replaced");
-    }
+    const previous = request ? this.store.awaitingResponseDraft(request.id) : null;
     const now = this.ctx.now();
     const d: DraftRecord = {
       id: crypto.randomUUID(), kind: meta.kind, authorMemberId: access.memberId, authorSessionId: session.id,
       authorSessionName: session.name, toMemberId: meta.kind === "request" ? peer : null, requestId: request?.id ?? null,
       message: meta.message.trim(), status: "awaiting", createdAt: now, expiresAt: now + this.settings.draftTtlMs,
     };
-    this.store.insertDraft(d);
-    this.files.store({ draftId: d.id, direction: d.kind, authorMemberId: access.memberId, peerMemberId: peer, files: valid });
+    // Atómico: primero los bytes a disco; luego, en una sola transacción, se descarta el borrador anterior y se
+    // insertan el borrador y sus archivos; solo tras el commit hay temporizadores y eventos. Si algo falla,
+    // se borra lo escrito y no cambia nada más.
+    const written = this.files.write(valid);
+    try {
+      this.store.transaction(() => {
+        if (previous) this.store.setDraftStatus(previous.id, "discarded");
+        this.store.insertDraft(d);
+        this.files.record({ draftId: d.id, direction: d.kind, authorMemberId: access.memberId, peerMemberId: peer, written });
+      });
+    } catch (e) {
+      this.files.removeWritten(written);
+      throw e;
+    }
+    if (previous) this.afterDiscard(previous, "replaced");
     if (request) this.timers.cancel(requestKey(request.id)); // el plazo se pausa mientras haya borrador de respuesta
     this.timers.at(draftKey(d.id), d.expiresAt, () => this.expire(d.id));
     const view = this.draftView(d);
@@ -148,6 +158,11 @@ export class RequestsManager {
 
   private discard(d: DraftRecord, reason: DiscardReason): void {
     this.store.setDraftStatus(d.id, "discarded");
+    this.afterDiscard(d, reason);
+  }
+
+  // Efectos de un borrador ya descartado en la BD (temporizadores, avisos, plazo de la solicitud).
+  private afterDiscard(d: DraftRecord, reason: DiscardReason): void {
     this.timers.cancel(draftKey(d.id));
     this.push(d.authorMemberId, { type: "draft.discarded", draftId: d.id });
     const target =

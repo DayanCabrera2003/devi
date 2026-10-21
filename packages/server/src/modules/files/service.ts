@@ -2,7 +2,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { FileMeta, Settings } from "@devi/protocol";
 import { HttpError } from "../../core/http";
-import type { FilesService, ValidFile } from "../../core/services";
+import type { FilesService, ValidFile, WrittenFile } from "../../core/services";
 import type { FilesStore } from "./store";
 import { validateFiles } from "./validate";
 
@@ -20,20 +20,33 @@ export class FileManager implements FilesService {
     return validateFiles(files);
   }
 
-  // Guarda en <dataDir>/files/<id> y registra los metadatos.
-  store(input: {
+  // Paso 1: bytes a <dataDir>/files/<id>. Si falla alguno, borra los ya escritos y relanza.
+  write(files: ValidFile[]): WrittenFile[] {
+    const written: WrittenFile[] = [];
+    try {
+      if (files.length > 0) mkdirSync(join(this.dataDir, "files"), { recursive: true });
+      for (const file of files) {
+        const id = crypto.randomUUID();
+        const path = `files/${id}`;
+        writeFileSync(join(this.dataDir, path), file.bytes);
+        written.push({ id, path, file });
+      }
+    } catch (e) {
+      this.removeWritten(written);
+      throw e;
+    }
+    return written;
+  }
+
+  // Paso 2: filas con los metadatos (sin tocar el disco).
+  record(input: {
     draftId: string;
     direction: "request" | "response";
     authorMemberId: string;
     peerMemberId: string;
-    files: ValidFile[];
+    written: WrittenFile[];
   }): FileMeta[] {
-    if (input.files.length === 0) return [];
-    mkdirSync(join(this.dataDir, "files"), { recursive: true });
-    return input.files.map((f) => {
-      const id = crypto.randomUUID();
-      const path = `files/${id}`;
-      writeFileSync(join(this.dataDir, path), f.bytes);
+    return input.written.map(({ id, path, file: f }) => {
       this.repo.insert({
         id, draftId: input.draftId, requestId: null, direction: input.direction, name: f.name, size: f.size,
         sha256: f.sha256, path, authorMemberId: input.authorMemberId, peerMemberId: input.peerMemberId,
@@ -41,6 +54,10 @@ export class FileManager implements FilesService {
       });
       return { id, name: f.name, size: f.size, direction: input.direction };
     });
+  }
+
+  removeWritten(written: WrittenFile[]): void {
+    for (const w of written) rmSync(join(this.dataDir, w.path), { force: true });
   }
 
   forDraft(draftId: string): FileMeta[] {

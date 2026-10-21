@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { existsSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { DEFAULT_SETTINGS } from "@devi/protocol";
 import { type Flow, setupFlow } from "./fixture";
 
@@ -174,4 +176,37 @@ describe("borradores de respuesta", () => {
     f.clock.advance(1);
     expect(f.userEvents("m-dayan").find((e) => e.type === "request.timed_out").request.status).toBe("timed_out");
   });
+});
+
+describe("creación atómica de borradores", () => {
+  const rows = (db: import("bun:sqlite").Database) => ({
+    drafts: db.query("SELECT count(*) AS n FROM drafts").get() as { n: number },
+    files: db.query("SELECT count(*) AS n FROM files").get() as { n: number },
+    status: db.query("SELECT id, status FROM drafts ORDER BY id").all(),
+  });
+  const onDisk = (dir: string) => (existsSync(join(dir, "files")) ? readdirSync(join(dir, "files")).length : 0);
+
+  for (const failing of ["write", "record"] as const) {
+    test(`si falla files.${failing}: BD y disco intactos, el borrador anterior sigue vivo con su temporizador`, async () => {
+      f = await setupFlow();
+      const r = await f.forwardedRequest();
+      const first = (await f.responseDraft(r.id, "primera", [txt("a.txt", "a")])).data;
+      const before = rows(f.app.ctx.db);
+      const diskBefore = onDisk(f.dataDir);
+      const spy = spyOn(f.app.ctx.services.get("files") as any, failing).mockImplementation(() => {
+        throw new Error("disco lleno");
+      });
+      const res = await f.responseDraft(r.id, "segunda", [txt("b.txt", "b")]);
+      spy.mockRestore();
+      expect(res.status).toBe(500);
+      expect(rows(f.app.ctx.db)).toEqual(before);
+      expect(onDisk(f.dataDir)).toBe(diskBefore);
+      expect(f.deliveries(f.mariaApi.id).some((d) => d.kind === "draft_discarded")).toBe(false);
+      // El anterior sigue awaiting y conserva su temporizador: caduca a su hora y reprograma el plazo.
+      f.clock.advance(DEFAULT_SETTINGS.draftTtlMs);
+      expect(f.userEvents("m-maria")).toContainEqual({ type: "draft.discarded", draftId: first.id });
+      f.clock.advance(DEFAULT_SETTINGS.requestTimeoutMs);
+      expect(f.userEvents("m-dayan").some((e) => e.type === "request.timed_out")).toBe(true);
+    });
+  }
 });

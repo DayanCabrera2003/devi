@@ -25,15 +25,22 @@ export interface SessionsService {
 // Archivo ya validado (nombre saneado, bytes en memoria, hash calculado).
 export type ValidFile = { name: string; bytes: Uint8Array; size: number; sha256: string };
 
+export type WrittenFile = { id: string; path: string; file: ValidFile };
+
 export interface FilesService {
   validate(files: File[]): Promise<ValidFile[]>; // lanza HttpError 400 si alguno no vale
-  store(input: {
+  // En dos pasos para poder crear borradores de forma atómica: primero se escriben los bytes en disco
+  // (si falla uno, se borran los ya escritos y se relanza) y después se registran las filas (dentro de la
+  // transacción del llamador). Si algo falla, el llamador borra lo escrito con removeWritten().
+  write(files: ValidFile[]): WrittenFile[];
+  record(input: {
     draftId: string;
     direction: "request" | "response";
     authorMemberId: string; // puede descargarlo siempre
     peerMemberId: string; // puede descargarlo cuando el borrador se autoriza
-    files: ValidFile[];
+    written: WrittenFile[];
   }): FileMeta[];
+  removeWritten(written: WrittenFile[]): void;
   forDraft(draftId: string): FileMeta[];
   forRequest(requestId: string): { files: FileMeta[]; responseFiles: FileMeta[] };
   attachToRequest(draftId: string, requestId: string): void;
