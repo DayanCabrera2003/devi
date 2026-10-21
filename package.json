@@ -6,11 +6,10 @@
   "private": true,
   "workspaces": ["packages/*", "apps/*"],
   "scripts": {
-    "hub": "bun src/hub/server.ts",
     "server": "bun packages/server/src/main.ts",
-    "test": "bun test",
-    "typecheck": "bunx tsc -p packages/protocol && bunx tsc -p packages/server && bunx tsc -p packages/client",
-    "smoke": "bun scripts/smoke-mcp.ts"
+    "server:dev": "bun packages/server/src/main.ts --dev",
+    "test": "bun test packages/",
+    "typecheck": "bunx tsc -p packages/protocol && bunx tsc -p packages/server && bunx tsc -p packages/client"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
