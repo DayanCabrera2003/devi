@@ -39,7 +39,7 @@ type SubscribeOpts = { onStatus?: (s: SseStatus, err?: DeviApiError) => void };
 export interface DeviClient {
   call<R extends ApiRoute>(
     name: R,
-    opts?: { params?: Record<string, string>; body?: unknown },
+    opts?: { params?: Record<string, string>; body?: unknown; query?: Record<string, string> },
   ): Promise<z.infer<(typeof API)[R]["response"]>>;
   createDraft(meta: z.infer<typeof CreateDraftMeta>, files: { name: string; content: string }[]): Promise<Draft>;
   downloadFile(id: string): Promise<string>;
@@ -128,7 +128,8 @@ export function createClient(opts: ClientOptions): DeviClient {
   return {
     async call(name, callOpts = {}) {
       const route = API[name];
-      const path = buildPath(route.path, callOpts.params ?? {});
+      const q = callOpts.query ? `?${new URLSearchParams(callOpts.query)}` : "";
+      const path = buildPath(route.path, callOpts.params ?? {}) + q;
       const hasBody = route.method === "POST" || route.method === "PATCH";
       const res = await send(route.method, path, hasBody ? { body: JSON.stringify(callOpts.body ?? {}), json: true } : {});
       return parsed(res, route.response, RAW_ROUTES.has(name));

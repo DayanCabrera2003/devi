@@ -46,6 +46,16 @@ describe("call", () => {
     expect(req.headers.get("X-Devi-Dev-User")).toBe("maria@dev");
   });
 
+  test("query: la añade a la URL (bandeja de la sesión) y valida la respuesta", async () => {
+    const item = { id: "i1", kind: "request" as const, content: "hola", meta: { request_id: "q1" }, createdAt: 1 };
+    const srv = serve(() => Response.json([item]));
+    const items = await createClient({ baseUrl: srv.url }).call("sessionInbox", { query: { parentPid: "12", claudeSessionId: "c 1" } });
+    expect(items).toEqual([item]);
+    expect(srv.seen[0]!.path).toBe("/api/v1/sessions/inbox");
+    expect(srv.seen[0]!.query.get("parentPid")).toBe("12");
+    expect(srv.seen[0]!.query.get("claudeSessionId")).toBe("c 1");
+  });
+
   test("sin devUser no manda la cabecera de dev", async () => {
     const srv = serve(() => Response.json(ME));
     await createClient({ baseUrl: srv.url }).call("me");
