@@ -1,0 +1,40 @@
+import { describe, expect, test } from "bun:test";
+import { API, CreateRoleBody, UpdateMemberBody, UpdateRoleBody, buildPath, matchPath } from "./api";
+
+describe("catálogo de la API", () => {
+  test("todas las rutas cuelgan de /api/v1 y no se repiten", () => {
+    const seen = new Set<string>();
+    for (const r of Object.values(API)) {
+      expect(r.path.startsWith("/api/v1/")).toBe(true);
+      const key = `${r.method} ${r.path}`;
+      expect(seen.has(key)).toBe(false);
+      seen.add(key);
+    }
+  });
+
+  test("buildPath sustituye parámetros y codifica", () => {
+    expect(buildPath(API.forwardRequest.path, { id: "a b" })).toBe("/api/v1/requests/a%20b/forward");
+    expect(() => buildPath(API.forwardRequest.path, {})).toThrow();
+  });
+
+  test("matchPath extrae parámetros", () => {
+    expect(matchPath("/api/v1/requests/:id/forward", "/api/v1/requests/q1/forward")).toEqual({ id: "q1" });
+    expect(matchPath("/api/v1/requests/:id/forward", "/api/v1/requests/q1/accept")).toBeNull();
+  });
+
+  test("los PATCH no inventan valores por defecto", () => {
+    expect(UpdateMemberBody.parse({ name: "x" })).toEqual({ name: "x" });
+    expect(UpdateRoleBody.parse({ name: "y" })).toEqual({ name: "y" });
+    expect(CreateRoleBody.parse({ name: "y" })).toEqual({ name: "y", color: "#4a7bd8", capabilities: [], perms: [] });
+  });
+
+  test("matchPath con escapes inválidos no rompe", () => {
+    expect(matchPath("/api/v1/files/:id", "/api/v1/files/%E0%A4%A")).toBeNull();
+  });
+
+  test("los cuerpos validan", () => {
+    expect(API.rejectRequest.body.safeParse({ reason: "" }).success).toBe(false);
+    expect(API.rejectRequest.body.safeParse({ reason: "no tengo permisos" }).success).toBe(true);
+    expect(API.forwardRequest.body.safeParse({ sessionId: "s1" }).success).toBe(true);
+  });
+});
