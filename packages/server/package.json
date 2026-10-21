@@ -1,0 +1,8 @@
+{
+  "name": "@devi/server",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "main": "src/main.ts",
+  "dependencies": { "@devi/protocol": "workspace:*", "zod": "^4.6.5" }
+}

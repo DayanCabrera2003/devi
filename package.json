@@ -1,12 +1,15 @@
 {
   "name": "devi",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Devi: la mascota que conecta las sesiones de Claude Code de un equipo",
   "type": "module",
   "private": true,
+  "workspaces": ["packages/*", "apps/*"],
   "scripts": {
     "hub": "bun src/hub/server.ts",
+    "server": "bun packages/server/src/main.ts",
     "test": "bun test",
+    "typecheck": "bunx tsc -p packages/protocol && bunx tsc -p packages/server",
     "smoke": "bun scripts/smoke-mcp.ts"
   },
   "dependencies": {
