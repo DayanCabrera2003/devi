@@ -3,6 +3,7 @@
 
 // Módulos nativos (se añaden en las tareas 5 a 9).
 mod config;
+mod files;
 
 use tauri::{Manager, WindowEvent};
 
@@ -35,6 +36,8 @@ pub fn run() {
             config::write_client_config,
             config::choose_received_dir,
             config::reset_received_dir,
+            files::save_received_files,
+            files::save_db_export,
         ])
         .run(tauri::generate_context!())
         .expect("no se pudo iniciar Devi");
