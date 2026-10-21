@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { API_VERSION, type Perm } from "@devi/protocol";
 import { createApp } from "../core/app";
+import { TAURI_ORIGINS } from "../core/http";
 import { DevIdentity } from "../core/auth";
 import { FakeClock } from "../core/clock";
 import { testConfig } from "../core/config";
@@ -30,7 +31,7 @@ export function createTestApp(opts: {
   const app = createApp({
     identity: new DevIdentity(),
     modules: opts.modules,
-    allowedOrigins: [],
+    allowedOrigins: TAURI_ORIGINS,
     db: opts.db,
     now: clock.now,
     timers: clock,
@@ -48,12 +49,16 @@ export function createTestApp(opts: {
 
   const headers = (login: string) => ({ "X-Devi-Version": API_VERSION, "X-Devi-Dev-User": login });
 
-  async function call(login: string, method: string, path: string, body?: unknown) {
-    const init: RequestInit = { method, headers: headers(login) };
+  // Por defecto se llama como la app (Origin tauri://localhost), que puede usar todas las rutas.
+  // origin: null simula la CLI/MCP o un agente, que no mandan Origin.
+  async function call(login: string, method: string, path: string, body?: unknown, opts: { origin?: string | null } = {}) {
+    const origin = opts.origin === undefined ? "tauri://localhost" : opts.origin;
+    const base: Record<string, string> = origin ? { ...headers(login), Origin: origin } : headers(login);
+    const init: RequestInit = { method, headers: base };
     if (body instanceof FormData) init.body = body;
     else if (body !== undefined) {
       init.body = JSON.stringify(body);
-      init.headers = { ...headers(login), "Content-Type": "application/json" };
+      init.headers = { ...base, "Content-Type": "application/json" };
     }
     const res = await app.fetch(new Request(`http://127.0.0.1${path}`, init));
     const text = await res.text();

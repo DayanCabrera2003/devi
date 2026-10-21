@@ -9,6 +9,19 @@ afterEach(() => f.cleanup());
 const txt = (name: string, content: string) => new File([content], name);
 const post = (login: string, path: string, body?: unknown) => f.call(login, "POST", path, body);
 
+describe("acciones humanas", () => {
+  test("sin el Origin de la app (CLI/MCP/agente) no se autoriza ni se responde: 403 human_only", async () => {
+    f = await setupFlow();
+    const d = (await f.requestDraft()).data;
+    const agent = { origin: null };
+    const auth = await f.call("dayan@dev", "POST", `/api/v1/drafts/${d.id}/authorize`, undefined, agent);
+    expect(auth).toMatchObject({ status: 403, data: { code: "human_only" } });
+    const r = await f.pendingRequest();
+    expect((await f.call("maria@dev", "POST", `/api/v1/requests/${r.id}/accept`, {}, agent)).data.code).toBe("human_only");
+    expect((await post("maria@dev", `/api/v1/requests/${r.id}/accept`, {})).status).toBe(200);
+  });
+});
+
 describe("acciones de B", () => {
   test("enviar a sesión: la sesión recibe la pregunta abierta con los archivos", async () => {
     f = await setupFlow();

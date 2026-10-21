@@ -12,6 +12,15 @@ describe("catálogo de la API", () => {
     }
   });
 
+  test("las acciones humanas y las mutaciones de equipo/ajustes van marcadas como human", () => {
+    const human = Object.entries(API).filter(([, r]) => "human" in r && r.human).map(([k]) => k).sort();
+    expect(human).toEqual([
+      "acceptRequest", "acceptResponse", "authorizeDraft", "createMember", "createRole", "deleteMember", "deleteRole",
+      "discardDraft", "exportDb", "forwardRequest", "forwardResponse", "ignoreRequest", "rejectRequest", "resendRequest",
+      "updateMember", "updateRole", "updateSettings",
+    ]);
+  });
+
   test("buildPath sustituye parámetros y codifica", () => {
     expect(buildPath(API.forwardRequest.path, { id: "a b" })).toBe("/api/v1/requests/a%20b/forward");
     expect(() => buildPath(API.forwardRequest.path, {})).toThrow();

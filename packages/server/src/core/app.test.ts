@@ -94,6 +94,21 @@ describe("createApp", () => {
     expect(handlerCalls).toBe(1);
   });
 
+  test("ruta humana sin Origin de la app (CLI/MCP/agente) → 403 human_only sin ejecutar el handler", async () => {
+    const res = await call(make(), "POST", "/api/v1/requests/q1/forward", { "X-Devi-Dev-User": "maria@dev" });
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { code: string; error: string };
+    expect(body.code).toBe("human_only");
+    expect(body.error).toContain("solo se puede hacer desde la app de Devi");
+  });
+
+  test("ruta humana con Origin de la app → pasa; ruta no humana sin Origin → pasa", async () => {
+    const app = make();
+    const res = await call(app, "POST", "/api/v1/requests/missing/forward", { "X-Devi-Dev-User": "maria@dev", Origin: "tauri://localhost" });
+    expect(res.status).toBe(404); // llegó al handler
+    expect((await call(app, "POST", "/api/v1/drafts", { "X-Devi-Dev-User": "maria@dev" })).status).toBe(200);
+  });
+
   test("sin identidad → 401; login desconocido → 403 con login", async () => {
     const app = make();
     expect((await call(app, "GET", "/api/v1/me")).status).toBe(401);
@@ -118,8 +133,9 @@ describe("createApp", () => {
   test("HttpError → su código; ZodError → 400; ruta desconocida → 404", async () => {
     const app = make();
     const h = { "X-Devi-Dev-User": "maria@dev" };
-    expect((await call(app, "POST", "/api/v1/requests/missing/forward", h)).status).toBe(404);
-    expect((await call(app, "POST", "/api/v1/requests/q1/forward", h)).status).toBe(400);
+    const app2 = { ...h, Origin: "tauri://localhost" };
+    expect((await call(app, "POST", "/api/v1/requests/missing/forward", app2)).status).toBe(404);
+    expect((await call(app, "POST", "/api/v1/requests/q1/forward", app2)).status).toBe(400);
     expect((await call(app, "GET", "/api/v1/nope", h)).status).toBe(404);
   });
 
@@ -164,7 +180,7 @@ describe("createApp", () => {
   });
 
   test("400 de Zod incluye la ruta del campo", async () => {
-    const res = await call(make(), "POST", "/api/v1/requests/q1/forward", { "X-Devi-Dev-User": "maria@dev" });
+    const res = await call(make(), "POST", "/api/v1/requests/q1/forward", { "X-Devi-Dev-User": "maria@dev", Origin: "tauri://localhost" });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toMatch(/^n: /);
   });

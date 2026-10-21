@@ -27,6 +27,14 @@ function serve(handler: Parameters<typeof fakeServer>[0]) {
 }
 
 describe("call", () => {
+  test("opción interna origin (solo tests): manda la cabecera Origin; sin ella no se manda", async () => {
+    const srv = serve(() => Response.json(ME));
+    await createClient({ baseUrl: srv.url, origin: "tauri://localhost" }).call("me");
+    await createClient({ baseUrl: srv.url }).call("me");
+    expect(srv.seen[0]!.headers.get("Origin")).toBe("tauri://localhost");
+    expect(srv.seen[1]!.headers.get("Origin")).toBeNull();
+  });
+
   test("manda versión por cabecera y ?v=, usuario de dev, y valida la respuesta", async () => {
     const srv = serve(() => Response.json(ME));
     const me = await createClient({ baseUrl: `${srv.url}/`, devUser: "maria@dev" }).call("me");

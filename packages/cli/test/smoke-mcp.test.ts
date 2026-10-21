@@ -100,8 +100,9 @@ beforeAll(async () => {
 }, 30_000);
 
 test("devi mcp: de list_teammates a la respuesta en el canal, con archivos", async () => {
-  const dayanApp = createClient({ baseUrl: serverUrl, devUser: "dayan@dev" });
-  const mariaApp = createClient({ baseUrl: serverUrl, devUser: "maria@dev" });
+  // Las "apps" mandan Origin como el webview de Devi (las rutas humanas lo exigen); el MCP no.
+  const dayanApp = createClient({ baseUrl: serverUrl, devUser: "dayan@dev", origin: "tauri://localhost" });
+  const mariaApp = createClient({ baseUrl: serverUrl, devUser: "maria@dev", origin: "tauri://localhost" });
 
   // Equipo: dayan (admin) y maria, los dos con un rol que puede enviar solicitudes y archivos.
   const role = await dayanApp.call("createRole", {

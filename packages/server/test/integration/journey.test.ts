@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { DEFAULT_SETTINGS, FILE_LIMITS, PRESENCE } from "@devi/protocol";
 import { createApp } from "../../src/core/app";
 import { DevIdentity } from "../../src/core/auth";
+import { TAURI_ORIGINS } from "../../src/core/http";
 import { FakeClock } from "../../src/core/clock";
 import { testConfig } from "../../src/core/config";
 import { MODULES } from "../../src/main";
@@ -23,7 +24,7 @@ async function boot() {
   const app = createApp({
     identity: new DevIdentity(),
     modules: MODULES,
-    allowedOrigins: [],
+    allowedOrigins: TAURI_ORIGINS,
     config: testConfig({ dataDir, adminLogin: "dayan@dev" }),
     now: clock.now,
     timers: clock,

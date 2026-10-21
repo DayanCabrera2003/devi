@@ -74,7 +74,7 @@ describe("settings", () => {
     t = createTestApp({ modules: [team, settingsModule] });
     const res = await t.app.fetch(
       new Request("http://127.0.0.1/api/v1/settings/export", {
-        headers: { "X-Devi-Version": "1.0.0", "X-Devi-Dev-User": "admin@dev" },
+        headers: { "X-Devi-Version": "1.0.0", "X-Devi-Dev-User": "admin@dev", Origin: "tauri://localhost" },
       }),
     );
     expect(res.status).toBe(200);

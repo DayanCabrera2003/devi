@@ -28,6 +28,9 @@ export function describeApiError(status: number, body: ErrorBody): string {
   if (status === 403 && body.code === "origin") {
     return "El servidor de Devi rechazó el origen de la petición. Usa la app de escritorio de Devi o la CLI `devi`.";
   }
+  if (status === 403 && body.code === "human_only") {
+    return "Esta acción solo se puede hacer desde la app de Devi: autorízala o respóndela tú en la app.";
+  }
   if (status === 426) {
     const min = body.minVersion ? ` (el servidor usa la ${body.minVersion})` : "";
     return `Esta versión de Devi no es compatible con el servidor${min}: actualiza Devi.`;

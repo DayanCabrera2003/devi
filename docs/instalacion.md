@@ -120,7 +120,13 @@ devi claude --session frontend
 
 Devi busca versiones nuevas al abrirse y muestra «Devi X está disponible → Actualizar y reiniciar». Las actualizaciones van firmadas con la clave del proyecto: la app solo instala las que estén firmadas con ella. Si el servidor exige una versión más nueva, la app muestra **Actualiza Devi**.
 
-## 6. Problemas frecuentes
+## 6. Seguridad
+
+Las acciones que debe decidir una persona (autorizar o descartar un borrador, responder una solicitud, administrar el equipo, roles y ajustes, exportar la base de datos) **solo se aceptan desde la app de Devi**: el servidor exige la cabecera `Origin` de la app. Si un agente intenta hacerlas llamando a la API directamente, recibe «Esta acción solo se puede hacer desde la app de Devi».
+
+Es una barrera, no una garantía: un proceso que corra con tu mismo usuario del sistema podría falsificar esa cabecera. La protección real es que Claude Code te pide permiso antes de ejecutar comandos de red, y que todo borrador aparece en la app para que lo revises antes de autorizarlo.
+
+## 7. Problemas frecuentes
 
 | Mensaje | Qué hacer |
 |---|---|
@@ -129,5 +135,6 @@ Devi busca versiones nuevas al abrirse y muestra «Devi X está disponible → A
 | «El servidor rechazó el origen de esta app» | Usa la app instalada. En desarrollo: Vite en el puerto 1420 y el servidor con `--dev`. |
 | «Sin conexión, reconectando…» | Tailscale apagado o la PC servidor apagada. Devi reintenta solo (máximo cada 30 s). |
 | «Te falta el permiso…» | El admin debe darte un rol con ese permiso (Admin → Roles). |
+| «Esta acción solo se puede hacer desde la app de Devi» | Autoriza, responde o administra desde la app, no desde la terminal ni desde Claude. |
 
 Diagnóstico completo: **Ajustes → Diagnóstico (devi doctor)**, o `devi doctor` en una terminal.

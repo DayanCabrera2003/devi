@@ -51,7 +51,7 @@ export function createApp(opts: AppOptions) {
   async function handle(req: Request): Promise<Response> {
     const url = new URL(req.url);
     // Anti-CSRF: un navegador siempre manda Origin en peticiones entre sitios. La CLI y el MCP
-    // (Bun) no lo mandan y siguen permitidos.
+    // (Bun) no lo mandan y siguen permitidos, salvo en las rutas humanas (ver más abajo).
     const origin = req.headers.get("Origin");
     if (origin !== null && !isAllowedOrigin(origin, opts.allowedOrigins)) {
       throw new HttpError(403, "Origen no permitido", { code: "origin" });
@@ -80,6 +80,12 @@ export function createApp(opts: AppOptions) {
 
     const match = router.match(req.method, url.pathname);
     if (!match) throw new HttpError(404, "Ruta no encontrada", { code: "not_found" });
+    // Acciones humanas (autorizar, responder, administrar): solo con el Origin de la app. Si llega
+    // Origin ya se comprobó arriba que es permitido; aquí se exige que exista. Es una barrera contra
+    // un agente que llame a la API directamente, no contra un proceso local que falsifique cabeceras.
+    if ("human" in match.route && match.route.human && origin === null) {
+      throw new HttpError(403, "Esta acción solo se puede hacer desde la app de Devi", { code: "human_only" });
+    }
     if (match.route.perm && !access.perms.has(match.route.perm)) {
       throw new HttpError(403, `Te falta el permiso "${match.route.perm}"`, { code: "missing_perm", perm: match.route.perm });
     }

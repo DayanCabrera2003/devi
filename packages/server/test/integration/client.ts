@@ -2,11 +2,12 @@ import { API_VERSION } from "@devi/protocol";
 
 // Cliente HTTP + SSE de pruebas que habla con un servidor real (Bun.serve) como lo harán la app y el MCP:
 // X-Devi-Version en todas las peticiones; en los SSE, además, ?v=. Identidad dev por X-Devi-Dev-User.
+// Lleva Origin tauri://localhost como la app (las rutas humanas lo exigen).
 
 export type SseEvent = { event: string; data: any };
 
 export function client(base: string, login: string) {
-  const headers = { "X-Devi-Version": API_VERSION, "X-Devi-Dev-User": login };
+  const headers = { "X-Devi-Version": API_VERSION, "X-Devi-Dev-User": login, Origin: "tauri://localhost" };
 
   async function call(method: string, path: string, body?: unknown) {
     const init: RequestInit = { method, headers };

@@ -25,6 +25,9 @@ import { subscribeSse, type FetchFn, type SseStatus } from "./sse";
 export type ClientOptions = { baseUrl: string; devUser?: string; fetch?: typeof fetch; requestTimeoutMs?: number;
   // Opción interna (por defecto PRESENCE.heartbeatMs) para los tests: cada cuánto se manda el heartbeat de presencia.
   heartbeatMs?: number;
+  // Opción interna SOLO para tests en Bun: manda la cabecera Origin como la manda el navegador de la app
+  // (en el webview la pone el propio navegador). La CLI y el MCP nunca la usan.
+  origin?: string;
 };
 
 // Rutas cuya respuesta no es JSON validable (z.any()): bytes, texto o SSE. Se listan por nombre
@@ -51,6 +54,7 @@ export function createClient(opts: ClientOptions): DeviClient {
   const headers = (): Record<string, string> => {
     const h: Record<string, string> = { [VERSION_HEADER]: API_VERSION };
     if (opts.devUser) h["X-Devi-Dev-User"] = opts.devUser;
+    if (opts.origin) h.Origin = opts.origin;
     return h;
   };
   const heartbeatMs = opts.heartbeatMs ?? PRESENCE.heartbeatMs;

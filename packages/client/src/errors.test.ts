@@ -10,6 +10,9 @@ test("mensajes legibles por código", () => {
     'Te falta el permiso "team.admin" (Administrar equipo) en Devi: pídeselo al admin.',
   );
   expect(describeApiError(403, { error: "x", code: "origin" })).toContain("rechazó el origen");
+  expect(describeApiError(403, { error: "x", code: "human_only" })).toBe(
+    "Esta acción solo se puede hacer desde la app de Devi: autorízala o respóndela tú en la app.",
+  );
   expect(describeApiError(426, { error: "x", code: "version", minVersion: "2.0.0" })).toBe(
     "Esta versión de Devi no es compatible con el servidor (el servidor usa la 2.0.0): actualiza Devi.",
   );
