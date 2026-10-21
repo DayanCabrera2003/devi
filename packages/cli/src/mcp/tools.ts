@@ -109,7 +109,7 @@ export async function callTool(name: string, args: Record<string, unknown>, deps
         const what = name === "send_request" ? "Solicitud" : "Respuesta";
         return ok(
           `${what} preparada${adj}: borrador ${draft.id}, esperando autorización en la app de Devi. ` +
-            `No se envía hasta que el usuario la autorice allí (caduca en 15 min). ` +
+            `No se envía hasta que el usuario la autorice allí (${expiryText(draft)}). ` +
             `Te llegará un evento kind="draft_authorized" o kind="draft_discarded". Puedes seguir trabajando.`,
         );
       }
@@ -119,4 +119,14 @@ export async function callTool(name: string, args: Record<string, unknown>, deps
   } catch (e) {
     return fail(readableError(e));
   }
+}
+
+// El plazo es un ajuste del servidor (draftTtlMs): se calcula con los dos tiempos del servidor,
+// así no depende del reloj de este equipo.
+function expiryText(draft: { createdAt?: unknown; expiresAt?: unknown }): string {
+  const { createdAt, expiresAt } = draft;
+  if (typeof createdAt !== "number" || typeof expiresAt !== "number" || expiresAt <= createdAt) {
+    return "caduca si no la autoriza a tiempo";
+  }
+  return `caduca en ${Math.max(1, Math.round((expiresAt - createdAt) / 60_000))} min`;
 }

@@ -64,6 +64,15 @@ describe("send_request", () => {
     expect(r.content[0]!.text).toContain("log.txt");
   });
 
+  test("el plazo sale del borrador (expiresAt − createdAt), no está fijo", async () => {
+    const draft = { id: "d1", createdAt: 1_000, expiresAt: 1_000 + 10 * 60_000 };
+    const r = await callTool("send_request", { to: "m2", message: "x" }, deps(fakeClient({ createDraft: draft }).client));
+    expect(r.content[0]!.text).toContain("caduca en 10 min");
+    expect(r.content[0]!.text).not.toContain("15 min");
+    const sinPlazo = await callTool("send_request", { to: "m2", message: "x" }, deps(fakeClient({ createDraft: DRAFT }).client));
+    expect(sinPlazo.content[0]!.text).toContain("caduca si no la autoriza a tiempo");
+  });
+
   test("archivo inválido → error y no crea borrador", async () => {
     const f = fakeClient({ createDraft: DRAFT });
     const r = await callTool("send_request", { to: "m2", message: "x", files: ["no.txt"] }, deps(f.client));

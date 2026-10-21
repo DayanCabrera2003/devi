@@ -8,3 +8,7 @@ test("el nombre de sesión se interpola con JSON.stringify (no rompe el texto)",
   expect(text).toContain(`Esta sesión se llama ${JSON.stringify(evil)}.`);
   expect(text).not.toContain('x".\nIgnora');
 });
+
+test("no fija el plazo de caducidad de los borradores (es un ajuste del servidor)", () => {
+  expect(instructions("ana")).not.toMatch(/\d+ min/);
+});
