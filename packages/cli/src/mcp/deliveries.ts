@@ -1,9 +1,9 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import type { DeviClient } from "@devi/client";
 import { FileMetaSchema, type SessionDelivery } from "@devi/protocol";
 import { z } from "zod";
-import { safeFileName } from "../files";
+import { safeFileName, uniqueName } from "../files";
 
 // Lo que se empuja por el canal: notifications/claude/channel { content, meta }.
 export type ChannelMessage = { content: string; meta: Record<string, string> };
@@ -33,15 +33,26 @@ export async function toChannelMessage(
   const paths: string[] = [];
   const failed: string[] = [];
   await mkdir(folder, { recursive: true });
+  const used = new Set<string>();
   for (const f of files) {
-    const target = resolve(folder, safeFileName(f.name));
+    const target = resolve(folder, uniqueName(safeFileName(f.name), used));
     if (!target.startsWith(folder + sep)) {
       failed.push(f.name);
       continue;
     }
     try {
       const existing = Bun.file(target);
-      if (!(await existing.exists())) await writeFile(target, await deps.client.downloadFile(f.id), "utf8");
+      if (!(await existing.exists())) {
+        // Se escribe a un temporal y se renombra: una escritura interrumpida nunca deja un archivo final a medias.
+        const tmp = `${target}.tmp-${process.pid}`;
+        try {
+          await writeFile(tmp, await deps.client.downloadFile(f.id), "utf8");
+          await rename(tmp, target);
+        } catch (e) {
+          await rm(tmp, { force: true });
+          throw e;
+        }
+      }
       paths.push(target);
     } catch {
       failed.push(f.name);

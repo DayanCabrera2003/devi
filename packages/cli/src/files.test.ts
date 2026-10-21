@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readLocalFiles, safeFileName } from "./files";
+import { readLocalFiles, safeFileName, uniqueName } from "./files";
 
 const cwd = mkdtempSync(join(tmpdir(), "devi-files-"));
 writeFileSync(join(cwd, "a.txt"), "hola ñandú");
@@ -83,4 +83,24 @@ describe("readLocalFiles: confinamiento al cwd", () => {
   test("acepta un archivo relativo normal", async () => {
     expect(await readLocalFiles(["ok.txt"], project)).toEqual({ ok: true, files: [{ name: "ok.txt", content: "ok" }] });
   });
+});
+
+test("safeFileName: nombres reservados de Windows y puntos/espacios finales", () => {
+  expect(safeFileName("CON")).toBe("_CON");
+  expect(safeFileName("nul.txt")).toBe("_nul.txt");
+  expect(safeFileName("com1.tar.gz")).toBe("_com1.tar.gz");
+  expect(safeFileName("LPT9")).toBe("_LPT9");
+  expect(safeFileName("console.txt")).toBe("console.txt");
+  expect(safeFileName("a.txt. . ")).toBe("a.txt");
+  expect(safeFileName("...")).toBe("archivo");
+  expect(safeFileName("con. ")).toBe("_con");
+});
+
+test("uniqueName numera los repetidos", () => {
+  const used = new Set<string>();
+  expect(uniqueName("a.txt", used)).toBe("a.txt");
+  expect(uniqueName("a.txt", used)).toBe("a (2).txt");
+  expect(uniqueName("A.txt", used)).toBe("A (3).txt");
+  expect(uniqueName("Makefile", used)).toBe("Makefile");
+  expect(uniqueName("Makefile", used)).toBe("Makefile (2)");
 });

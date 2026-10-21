@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { toChannelMessage } from "./deliveries";
@@ -51,5 +51,27 @@ describe("toChannelMessage", () => {
       { client: f.client, receivedDir: dir },
     );
     expect(m.content).toContain("No se pudieron descargar: b.txt");
+  });
+
+  test("nombres repetidos en la misma solicitud: a.txt y a (2).txt", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "devi-recv-"));
+    const f = fakeClient({ downloadFile: (id: unknown) => `c-${id}` });
+    const m = await toChannelMessage(
+      { kind: "request", content: "x", meta: { request_id: "q4", files: files([{ id: "f1", name: "a.txt" }, { id: "f2", name: "a.txt" }]) } },
+      { client: f.client, receivedDir: dir },
+    );
+    expect(readFileSync(join(dir, "q4", "a.txt"), "utf8")).toBe("c-f1");
+    expect(readFileSync(join(dir, "q4", "a (2).txt"), "utf8")).toBe("c-f2");
+    expect(m.meta.file_paths.split("\n")).toHaveLength(2);
+  });
+
+  test("una descarga fallida no deja archivo final ni temporal", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "devi-recv-"));
+    const f = fakeClient({ downloadFile: new Error("corte") });
+    await toChannelMessage(
+      { kind: "request", content: "x", meta: { request_id: "q5", files: files([{ id: "f1", name: "a.txt" }]) } },
+      { client: f.client, receivedDir: dir },
+    );
+    expect(readdirSync(join(dir, "q5"))).toEqual([]);
   });
 });

@@ -76,9 +76,24 @@ export async function readLocalFiles(paths: string[], cwd: string): Promise<File
   return { ok: true, files };
 }
 
-// Nombre seguro para guardar un archivo recibido: sin rutas, sin caracteres reservados, sin "..".
+const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+
+// Nombre seguro para guardar un archivo recibido: sin rutas, sin caracteres reservados, sin "..",
+// sin puntos/espacios finales (Windows los descarta) y sin nombres reservados de Windows (CON, NUL, COM1…).
 export function safeFileName(name: string): string {
   const base = name.split(/[\\/]/).pop() ?? "";
-  const clean = base.replace(/[<>:"|?*\u0000-\u001f]/g, "_").replace(/^\.+/, "").trim().slice(0, 200);
-  return clean === "" ? "archivo" : clean;
+  let clean = base.replace(/[<>:"|?*\u0000-\u001f]/g, "_").replace(/^\.+/, "").trim().slice(0, 200).replace(/[. ]+$/, "");
+  if (clean === "") return "archivo";
+  if (WINDOWS_RESERVED.test(clean.split(".")[0]!.trim())) clean = `_${clean}`;
+  return clean;
+}
+
+// `a.txt` → `a (2).txt` → `a (3).txt`… hasta que el nombre no esté en `used` (sin distinguir mayúsculas).
+export function uniqueName(name: string, used: Set<string>): string {
+  const dot = name.lastIndexOf(".");
+  const [stem, ext] = dot > 0 ? [name.slice(0, dot), name.slice(dot)] : [name, ""];
+  let candidate = name;
+  for (let n = 2; used.has(candidate.toLowerCase()); n++) candidate = `${stem} (${n})${ext}`;
+  used.add(candidate.toLowerCase());
+  return candidate;
 }
