@@ -1,0 +1,22 @@
+[Unit]
+Description=Devi - servidor del equipo
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+User=asai
+Group=asai
+ExecStart=/home/asai/devi/bin/devi server --port 4747 --data-dir /home/asai/.local/share/devi --admin dcabrera@asai.digital
+Restart=on-failure
+RestartSec=5
+MemoryMin=128M
+MemoryMax=512M
+CPUWeight=500
+OOMScoreAdjust=-500
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/home/asai/.local/share/devi
+
+[Install]
+WantedBy=multi-user.target

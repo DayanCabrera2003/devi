@@ -1,0 +1,11 @@
+[Unit]
+Description=Devi - busca actualizaciones del servidor cada 15 minutos
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+RandomizedDelaySec=60
+Persistent=true
+
+[Install]
+WantedBy=timers.target

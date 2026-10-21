@@ -1,0 +1,11 @@
+[Unit]
+Description=Devi - actualiza el servidor desde la última release de GitHub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Como root: tiene que reiniciar devi-server. El binario se comprueba como asai (runuser).
+ExecStart=/home/asai/devi/devi-update.sh
+Nice=10
+IOSchedulingClass=idle

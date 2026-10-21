@@ -28,6 +28,7 @@ La respuesta vuelve como notificación a quien preguntó, que puede **aceptarla*
 - [Bun](https://bun.sh) 1.x
 - [Claude Code](https://code.claude.com) con **Channels** permitidos. Funcionan por defecto en Pro/Max y con API key de Console; en organizaciones Team o Enterprise, un Owner debe activar `channelsEnabled`.
 - Para usar la app instalada no hace falta Bun: sigue [docs/instalacion.md](docs/instalacion.md).
+- Servidor del equipo en una PC Linux (systemd + actualización automática al publicar una release): [deploy/servidor-linux/README.md](deploy/servidor-linux/README.md). Puede haber varios admins: da el rol «Admin Devi» (o uno con «Administrar equipo») a más personas; solo se bloquea quitar el último.
 
 ## Probarlo (modo dev, una sola máquina)
 

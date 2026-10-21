@@ -91,6 +91,10 @@ Sin la extensión, Devi funciona igual: la **ventanita de la mascota** muestra e
      En Linux, si pide permisos, ejecuta antes `sudo tailscale set --operator=$USER`. Compruébalo con `tailscale serve status`.
 
      La PC servidor también se conecta por la URL `https://…ts.net`, nunca por `127.0.0.1`.
+
+     **Servidor permanente en Linux** (sin depender de que la app esté abierta): servicio de systemd `devi-server` y un timer que lo actualiza solo al publicar una release en GitHub. Instalación, logs, despliegue y vuelta atrás en [deploy/servidor-linux/README.md](../deploy/servidor-linux/README.md).
+
+     **Varios admins:** el equipo puede tener tantos admins como quiera. Da el rol «Admin Devi» (o cualquier rol con el permiso «Administrar equipo») a otras personas en Admin → Personas. Solo se bloquea quitar o desactivar al último admin.
 3. **Conexión:** Devi prueba la conexión y muestra con qué login entraste. Si dice que tu login no está en el equipo, pide al admin que te añada (Admin → Personas → Invitar por login) y pulsa Reintentar.
 4. **Claude Code:** «Instalar integración» copia el binario `devi` a una ruta estable e instala el plugin de Claude Code (`devi@devi-local`). Necesitas Claude Code instalado. Con la casilla «Usar Devi automáticamente al escribir `claude` en la terminal» (marcada por defecto), además instala la función `claude` en tus perfiles de shell (ver la sección 4).
 5. **Listo:** «Comprobar todo» ejecuta `devi doctor`.
