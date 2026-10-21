@@ -1,7 +1,7 @@
 import { fireEvent, render } from "@testing-library/svelte";
 import { describe, expect, test, vi } from "vitest";
 import { fakeApp } from "../../lib/test-app";
-import { SESSIONS } from "../../lib/test-fixtures";
+import { SESSIONS, TEAM } from "../../lib/test-fixtures";
 import ServerTab from "./ServerTab.svelte";
 
 const SETTINGS = { requestTimeoutMs: 3_600_000, draftTtlMs: 900_000, fileRetentionDays: 7, fileMaxAgeDays: 30 };
@@ -32,7 +32,7 @@ describe("ServerTab", () => {
     const { updateSettings, getByLabelText, getByRole, findByText } = await setup();
     await fireEvent.input(getByLabelText(/Timeout de una solicitud/), { target: { value: "120" } });
     await fireEvent.click(getByRole("button", { name: "Guardar" }));
-    expect(updateSettings).toHaveBeenCalledWith({ ...SETTINGS, requestTimeoutMs: 7_200_000 });
+    expect(updateSettings).toHaveBeenCalledWith({ requestTimeoutMs: 7_200_000 }); // solo lo cambiado
     expect(await findByText("Ajustes guardados.")).toBeTruthy();
   });
 
@@ -50,8 +50,39 @@ describe("ServerTab", () => {
     const updateSettings = vi.fn(async () => {
       throw { status: 400, body: { error: "fileMaxAgeDays: Too big", code: "invalid" } };
     });
-    const { getByRole, findByText } = await setup({ updateSettings });
+    const { getByRole, getByLabelText, findByText } = await setup({ updateSettings });
+    await fireEvent.input(getByLabelText(/Borrar archivos siempre/), { target: { value: "29" } });
     await fireEvent.click(getByRole("button", { name: "Guardar" }));
     expect(await findByText("fileMaxAgeDays: Too big")).toBeTruthy();
+  });
+
+  test("sin cambios no llama al servidor", async () => {
+    const { updateSettings, getByRole, findByText } = await setup();
+    await fireEvent.click(getByRole("button", { name: "Guardar" }));
+    expect(await findByText("No hay cambios que guardar.")).toBeTruthy();
+    expect(updateSettings).not.toHaveBeenCalled();
+  });
+
+  test("un valor del servidor que no son minutos enteros se muestra sin redondear y no se reenvía", async () => {
+    const getSettings = vi.fn(async () => ({ ...SETTINGS, draftTtlMs: 90_500 }));
+    const { updateSettings, getByLabelText, getByRole, findByText } = await setup({ getSettings });
+    expect((getByLabelText(/Tiempo para autorizar/) as HTMLInputElement).value).toBe("1.51");
+    expect(await findByText(/90,5 s/)).toBeTruthy();
+    await fireEvent.input(getByLabelText(/Borrar archivos tras cerrar/), { target: { value: "8" } });
+    await fireEvent.click(getByRole("button", { name: "Guardar" }));
+    expect(updateSettings).toHaveBeenCalledWith({ fileRetentionDays: 8 });
+  });
+
+  test("si falla el recuento de sesiones de una persona, el resto de estadísticas sigue", async () => {
+    const team = vi.fn(async () => ({ ...TEAM, members: TEAM.members.map((m) => ({ ...m, connected: true })) }));
+    const memberSessions = vi.fn(async (id: string) => {
+      if (id === "m2") throw new Error("caído");
+      return SESSIONS;
+    });
+    const { findByText, getByText, queryByText } = await setup({ team, memberSessions });
+    expect(await findByText("0.3.0")).toBeTruthy();
+    expect(await findByText(/sin datos de 1 persona/)).toBeTruthy();
+    expect(getByText("Sesiones abiertas").parentElement?.querySelector("b")?.textContent).toBe("2");
+    expect(queryByText("caído")).toBeNull();
   });
 });

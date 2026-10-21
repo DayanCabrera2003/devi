@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { formatBytes, lastJsonLine, settingsFromForm, minutesToMs, msToMinutes, normalizeServerUrl, truncate, waited } from "./format";
+import { formatBytes, lastJsonLine, settingsFromForm, minutesToMs, msToMinutes, normalizeServerUrl, notWholeMinutes, truncate, waited } from "./format";
 
 describe("format", () => {
   test("formatBytes", () => {
@@ -31,6 +31,13 @@ describe("format", () => {
   test("minutos y milisegundos", () => {
     expect(msToMinutes(3_600_000)).toBe(60);
     expect(minutesToMs(15)).toBe(900_000);
+  });
+
+  test("sin redondear en silencio: decimales y aviso en segundos", () => {
+    expect(msToMinutes(90_000)).toBe(1.5);
+    expect(msToMinutes(100_000)).toBe(1.67);
+    expect(notWholeMinutes(3_600_000)).toBeNull();
+    expect(notWholeMinutes(90_500)).toBe("90,5 s");
   });
 });
 
@@ -71,6 +78,22 @@ describe("settingsFromForm (los rangos del servidor)", () => {
 
   test("el tope absoluto no puede ser menor que la retención", () => {
     const r = settingsFromForm({ ...ok, retentionDays: 10, maxAgeDays: 5 });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors.maxAgeDays).toContain("retención");
+  });
+});
+
+describe("settingsFromForm con los valores iniciales", () => {
+  const initial = { timeoutMin: 1.51, draftMin: 15, retentionDays: 7, maxAgeDays: 30 };
+
+  test("solo envía los campos cambiados y no valida los que no se tocaron", () => {
+    expect(settingsFromForm({ ...initial, draftMin: 20 }, initial)).toEqual({ ok: true, settings: { draftTtlMs: 1_200_000 } });
+    expect(settingsFromForm(initial, initial)).toEqual({ ok: true, settings: {} });
+  });
+
+  test("un campo cambiado sigue validándose, también contra el otro sin cambiar", () => {
+    expect(settingsFromForm({ ...initial, timeoutMin: 2.5 }, initial).ok).toBe(false);
+    const r = settingsFromForm({ ...initial, maxAgeDays: 5 }, initial);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors.maxAgeDays).toContain("retención");
   });

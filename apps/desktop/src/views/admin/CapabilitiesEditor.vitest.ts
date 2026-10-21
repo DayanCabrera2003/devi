@@ -32,4 +32,13 @@ describe("CapabilitiesEditor", () => {
     await fireEvent.click(getByRole("button", { name: "Quitar A" }));
     expect(onChange).toHaveBeenCalledWith(["B"]);
   });
+
+  test("tolera capacidades repetidas que vengan del servidor (lista por índice)", async () => {
+    const onChange = vi.fn();
+    const { getAllByRole } = render(CapabilitiesEditor, { items: ["A", "A", "B"], onChange });
+    const quitar = getAllByRole("button", { name: "Quitar A" });
+    expect(quitar).toHaveLength(2);
+    await fireEvent.click(quitar[1]!);
+    expect(onChange).toHaveBeenCalledWith(["A", "B"]);
+  });
 });

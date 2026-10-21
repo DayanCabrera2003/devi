@@ -48,8 +48,15 @@ export function normalizeServerUrl(raw: string): UrlCheck {
   return { ok: true, url: u.origin };
 }
 
-export const msToMinutes = (ms: number) => Math.round(ms / 60_000);
+// Con dos decimales: un valor del servidor que no son minutos enteros no se redondea en silencio.
+export const msToMinutes = (ms: number) => Math.round(ms / 600) / 100;
 export const minutesToMs = (min: number) => Math.round(min * 60_000);
+
+// null si son minutos enteros; si no, el valor exacto en segundos para mostrarlo junto al campo.
+export function notWholeMinutes(ms: number): string | null {
+  if (ms % 60_000 === 0) return null;
+  return `${(ms / 1000).toLocaleString("es-ES", { maximumFractionDigits: 3 })} s`;
+}
 
 // `devi install-integration --json` deja un objeto JSON en la última línea de stdout.
 export function lastJsonLine<T>(stdout: string): T | null {
@@ -75,31 +82,33 @@ export const SETTINGS_BOUNDS: Record<keyof SettingsForm, { min: number; max: num
 };
 
 export type SettingsCheck =
-  | { ok: true; settings: Settings }
+  | { ok: true; settings: Partial<Settings> }
   | { ok: false; errors: Partial<Record<keyof SettingsForm, string>> };
 
-export function settingsFromForm(f: SettingsForm): SettingsCheck {
+// Con `initial` (lo que se cargó del servidor) solo se validan y se envían los campos cambiados:
+// un valor que el formulario no puede representar exacto (p. ej. 90,5 s) se queda como está.
+export function settingsFromForm(f: SettingsForm, initial?: SettingsForm): SettingsCheck {
   const errors: Partial<Record<keyof SettingsForm, string>> = {};
+  const changed = (key: keyof SettingsForm) => !initial || f[key] !== initial[key];
   for (const key of Object.keys(SETTINGS_BOUNDS) as (keyof SettingsForm)[]) {
+    if (!changed(key)) continue;
     const v = f[key];
     const b = SETTINGS_BOUNDS[key];
     if (typeof v !== "number" || !Number.isInteger(v) || v < b.min || v > b.max) {
       errors[key] = `Escribe un número entero ${b.range}.`;
     }
   }
-  if (!errors.retentionDays && !errors.maxAgeDays && f.maxAgeDays < f.retentionDays) {
+  const retentionTouched = changed("retentionDays") || changed("maxAgeDays");
+  if (retentionTouched && !errors.retentionDays && !errors.maxAgeDays && f.maxAgeDays < f.retentionDays) {
     errors.maxAgeDays = "No puede ser menor que la retención tras cerrar la solicitud.";
   }
   if (Object.keys(errors).length > 0) return { ok: false, errors };
-  return {
-    ok: true,
-    settings: {
-      requestTimeoutMs: minutesToMs(f.timeoutMin),
-      draftTtlMs: minutesToMs(f.draftMin),
-      fileRetentionDays: f.retentionDays,
-      fileMaxAgeDays: f.maxAgeDays,
-    },
-  };
+  const settings: Partial<Settings> = {};
+  if (changed("timeoutMin")) settings.requestTimeoutMs = minutesToMs(f.timeoutMin);
+  if (changed("draftMin")) settings.draftTtlMs = minutesToMs(f.draftMin);
+  if (changed("retentionDays")) settings.fileRetentionDays = f.retentionDays;
+  if (changed("maxAgeDays")) settings.fileMaxAgeDays = f.maxAgeDays;
+  return { ok: true, settings };
 }
 
 export function formFromSettings(s: Settings): SettingsForm {

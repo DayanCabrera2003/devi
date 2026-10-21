@@ -3,12 +3,22 @@
   import { onMount } from "svelte";
   import { errorMessage } from "../../lib/api";
   import { useApp } from "../../lib/context";
-  import { SETTINGS_BOUNDS, type SettingsForm, formFromSettings, settingsFromForm } from "../../lib/format";
+  import type { Settings } from "@devi/protocol";
+  import {
+    SETTINGS_BOUNDS,
+    type SettingsForm,
+    formFromSettings,
+    notWholeMinutes,
+    settingsFromForm,
+  } from "../../lib/format";
 
   const app = useApp();
 
   let version = $state<string | null>(null);
   let sessionsCount = $state<number | null>(null);
+  let sessionsMissing = $state(0); // personas cuyo recuento falló
+  let loaded = $state<Settings | null>(null); // lo último que dio el servidor
+  let initial = $state<SettingsForm | null>(null);
   let form = $state<SettingsForm | null>(null);
   let fieldErrors = $state<Partial<Record<keyof SettingsForm, string>>>({});
   let loading = $state(false);
@@ -20,9 +30,9 @@
   let exportError = $state<string | null>(null);
   let exportPath = $state<string | null>(null);
 
-  const fields: { key: keyof SettingsForm; label: string }[] = [
-    { key: "timeoutMin", label: "Timeout de una solicitud sin respuesta (minutos)" },
-    { key: "draftMin", label: "Tiempo para autorizar un borrador (minutos)" },
+  const fields: { key: keyof SettingsForm; label: string; ms?: (s: Settings) => number }[] = [
+    { key: "timeoutMin", label: "Timeout de una solicitud sin respuesta (minutos)", ms: (s) => s.requestTimeoutMs },
+    { key: "draftMin", label: "Tiempo para autorizar un borrador (minutos)", ms: (s) => s.draftTtlMs },
     { key: "retentionDays", label: "Borrar archivos tras cerrar la solicitud (días)" },
     { key: "maxAgeDays", label: "Borrar archivos siempre a partir de (días desde la subida)" },
   ];
@@ -34,11 +44,13 @@
       // admin() recarga también el equipo: el recuento de conectados queda al día.
       const [health, s] = await Promise.all([app.call((a) => a.health()), app.admin((a) => a.getSettings())]);
       version = health.version;
-      form = formFromSettings(s);
+      setForm(s);
       fieldErrors = {};
+      // Una persona que falla no tumba las estadísticas: se cuenta el resto y se dice cuántas faltan.
       const connected = app.team.team.members.filter((m) => m.connected && !m.disabled);
-      const lists = await Promise.all(connected.map((m) => app.call((a) => a.memberSessions(m.id))));
-      sessionsCount = lists.reduce((n, l) => n + l.length, 0);
+      const lists = await Promise.allSettled(connected.map((m) => app.call((a) => a.memberSessions(m.id))));
+      sessionsCount = lists.reduce((n, r) => n + (r.status === "fulfilled" ? r.value.length : 0), 0);
+      sessionsMissing = lists.filter((r) => r.status === "rejected").length;
     } catch (e) {
       loadError = errorMessage(e);
     } finally {
@@ -46,20 +58,30 @@
     }
   }
 
+  function setForm(s: Settings) {
+    loaded = s;
+    initial = formFromSettings(s);
+    form = { ...initial };
+  }
+
   async function save(e: SubmitEvent) {
     e.preventDefault();
     if (!form) return;
     msg = null;
     saveError = null;
-    const r = settingsFromForm($state.snapshot(form));
+    const r = settingsFromForm($state.snapshot(form), $state.snapshot(initial) ?? undefined);
     if (!r.ok) {
       fieldErrors = r.errors;
       return;
     }
     fieldErrors = {};
+    if (Object.keys(r.settings).length === 0) {
+      msg = "No hay cambios que guardar.";
+      return;
+    }
     saving = true;
     try {
-      form = formFromSettings(await app.call((a) => a.updateSettings(r.settings)));
+      setForm(await app.call((a) => a.updateSettings(r.settings)));
       msg = "Ajustes guardados.";
     } catch (err) {
       saveError = errorMessage(err); // p. ej. el 400 del servidor con el campo que no acepta
@@ -93,7 +115,11 @@
   <div class="stats">
     <div class="stat"><span class="muted small">Versión</span><b>{version ?? "…"}</b></div>
     <div class="stat"><span class="muted small">Personas conectadas</span><b>{app.team.connectedCount}</b></div>
-    <div class="stat"><span class="muted small">Sesiones abiertas</span><b>{sessionsCount ?? "…"}</b></div>
+    <div class="stat"><span class="muted small">Sesiones abiertas</span><b>{sessionsCount ?? "…"}</b>
+      {#if sessionsMissing > 0}
+        <span class="muted small">(sin datos de {sessionsMissing} {sessionsMissing === 1 ? "persona" : "personas"})</span>
+      {/if}
+    </div>
   </div>
   <div class="actions"><button class="ghost" disabled={loading} onclick={load}>Actualizar</button></div>
   {#if loadError}<div class="error">{loadError}</div>{/if}
@@ -120,6 +146,12 @@
           <span class="error">{fieldErrors[f.key]}</span>
         {:else}
           <span class="muted small">{b.range.charAt(0).toUpperCase() + b.range.slice(1)}.</span>
+        {/if}
+        {#if f.ms && loaded && form[f.key] === initial?.[f.key]}
+          {@const exact = notWholeMinutes(f.ms(loaded))}
+          {#if exact}
+            <span class="muted small">En el servidor: {exact} (no son minutos enteros; si no lo cambias, se mantiene).</span>
+          {/if}
         {/if}
       </div>
     {/each}

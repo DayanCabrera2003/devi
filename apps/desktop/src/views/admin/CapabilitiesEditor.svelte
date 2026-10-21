@@ -28,7 +28,7 @@
   <span class="label">Capacidades (las lee el agente para saber a quién pedir qué)</span>
   {#if items.length > 0}
     <ul class="caps">
-      {#each items as item, i (item)}
+      {#each items as item, i (i)}
         <li>
           <span>{item}</span>
           <button type="button" class="ghost" aria-label={`Quitar ${item}`} onclick={() => remove(i)}>×</button>
