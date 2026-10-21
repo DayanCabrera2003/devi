@@ -43,9 +43,8 @@ pub fn read_from(path: &Path) -> Result<Option<ClientConfig>, String> {
 
 pub fn validate(cfg: &ClientConfig) -> Result<(), String> {
     let url = cfg.server_url.trim();
-    let local = url.starts_with("http://127.0.0.1") || url.starts_with("http://localhost");
-    if !url.is_empty() && !url.starts_with("https://") && !local {
-        return Err("la URL del servidor debe empezar por https:// (o ser http://127.0.0.1 en modo dev)".into());
+    if !url.is_empty() {
+        check_server_url(url)?;
     }
     if let Some(dir) = &cfg.received_dir {
         if !Path::new(dir).is_absolute() {
@@ -53,6 +52,27 @@ pub fn validate(cfg: &ClientConfig) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// https:// siempre; http:// solo si el host es exactamente 127.0.0.1, localhost o [::1]
+/// (se parsea la URL: `http://localhost.evil.com` no es localhost).
+fn check_server_url(raw: &str) -> Result<(), String> {
+    use std::net::{Ipv4Addr, Ipv6Addr};
+    use url::Host;
+    const MSG: &str = "la URL del servidor debe empezar por https:// (o ser http://127.0.0.1 en modo dev)";
+    let parsed = url::Url::parse(raw).map_err(|_| format!("la URL del servidor no es válida: {raw}"))?;
+    let loopback = match parsed.host() {
+        Some(Host::Domain(d)) => d == "localhost",
+        Some(Host::Ipv4(ip)) => ip == Ipv4Addr::LOCALHOST,
+        Some(Host::Ipv6(ip)) => ip == Ipv6Addr::LOCALHOST,
+        None => false,
+    };
+    let has_credentials = !parsed.username().is_empty() || parsed.password().is_some();
+    match parsed.scheme() {
+        "https" if parsed.host().is_some() => Ok(()),
+        "http" if loopback && !has_credentials => Ok(()),
+        _ => Err(MSG.into()),
+    }
 }
 
 pub fn write_to(path: &Path, cfg: &ClientConfig) -> Result<(), String> {
@@ -175,6 +195,14 @@ mod tests {
         assert!(validate(&ok("http://127.0.0.1:4747")).is_ok());
         assert!(validate(&ok("")).is_ok());
         assert!(validate(&ok("http://pc.tail1.ts.net")).is_err());
+        assert!(validate(&ok("http://localhost:4747")).is_ok());
+        assert!(validate(&ok("http://[::1]:4747")).is_ok());
+        // Un prefijo de localhost no es localhost.
+        assert!(validate(&ok("http://localhost.evil.com")).is_err());
+        assert!(validate(&ok("http://127.0.0.1.attacker.net")).is_err());
+        assert!(validate(&ok("http://localhost@evil.com")).is_err());
+        assert!(validate(&ok("ftp://pc.tail1.ts.net")).is_err());
+        assert!(validate(&ok("no es una url")).is_err());
         let rel = ClientConfig { received_dir: Some("Devi/recibidos".into()), ..Default::default() };
         assert!(validate(&rel).is_err());
     }
