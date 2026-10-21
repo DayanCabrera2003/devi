@@ -1,7 +1,7 @@
 import { appendFileSync } from "node:fs";
 
 // Cómo se empareja el MCP con las sesiones de los hooks: los dos son hijos directos de Claude Code,
-// así que comparten el PID del padre. Se verifica en la Task 17 de la Fase 2 (y si falla se aplica el plan B ahí).
+// así que comparten el PID del padre. DEVI_DEBUG_PAIRING permite comprobarlo en una máquina concreta.
 export type Pairing = { parentPid: number };
 
 export function pairing(): Pairing {

@@ -159,7 +159,7 @@ Limitaciones:
 
 ## 5. Actualizaciones
 
-**Las actualizaciones automáticas todavía no están activas.** Requieren generar la clave de firma del updater (Task 25 del plan de la app de escritorio), y aún no se ha hecho. Hasta entonces, para actualizar descarga el instalador de la versión nueva desde Releases e instálalo encima de la actual: se conservan tus datos y tu configuración.
+**Las actualizaciones automáticas todavía no están activas.** Requieren generar la clave de firma del updater, y aún no se ha hecho. Hasta entonces, para actualizar descarga el instalador de la versión nueva desde Releases e instálalo encima de la actual: se conservan tus datos y tu configuración.
 
 Cuando estén activas, Devi buscará versiones nuevas al abrirse y mostrará «Devi X está disponible → Actualizar y reiniciar», y solo instalará las versiones firmadas con la clave del proyecto.
 

@@ -120,7 +120,7 @@ pub fn port_free(port: u16) -> bool {
 }
 
 /// Solo en builds de desarrollo: DEVI_SERVER_EXTRA_ARGS (p. ej. "--dev --data-dir /tmp/x") permite
-/// probar el modo servidor sin tocar los datos reales (Task 24). En release no existe.
+/// probar el modo servidor sin tocar los datos reales. En release no existe.
 #[cfg(debug_assertions)]
 fn dev_extra_args() -> Vec<String> {
     std::env::var("DEVI_SERVER_EXTRA_ARGS")

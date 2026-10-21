@@ -42,8 +42,8 @@ export function decodeMimeWords(value: string): string {
   });
 }
 
-// Producción: el servidor escucha en 127.0.0.1 y `tailscale serve` añade estas cabeceras
-// (y elimina las que traiga el cliente). Sin cabecera → no hay identidad.
+// Producción: el servidor escucha en un socket Unix (o en 127.0.0.1 con la app en modo servidor) y
+// `tailscale serve` añade estas cabeceras (y elimina las que traiga el cliente). Sin cabecera → no hay identidad.
 export class TailscaleServeIdentity implements IdentityProvider {
   readonly name = "tailscale-serve";
   identify(req: Request): Principal | null {

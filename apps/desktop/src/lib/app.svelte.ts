@@ -321,8 +321,8 @@ export class DeviApp {
     this.publishMascot();
   }
 
-  // Enviar a sesión: solo avisa al servidor. El MCP de esa sesión descarga los archivos
-  // en la carpeta de recibidos (decisión entre fases, opción 2).
+  // Enviar a sesión: solo avisa al servidor. El MCP de esa sesión (o el hook, sin canal) descarga
+  // los archivos en la carpeta de recibidos.
   async forward(r: DeviRequest, sessionId: string): Promise<void> {
     this.applyRequest(await this.need().forwardRequest(r.id, sessionId));
   }

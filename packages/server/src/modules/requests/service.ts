@@ -23,7 +23,7 @@ const sha256 = (text: string) => createHash("sha256").update(text).digest("hex")
 const conflict = (message: string) => new HttpError(409, message, { code: "conflict" });
 const sessionGone = () => new HttpError(409, "esa sesión ya no está abierta", { code: "session_gone" });
 
-// Ciclo de vida de borradores y solicitudes (ver el diagrama de estados del spec).
+// Ciclo de vida de borradores y solicitudes (diagrama de estados en docs/arquitectura.md).
 // Todo se persiste en SQLite; los temporizadores viven en memoria y se reprograman en restore().
 export class RequestsManager {
   private timers: KeyedTimers;
