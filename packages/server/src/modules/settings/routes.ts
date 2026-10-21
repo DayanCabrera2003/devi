@@ -10,13 +10,12 @@ export function registerSettingsRoutes(r: Router, ctx: ModuleContext, settings: 
 
   r.on(API.updateSettings, async ({ request }) => json(settings.update(await readBody(request, API.updateSettings.body))));
 
-  // Copia completa de la base de datos (también funciona con :memory:).
+  // Copia completa (los bytes de devi.db) de la base de datos (también funciona con :memory:).
   r.on(API.exportDb, () => {
-    const day = new Date(ctx.now()).toISOString().slice(0, 10);
     return new Response(ctx.db.serialize(), {
       headers: {
         "Content-Type": "application/octet-stream",
-        "Content-Disposition": `attachment; filename="devi-${day}.db"`,
+        "Content-Disposition": 'attachment; filename="devi.db"',
       },
     });
   });

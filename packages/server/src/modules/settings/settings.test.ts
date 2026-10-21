@@ -78,7 +78,8 @@ describe("settings", () => {
       }),
     );
     expect(res.status).toBe(200);
-    expect(res.headers.get("Content-Disposition")).toContain("devi-");
+    expect(res.headers.get("Content-Type")).toBe("application/octet-stream");
+    expect(res.headers.get("Content-Disposition")).toBe('attachment; filename="devi.db"');
     const bytes = new Uint8Array(await res.arrayBuffer());
     expect(new TextDecoder().decode(bytes.slice(0, 15))).toBe("SQLite format 3");
   });
