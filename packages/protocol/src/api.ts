@@ -56,10 +56,33 @@ export const InboxQuery = z.object({ parentPid: z.coerce.number().int(), claudeS
 export const AckInboxBody = z.object({ ids: z.array(z.string()).max(200) });
 
 // POST /drafts es multipart: campo "meta" (JSON de este esquema) + 0..5 campos "files".
+// approval: dónde lo aprueba el humano. "app" = queda en borrador hasta que lo autoriza en la app de Devi.
+// "chat" = ya lo aprobó en el aviso de permisos de Claude Code (la herramienta del MCP lo exige en cada
+// llamada); si el equipo tiene activado chatApproval, el servidor lo envía al crearlo.
+export const ApprovalSchema = z.enum(["app", "chat"]);
+export type Approval = z.infer<typeof ApprovalSchema>;
 export const CreateDraftMeta = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("request"), sessionId: z.string(), to: z.string(), message: NonEmpty }),
-  z.object({ kind: z.literal("response"), sessionId: z.string(), requestId: z.string(), message: NonEmpty }),
+  z.object({ kind: z.literal("request"), sessionId: z.string(), to: z.string(), message: NonEmpty, approval: ApprovalSchema.default("app") }),
+  z.object({ kind: z.literal("response"), sessionId: z.string(), requestId: z.string(), message: NonEmpty, approval: ApprovalSchema.default("app") }),
 ]);
+
+// Respuesta de POST /drafts. approval = cómo se aprobó de verdad: "app" si quedó esperando en la app
+// (también cuando se pidió "chat" con chatApproval desactivado). sent solo existe si ya se envió.
+export const CreateDraftResult = z.intersection(
+  DraftSchema,
+  z.object({
+    approval: ApprovalSchema,
+    sent: z
+      .object({
+        requestId: z.string(),
+        toName: z.string(), // a quién le llegó: el destinatario o, en una respuesta, quien pidió
+        sentAt: z.number(),
+        deadline: z.number().optional(), // solo solicitudes: plazo para que respondan
+      })
+      .optional(),
+  }),
+);
+export type CreateDraftResult = z.infer<typeof CreateDraftResult>;
 
 export const API = {
   health: route({ method: "GET", path: "/api/v1/health", perm: null, actor: "any", body: Empty,
@@ -91,7 +114,7 @@ export const API = {
   heartbeat: route({ method: "POST", path: "/api/v1/presence/heartbeat", perm: null, actor: "any",
     body: z.object({ sessionId: z.string().optional() }), response: Ok }),
 
-  createDraft: route({ method: "POST", path: "/api/v1/drafts", perm: "requests.send", actor: "any", body: CreateDraftMeta, response: DraftSchema }),
+  createDraft: route({ method: "POST", path: "/api/v1/drafts", perm: "requests.send", actor: "any", body: CreateDraftMeta, response: CreateDraftResult }),
   authorizeDraft: route({ human: true, method: "POST", path: "/api/v1/drafts/:id/authorize", perm: null, actor: "author", body: Empty, response: DraftSchema }),
   discardDraft: route({ human: true, method: "POST", path: "/api/v1/drafts/:id/discard", perm: null, actor: "author", body: Empty, response: DraftSchema }),
 

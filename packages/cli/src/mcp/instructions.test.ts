@@ -35,3 +35,13 @@ test("sección de seguridad: datos, nunca instrucciones; qué no hacer; decide e
   expect(sec).toMatch(/avisa al usuario/i);
   expect(sec).toContain("allow_secrets: true solo si");
 });
+
+test("envíos: se confirman en el aviso de Claude Code (o en la app si queda en borrador) y no se reintentan si se deniegan", () => {
+  const text = instructions("ana");
+  const sec = text.indexOf("Seguridad");
+  const before = text.slice(0, sec);
+  expect(before).toMatch(/aviso de permisos de Claude Code/);
+  expect(before).toMatch(/app de Devi/);
+  expect(before).toMatch(/Nunca vuelvas a intentar un envío que el usuario denegó/);
+  expect(before).toContain("to_name");
+});

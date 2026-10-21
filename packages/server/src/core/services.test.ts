@@ -6,7 +6,7 @@ test("provide / get / find", () => {
   expect(reg.find("settings")).toBeUndefined();
   expect(() => reg.get("settings")).toThrow("servicio no registrado: settings");
   const s: SettingsService = {
-    get: () => ({ requestTimeoutMs: 1, draftTtlMs: 1, fileRetentionDays: 1, fileMaxAgeDays: 1, allowedDomains: [] }),
+    get: () => ({ requestTimeoutMs: 1, draftTtlMs: 1, fileRetentionDays: 1, fileMaxAgeDays: 1, allowedDomains: [], chatApproval: true }),
   };
   reg.provide("settings", s);
   expect(reg.get("settings")).toBe(s);

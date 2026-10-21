@@ -63,6 +63,19 @@ describe("settings", () => {
     expect((await patch({ fileRetentionDays: 2, fileMaxAgeDays: 2 })).status).toBe(200);
   });
 
+  test("chatApproval: activado por defecto, solo booleanos, se puede desactivar y persiste", async () => {
+    t = createTestApp({ modules: [team, settingsModule] });
+    const patch = (b: object) => t.call("admin@dev", "PATCH", "/api/v1/settings", b);
+    expect((await t.call("admin@dev", "GET", "/api/v1/settings")).data.chatApproval).toBe(true);
+    for (const bad of [{ chatApproval: "no" }, { chatApproval: 0 }, { chatApproval: null }]) expect((await patch(bad)).status).toBe(400);
+    const off = await patch({ chatApproval: false });
+    expect(off.status).toBe(200);
+    expect(off.data).toEqual({ ...DEFAULT_SETTINGS, chatApproval: false });
+    expect(t.app.ctx.services.get("settings").get().chatApproval).toBe(false);
+    expect((await patch({ requestTimeoutMs: 120_000 })).data.chatApproval).toBe(false); // un parche parcial no lo toca
+    expect((await patch({ chatApproval: true })).data.chatApproval).toBe(true);
+  });
+
   test("solo team.admin", async () => {
     t = createTestApp({ modules: [team, settingsModule] });
     const res = await t.call("maria@dev", "GET", "/api/v1/settings");

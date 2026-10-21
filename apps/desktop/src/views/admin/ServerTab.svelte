@@ -29,6 +29,9 @@
   let saveError = $state<string | null>(null);
   let exportError = $state<string | null>(null);
   let exportPath = $state<string | null>(null);
+  let chatSaving = $state(false);
+  let chatMsg = $state<string | null>(null);
+  let chatError = $state<string | null>(null);
 
   const fields: { key: keyof SettingsForm; label: string; ms?: (s: Settings) => number }[] = [
     { key: "timeoutMin", label: "Timeout de una solicitud sin respuesta (minutos)", ms: (s) => s.requestTimeoutMs },
@@ -87,6 +90,25 @@
       saveError = errorMessage(err); // p. ej. el 400 del servidor con el campo que no acepta
     } finally {
       saving = false;
+    }
+  }
+
+  // Se guarda al cambiarlo (no va con el formulario de tiempos). Si falla, la casilla vuelve a lo del servidor.
+  async function setChatApproval(e: Event) {
+    const input = e.currentTarget as HTMLInputElement;
+    const value = input.checked;
+    chatMsg = null;
+    chatError = null;
+    chatSaving = true;
+    try {
+      const s = await app.call((a) => a.updateSettings({ chatApproval: value }));
+      loaded = s;
+      chatMsg = s.chatApproval ? "Activado." : "Desactivado: todo lo que se envía queda en borrador para la app.";
+    } catch (err) {
+      chatError = errorMessage(err);
+      input.checked = !value;
+    } finally {
+      chatSaving = false;
     }
   }
 
@@ -159,6 +181,21 @@
     {#if msg}<div class="ok-text">{msg}</div>{/if}
     {#if saveError}<div class="error">{saveError}</div>{/if}
   </form>
+{/if}
+
+{#if loaded}
+  <section class="card">
+    <div class="card-kicker">Aprobación de envíos</div>
+    <label class="check">
+      <input type="checkbox" checked={loaded.chatApproval} disabled={chatSaving} onchange={setChatApproval} />
+      Aprobar envíos en el chat de Claude Code
+    </label>
+    <p class="muted small">
+      Lo que el usuario aprueba en el aviso de permisos de Claude Code se envía sin pasar por la app. Desactivado, todo queda en borrador para autorizarlo en la app.
+    </p>
+    {#if chatMsg}<div class="ok-text">{chatMsg}</div>{/if}
+    {#if chatError}<div class="error">{chatError}</div>{/if}
+  </section>
 {/if}
 
 <section class="card">

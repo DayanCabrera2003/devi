@@ -4,6 +4,8 @@
 // con ruta local → respond_to_request (con archivo) → autorizar → forward → response en el canal.
 // Segundo test: una sesión SIN canal (sin DEVI_CHANNEL=1) no recibe nada por el canal; la solicitud llega
 // cuando el usuario escribe, por `devi hook working` (additionalContext con la ruta local del archivo).
+// Tercer test: un cliente MCP que se presenta como Claude Code aprueba en el chat: send_request llega al
+// destinatario sin pasar por la app; con chatApproval desactivado, queda en borrador como siempre.
 // Todo vive en carpetas temporales; el servidor y los MCP se matan en afterAll.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -50,14 +52,17 @@ afterAll(async () => {
 }, 20_000); // cada MCP avisa al servidor al cerrarse (hasta 1 s cada uno)
 
 // "Claude Code falso": lanza `devi mcp` con su propia config, carpeta de proyecto y carpeta de recibidos.
-async function fakeClaude(login: string, session: string, home: string, opts: { channel?: boolean } = {}) {
+async function fakeClaude(
+  login: string, session: string, home: string,
+  opts: { channel?: boolean; clientInfo?: { name: string; version: string } } = {},
+) {
   const project = join(home, "proyecto");
   mkdirSync(project, { recursive: true });
   const config = join(home, "config.json");
   const receivedDir = join(home, "recibidos");
   writeFileSync(config, JSON.stringify({ serverUrl, devUser: login, receivedDir }));
   const events: ChannelMsg[] = [];
-  const client = new Client({ name: "smoke", version: "0" });
+  const client = new Client(opts.clientInfo ?? { name: "smoke", version: "0" });
   client.setNotificationHandler(ChannelEvent, async (n) => {
     events.push(n.params);
   });
@@ -241,4 +246,38 @@ test("sesión sin canal: la solicitud llega por el hook al escribir, con la ruta
   expect(leoCc.events).toEqual([]); // sin canal, el MCP no empuja nada
 
   expect((await runHookProc(leoCc, "working", hookInput)).trim()).toBe("");
+}, 60_000);
+
+test("Claude Code aprueba en el chat: la solicitud llega sin pasar por la app; con chatApproval desactivado, a la app", async () => {
+  expect(shared).not.toBeNull();
+  const { dayanApp, roleId, dayanUi } = shared!;
+  const me = await dayanApp.call("me");
+  const ana = await dayanApp.call("createMember", { body: { login: "ana@dev", name: "Ana", description: "QA", roleIds: [roleId] } });
+  const anaApp = createClient({ baseUrl: serverUrl, devUser: "ana@dev", origin: "tauri://localhost" });
+  const anaUi = fakeApp(anaApp);
+  const anaCc = await fakeClaude("ana@dev", "qa", join(tmp, "ana"), { clientInfo: { name: "claude-code", version: "2.1.307" } });
+  const anaSession = await waitFor(async () => (await anaApp.call("memberSessions", { params: { id: ana.id } }))[0], "sesión de ana");
+  heartbeats.add(() => anaApp.call("heartbeat", { body: { sessionId: anaSession.id } }));
+  await anaApp.call("heartbeat", { body: { sessionId: anaSession.id } });
+
+  writeFileSync(join(anaCc.project, "fallo.txt"), "el test e2e falla en login");
+  const sent = await anaCc.callTool("send_request", { to: me.member.id, to_name: me.member.name, message: "¿Miras el fallo de login?", files: ["fallo.txt"] });
+  expect(sent.isError).toBe(false);
+  expect(sent.text).toStartWith(`Enviado a ${me.member.name}.`);
+  const incoming = await dayanUi.next("request.incoming", (e) => e.request.message === "¿Miras el fallo de login?");
+  expect(incoming.request).toMatchObject({ fromMemberId: ana.id, fromSessionName: "qa", status: "pending" });
+  expect(incoming.request.files.map((f) => f.name)).toEqual(["fallo.txt"]);
+  expect(sent.text).toContain(incoming.request.id);
+  expect(anaUi.events.some((e) => e.type === "draft.awaiting")).toBe(false); // sin paso de autorización
+
+  // El admin lo desactiva: lo aprobado en el chat queda en borrador para la app.
+  await dayanApp.call("updateSettings", { body: { chatApproval: false } });
+  const held = await anaCc.callTool("send_request", { to: me.member.id, message: "¿Y el de logout?" });
+  expect(held.isError).toBe(false);
+  expect(held.text).toContain("esperando autorización en la app de Devi");
+  expect(held.text).toContain("desactivada");
+  const draft = await anaUi.next("draft.awaiting", (e) => e.draft.message === "¿Y el de logout?");
+  expect(draft.draft.status).toBe("awaiting");
+  expect(dayanUi.events.some((e) => e.type === "request.incoming" && e.request.message === "¿Y el de logout?")).toBe(false);
+  await dayanApp.call("updateSettings", { body: { chatApproval: true } });
 }, 60_000);
