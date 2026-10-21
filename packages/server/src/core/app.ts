@@ -73,6 +73,7 @@ export function createApp(opts: AppOptions) {
     // Dominios permitidos (ajuste allowedDomains): se comprueba antes de mirar el equipo.
     const domains = ctx.services.find("settings")?.get().allowedDomains ?? [];
     if (!loginInDomains(principal.login, domains)) {
+      ctx.services.find("audit")?.loginRejected(principal.login, "domain");
       throw new HttpError(403, `Tu login (${principal.login}) no es de un dominio permitido en este servidor de Devi`, {
         code: "domain",
         login: principal.login,
@@ -81,6 +82,7 @@ export function createApp(opts: AppOptions) {
 
     const access = resolveAccess(principal.login);
     if (!access) {
+      ctx.services.find("audit")?.loginRejected(principal.login, "unknown_login");
       throw new HttpError(403, `Pide al admin de Devi que te añada al equipo (tu login: ${principal.login})`, {
         code: "unknown_login",
         login: principal.login,

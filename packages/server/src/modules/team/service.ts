@@ -78,6 +78,19 @@ export class TeamManager implements TeamService {
     return this.store.members().map((m) => m.id);
   }
 
+  adminIds(): string[] {
+    return this.store.members().filter((m) => !m.disabled && this.store.permsOf(m.id).includes("team.admin")).map((m) => m.id);
+  }
+
+  // Para la auditoría (antes/después de un cambio). null si no existe.
+  getMember(id: string): Member | null {
+    return this.store.member(id);
+  }
+
+  getRole(id: string): Role | null {
+    return this.store.role(id);
+  }
+
   // ---- personas -------------------------------------------------------------
 
   createMember(body: CreateMember): Member {

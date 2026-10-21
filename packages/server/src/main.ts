@@ -7,6 +7,7 @@ import { parseServerArgs, type ServerConfig } from "./core/config";
 import { openDb } from "./core/db";
 import { TAURI_ORIGINS } from "./core/http";
 import type { DeviModule } from "./core/module";
+import { auditModule } from "./modules/audit/index";
 import { filesModule } from "./modules/files/index";
 import { requestsModule } from "./modules/requests/index";
 import { sessionsModule } from "./modules/sessions/index";
@@ -15,7 +16,7 @@ import { teamModule } from "./modules/team/index";
 
 // Módulos de features, en orden de arranque. team va primero: si no hay admin, el servidor no arranca
 // antes de que nada programe temporizadores.
-export const MODULES: DeviModule[] = [teamModule, settingsModule, sessionsModule, filesModule, requestsModule];
+export const MODULES: DeviModule[] = [teamModule, settingsModule, auditModule, sessionsModule, filesModule, requestsModule];
 
 // Tope del cuerpo HTTP: 5 archivos de 1 MB + multipart, con margen.
 const MAX_BODY = 8 * 1024 * 1024;

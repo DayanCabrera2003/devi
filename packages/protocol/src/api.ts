@@ -4,6 +4,7 @@ import {
   SessionSchema, SessionStatusSchema, SettingsSchema, TeamViewSchema,
 } from "./entities";
 import type { Perm } from "./perms";
+import { AuditPageSchema } from "./audit";
 
 // Quién puede llamar una ruta además del permiso (lo comprueba el módulo, no el núcleo):
 // any = cualquier miembro; admin = team.admin; author = autor del borrador;
@@ -74,6 +75,8 @@ export const API = {
   deleteRole: route({ human: true, method: "DELETE", path: "/api/v1/team/roles/:id", perm: "team.admin", actor: "admin", body: Empty, response: Ok }),
   getSettings: route({ method: "GET", path: "/api/v1/settings", perm: "team.admin", actor: "admin", body: Empty, response: SettingsSchema }),
   updateSettings: route({ human: true, method: "PATCH", path: "/api/v1/settings", perm: "team.admin", actor: "admin", body: SettingsSchema.partial(), response: SettingsSchema }),
+  // Registro de auditoría (query: AuditQuery). Solo lectura: ninguna ruta lo cambia.
+  audit: route({ method: "GET", path: "/api/v1/audit", perm: "team.admin", actor: "admin", body: Empty /* query: AuditQuery */, response: AuditPageSchema }),
   exportDb: route({ human: true, method: "GET", path: "/api/v1/settings/export", perm: "team.admin", actor: "admin", body: Empty, response: z.any() /* application/octet-stream */ }),
 
   registerSession: route({ method: "POST", path: "/api/v1/sessions", perm: null, actor: "any", body: RegisterSessionBody, response: SessionSchema }),

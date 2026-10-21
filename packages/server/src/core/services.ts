@@ -1,4 +1,4 @@
-import type { FileMeta, Session, SessionDelivery, Settings } from "@devi/protocol";
+import type { AuditAction, AuditTarget, FileMeta, Session, SessionDelivery, Settings } from "@devi/protocol";
 
 // Servicios que un módulo ofrece a los demás a través de ModuleContext.services.
 // Así ningún módulo importa a otro: solo dependen de estas interfaces del núcleo.
@@ -9,6 +9,7 @@ export interface TeamService {
   member(id: string): MemberInfo | null;
   nameOf(id: string): string; // nombre visible; si no existe, el propio id
   memberIds(): string[];
+  adminIds(): string[]; // personas activas con team.admin (reciben las alertas de auditoría)
 }
 
 export interface SettingsService {
@@ -48,11 +49,31 @@ export interface FilesService {
   attachToRequest(draftId: string, requestId: string): void;
 }
 
+// Una entrada del registro de auditoría. actorMemberId null/ausente = el servidor (caducidades, plazos).
+// Si falta actorLogin se toma el login de actorMemberId. Los valores de details se guardan como texto.
+export type AuditDetails = Record<string, string | number | boolean | null | undefined>;
+export type AuditInput = {
+  actorMemberId?: string | null;
+  actorLogin?: string;
+  action: AuditAction;
+  targetType: AuditTarget;
+  targetId?: string | null;
+  details?: AuditDetails;
+  alert?: boolean; // forzar (o quitar) la alerta a los admins; por defecto según la acción
+};
+
+export interface AuditService {
+  record(input: AuditInput): void; // nunca lanza: un fallo del registro no deshace la acción
+  // Login rechazado (desconocido o de otro dominio). Como mucho una entrada por login cada 10 min.
+  loginRejected(login: string, reason: "unknown_login" | "domain"): void;
+}
+
 export interface ServiceMap {
   team: TeamService;
   settings: SettingsService;
   sessions: SessionsService;
   files: FilesService;
+  audit: AuditService;
 }
 
 export class ServiceRegistry {

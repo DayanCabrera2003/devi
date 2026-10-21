@@ -104,6 +104,7 @@ export function stubTeamModule(members: (MemberInfo & { perms: Perm[] })[]): Dev
         member: (id) => members.find((m) => m.id === id) ?? null,
         nameOf: (id) => members.find((m) => m.id === id)?.name ?? id,
         memberIds: () => members.map((m) => m.id),
+        adminIds: () => members.filter((m) => !m.disabled && m.perms.includes("team.admin")).map((m) => m.id),
       });
     },
   };

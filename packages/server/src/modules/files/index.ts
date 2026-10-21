@@ -27,7 +27,7 @@ export const filesModule: DeviModule = {
     ctx.services.provide("files", files);
     ctx.bus.on("draft.discarded", ({ draftId }) => files.releaseDraft(draftId));
     ctx.bus.on("request.closed", ({ requestId }) => files.releaseRequest(requestId));
-    registerFileRoutes(r, files);
+    registerFileRoutes(r, ctx, files);
   },
 
   onStart(ctx) {

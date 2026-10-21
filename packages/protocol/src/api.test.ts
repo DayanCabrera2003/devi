@@ -59,3 +59,15 @@ describe("catálogo de la API", () => {
     expect(API.forwardRequest.body.safeParse({ sessionId: "s1" }).success).toBe(true);
   });
 });
+
+describe("auditoría", () => {
+  test("GET /audit es de admin, no humana, y pagina con limit/before", async () => {
+    const { AuditQuery, AUDIT_ACTIONS } = await import("./audit");
+    expect(API.audit).toMatchObject({ method: "GET", path: "/api/v1/audit", perm: "team.admin", actor: "admin" });
+    expect("human" in API.audit).toBe(false);
+    expect(AuditQuery.parse({})).toEqual({ limit: 50 });
+    expect(AuditQuery.parse({ limit: "10", before: "99" })).toEqual({ limit: 10, before: 99 });
+    expect(AuditQuery.safeParse({ limit: "500" }).success).toBe(false);
+    expect(AUDIT_ACTIONS).toContain("login.rejected");
+  });
+});
