@@ -1,11 +1,14 @@
 <script lang="ts">
-  import type { DeviRequest, Session } from "@devi/protocol";
+  import { type DeviRequest, type InjectionScan, type Session, scanForInjection } from "@devi/protocol";
   import FileList from "../components/FileList.svelte";
+  import InjectionWarning from "../components/InjectionWarning.svelte";
+  import SendConfirm from "../components/SendConfirm.svelte";
   import SaveFilesButton from "../components/SaveFilesButton.svelte";
   import SessionPicker from "../components/SessionPicker.svelte";
   import { errorMessage } from "../lib/api";
   import { useApp } from "../lib/context";
   import { OUTCOME } from "../lib/format";
+  import { combineScans } from "../lib/safety";
 
   type Props = { request: DeviRequest };
   let { request }: Props = $props();
@@ -20,8 +23,15 @@
   // Las sesiones se piden al abrir el selector, no al montar cada tarjeta.
   let loadingSessions = $state(false);
 
+  // Posible prompt injection: en el texto de la respuesta y en los archivos previsualizados.
+  const messageScan = $derived(scanForInjection(request.outcomeText ?? ""));
+  let fileScans = $state<Record<string, InjectionScan>>({});
+  const scan = $derived(combineScans([messageScan, ...Object.values(fileScans)]));
+  let reviewed = $state(false);
+  const blocked = $derived(scan.level === "high" && !reviewed);
+
   async function openPicker() {
-    if (loadingSessions) return;
+    if (loadingSessions || blocked) return;
     loadingSessions = true;
     try {
       await app.loadSessions();
@@ -68,13 +78,15 @@
     <div class="card-kicker">Respuesta · <span class="badge {outcome.cls}">{outcome.label}</span></div>
     <div class="card-title">Respuesta de {to}</div>
     <div class="card-from">a: <span class="muted">“{request.message}”</span></div>
+    <InjectionWarning scan={messageScan} />
     <p class="card-msg"><span class="muted">{outcome.lead}</span> {request.outcomeText ?? ""}</p>
-    <FileList files={request.responseFiles} load={(id) => app.downloadFile(id)} />
+    <FileList files={request.responseFiles} load={(id) => app.downloadFile(id)} onScan={(id, s) => (fileScans[id] = s)} />
     {#if request.responseFiles.length > 0}
       <SaveFilesButton save={() => app.saveFiles(request.id, "response", request.responseFiles)} />
     {/if}
+    {#if scan.level === "high"}<SendConfirm bind:checked={reviewed} />{/if}
     <div class="actions">
-      <button class="primary" disabled={loadingSessions} onclick={openPicker}>
+      <button class="primary" disabled={loadingSessions || blocked} onclick={openPicker}>
         {loadingSessions ? "Buscando sesiones…" : "Enviar a sesión"}
       </button>
       <button class="ok" disabled={busy} onclick={acceptIt}>Aceptar</button>

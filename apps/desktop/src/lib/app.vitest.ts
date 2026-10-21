@@ -441,4 +441,52 @@ describe("DeviApp", () => {
       expect(t.emitMascot).toHaveBeenLastCalledWith(expect.objectContaining({ pending: 4 }));
     });
   });
+
+  describe("alertas de seguridad (audit.alert)", () => {
+    const entry = {
+      id: "a1", at: 1, actorMemberId: "m1", actorLogin: "dayan@x", action: "member.updated", targetType: "member", targetId: "m2", details: {},
+    };
+    const alert = (e: unknown = entry) => ({ type: "audit.alert", entry: e }) as unknown as UserEvent;
+
+    test("admin: aviso nativo una sola vez por entrada y contador para la pestaña", async () => {
+      const t = setup();
+      await t.app.boot();
+      t.status("open");
+      t.event(alert());
+      t.event(alert());
+      expect(t.notify).toHaveBeenCalledOnce();
+      expect(t.notify).toHaveBeenCalledWith(expect.objectContaining({ title: "Devi · Cambio de seguridad: Persona modificada" }));
+      expect(t.app.auditAlerts.map((e) => e.id)).toEqual(["a1"]);
+      expect(t.app.inbox.cards).toHaveLength(0);
+      t.app.clearAuditAlerts();
+      expect(t.app.auditAlerts).toEqual([]);
+    });
+
+    test("sin avisos activados: no notifica, pero sí cuenta", async () => {
+      const t = setup({ ...CONFIG, app: { notifications: false, setupDone: true } });
+      await t.app.boot();
+      t.event(alert());
+      expect(t.notify).not.toHaveBeenCalled();
+      expect(t.app.auditAlerts).toHaveLength(1);
+    });
+
+    test("quien no es admin no recibe nada", async () => {
+      const t = setup();
+      t.api.me.mockResolvedValue({ ...ME, perms: ["requests.send"] });
+      await t.app.boot();
+      t.event(alert());
+      expect(t.notify).not.toHaveBeenCalled();
+      expect(t.app.auditAlerts).toHaveLength(0);
+    });
+
+    test("un audit.alert mal formado o un evento desconocido se ignoran sin romper nada", async () => {
+      const t = setup();
+      await t.app.boot();
+      expect(() => t.event(alert({ id: 3 }))).not.toThrow();
+      expect(() => t.event({ type: "algo.nuevo", x: 1 } as unknown as UserEvent)).not.toThrow();
+      expect(t.notify).not.toHaveBeenCalled();
+      expect(t.app.auditAlerts).toHaveLength(0);
+      expect(t.app.inbox.cards).toHaveLength(0);
+    });
+  });
 });
