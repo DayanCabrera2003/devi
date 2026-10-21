@@ -32,15 +32,15 @@ describe("toChannelMessage", () => {
 
   test("si la app ya lo descargó, no lo vuelve a pedir", async () => {
     const dir = mkdtempSync(join(tmpdir(), "devi-recv-"));
-    mkdirSync(join(dir, "q2"));
-    writeFileSync(join(dir, "q2", "a.txt"), "de la app");
+    mkdirSync(join(dir, "q2", "respuesta"), { recursive: true });
+    writeFileSync(join(dir, "q2", "respuesta", "a.txt"), "de la app");
     const f = fakeClient();
     await toChannelMessage(
       { kind: "response", content: "r", meta: { request_id: "q2", files: files([{ id: "f1", name: "a.txt" }]) } },
       { client: f.client, receivedDir: dir },
     );
     expect(f.calls).toEqual([]);
-    expect(readFileSync(join(dir, "q2", "a.txt"), "utf8")).toBe("de la app");
+    expect(readFileSync(join(dir, "q2", "respuesta", "a.txt"), "utf8")).toBe("de la app");
   });
 
   test("un fallo de descarga se cuenta en el texto", async () => {
@@ -124,5 +124,22 @@ describe("toChannelMessage", () => {
     expect(m.content).toContain("No se pudieron descargar: a.txt");
     expect(readFileSync(join(fuera, "objetivo.txt"), "utf8")).toBe("intacto");
     expect(existsSync(join(dir, "q8", "a.txt.tmp-0"))).toBe(false);
+  });
+
+  test("request y response con el mismo nombre no chocan: la respuesta va a respuesta/", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "devi-recv-"));
+    const f = fakeClient({ downloadFile: (id: unknown) => `c-${id}` });
+    const req = await toChannelMessage(
+      { kind: "request", content: "x", meta: { request_id: "q9", files: files([{ id: "f1", name: "a.txt" }]) } },
+      { client: f.client, receivedDir: dir },
+    );
+    const res = await toChannelMessage(
+      { kind: "response", content: "y", meta: { request_id: "q9", files: files([{ id: "f2", name: "a.txt" }]) } },
+      { client: f.client, receivedDir: dir },
+    );
+    expect(req.meta.file_paths).toBe(join(dir, "q9", "a.txt"));
+    expect(res.meta.file_paths).toBe(join(dir, "q9", "respuesta", "a.txt"));
+    expect(readFileSync(join(dir, "q9", "a.txt"), "utf8")).toBe("c-f1");
+    expect(readFileSync(join(dir, "q9", "respuesta", "a.txt"), "utf8")).toBe("c-f2");
   });
 });

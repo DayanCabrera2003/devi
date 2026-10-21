@@ -11,7 +11,7 @@ export type ChannelMessage = { content: string; meta: Record<string, string> };
 const FilesMeta = z.array(FileMetaSchema.pick({ id: true, name: true }));
 
 // Convierte una entrega del servidor en el mensaje del canal. Si trae archivos (meta.files = JSON
-// de [{id,name}]), se guardan en <receivedDir>/<request_id>/ y el agente recibe las rutas locales.
+// de [{id,name}]), se guardan en <receivedDir>/<request_id>/ (las respuestas, en .../respuesta/) y el agente recibe las rutas locales.
 // Si la app ya los descargó, se reutilizan (no se vuelven a pedir).
 // Mismo patrón que valida la app de escritorio; evita cualquier ruta en el nombre de la carpeta.
 const REQUEST_ID = /^[A-Za-z0-9_-]{1,64}$/;
@@ -56,7 +56,7 @@ export async function toChannelMessage(
   let folder: string;
   try {
     await mkdir(deps.receivedDir, { recursive: true });
-    folder = await safeFolder(await realpath(deps.receivedDir), [requestId]);
+    folder = await safeFolder(await realpath(deps.receivedDir), d.kind === "response" ? [requestId, "respuesta"] : [requestId]);
   } catch {
     failed.push(...files.map((f) => f.name));
     files = [];
