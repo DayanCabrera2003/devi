@@ -28,6 +28,12 @@ describe("native", () => {
     expect(invoke).toHaveBeenLastCalledWith("save_db_export", bytes);
   });
 
+  test("quitApp llama a quit_app sin argumentos", async () => {
+    invoke.mockResolvedValue(undefined);
+    await native.quitApp();
+    expect(invoke).toHaveBeenLastCalledWith("quit_app");
+  });
+
   test("prefsOf completa con los valores por defecto", () => {
     expect(prefsOf(null)).toEqual(DEFAULT_PREFS);
     expect(prefsOf({ serverUrl: "x", app: { notifications: false, setupDone: true } })).toEqual({

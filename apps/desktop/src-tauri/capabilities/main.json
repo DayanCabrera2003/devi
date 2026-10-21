@@ -22,6 +22,7 @@
     "allow-start-server",
     "allow-stop-server",
     "allow-server-status",
-    "allow-set-paused"
+    "allow-set-paused",
+    "allow-quit-app"
   ]
 }

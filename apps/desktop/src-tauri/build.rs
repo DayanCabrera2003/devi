@@ -15,6 +15,7 @@ fn main() {
             "server_status",
             "show_main_window",
             "set_paused",
+            "quit_app",
         ])),
     )
     .expect("falló tauri-build");

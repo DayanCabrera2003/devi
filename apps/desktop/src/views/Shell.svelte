@@ -5,6 +5,7 @@
   import { createApp } from "../lib/boot";
   import { provideApp } from "../lib/context";
   import { MASCOT_READY } from "../lib/mascot";
+  import { native } from "../lib/native";
   import BlockedScreen from "./BlockedScreen.svelte";
   import Inbox from "./Inbox.svelte";
   import Settings from "./Settings.svelte";
@@ -55,6 +56,8 @@
         <span class="dot" class:on={app.conn.online}></span><span>{app.conn.label}</span>
       </div>
     </div>
+    <!-- Sin icono de bandeja (GNOME sin AppIndicator) esta es la única forma de cerrar Devi. -->
+    <button class="ghost" title="Cierra Devi y su servidor" onclick={() => void native.quitApp()}>Salir de Devi</button>
   </header>
 
   <UpdateBanner />

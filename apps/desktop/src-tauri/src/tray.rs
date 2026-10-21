@@ -1,4 +1,4 @@
-//! Icono de la bandeja del sistema: Abrir, Pausar avisos, Ajustes y Salir.
+//! Icono de la bandeja del sistema: Abrir, Pausar avisos, Ajustes y Salir (y `quit_app` para la UI).
 //! En GNOME sin la extensión AppIndicator no se ve; por eso existe la ventana mascota.
 
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
@@ -13,12 +13,22 @@ pub struct TrayState {
     pause: CheckMenuItem<Wry>,
 }
 
+/// Muestra la ventana principal y, si se había cerrado (oculta), también la mascota.
 pub fn show_main(app: &AppHandle) {
+    if let Some(m) = app.get_webview_window("mascota") {
+        let _ = m.show();
+    }
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.unminimize();
         let _ = w.show();
         let _ = w.set_focus();
     }
+}
+
+/// Mata el servidor sidecar y cierra la app (también lo hace `RunEvent::Exit`; repetirlo no daña).
+pub fn exit_app(app: &AppHandle) {
+    crate::sidecar::kill_server(app);
+    app.exit(0);
 }
 
 pub fn create(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
@@ -46,7 +56,7 @@ pub fn create(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                 show_main(app);
                 let _ = app.emit_to("main", EVT_NAVIGATE, "ajustes");
             }
-            "quit" => app.exit(0),
+            "quit" => exit_app(app),
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
@@ -62,6 +72,12 @@ pub fn create(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 #[tauri::command]
 pub fn show_main_window(app: AppHandle) {
     show_main(&app);
+}
+
+/// "Salir de Devi" desde la ventana principal: sin tray no habría otra forma de cerrar la app.
+#[tauri::command]
+pub fn quit_app(app: AppHandle) {
+    exit_app(&app);
 }
 
 /// La UI pausa o reanuda los avisos: se refleja en la casilla del tray.

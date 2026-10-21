@@ -37,7 +37,8 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Cerrar una ventana la oculta: Devi sigue vivo en la bandeja del sistema.
+            // Cerrar una ventana (también la mascota) la oculta: Devi sigue vivo. "Abrir" del tray
+            // o una segunda instancia vuelven a mostrar las dos; se sale con "Salir de Devi".
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 let _ = window.hide();
@@ -58,6 +59,7 @@ pub fn run() {
             sidecar::server_status,
             tray::show_main_window,
             tray::set_paused,
+            tray::quit_app,
         ])
         .build(tauri::generate_context!())
         .expect("no se pudo iniciar Devi")

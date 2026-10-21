@@ -41,6 +41,8 @@ export const native = {
   serverStatus: () => invoke<ServerStatus>("server_status"),
   showMainWindow: () => invoke<void>("show_main_window"),
   setPaused: (paused: boolean) => invoke<void>("set_paused", { paused }),
+  // Mata el servidor sidecar (si lo hay) y cierra Devi: la salida sin icono de bandeja.
+  quitApp: () => invoke<void>("quit_app"),
 };
 
 export type Native = typeof native;
