@@ -76,22 +76,30 @@ export async function readLocalFiles(paths: string[], cwd: string): Promise<File
   return { ok: true, files };
 }
 
-const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+const WINDOWS_RESERVED = new Set([
+  "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+  "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+]);
+const MAX_NAME_CHARS = 120;
+// char::is_control de Rust = categoría Cc (U+0000–U+001F y U+007F–U+009F).
+const UNSAFE_CHARS = /[<>:"/\\|?*\u0000-\u001f\u007f-\u009f]/g;
+// char::is_whitespace de Rust = propiedad Unicode White_Space (JS \s no coincide: incluye U+FEFF).
+const EDGE_START = /^[.\p{White_Space}]+/u;
+const EDGE_END = /[.\p{White_Space}]+$/u;
+const asciiUpper = (s: string) => s.replace(/[a-z]/g, (c) => c.toUpperCase());
 
-// Nombre seguro para guardar un archivo recibido. Las MISMAS reglas, en el mismo orden, las aplica el
-// código Rust de la app de escritorio (y el MCP salta los archivos que ya existen), así que no cambiarlas
-// de un solo lado: 1) última componente tras / o \; 2) caracteres de control y <>:"/\|?* → _;
-// 3) sin puntos ni espacios al inicio/final; 4) máximo 120 caracteres; 5) vacío → "archivo";
-// 6) nombres reservados de Windows (con o sin extensión) llevan "_" delante.
+// Nombre seguro para guardar un archivo recibido. Es un espejo EXACTO de `sanitize_file_name` en
+// apps/desktop/src-tauri/src/files.rs (y el MCP salta los archivos que ya existen), así que no cambiar
+// un lado sin el otro: 1) última componente tras / o \; 2) caracteres de control (Cc) y <>:"/\|?* → _;
+// 3) sin puntos ni espacios (Unicode) al inicio/final; 4) máximo 120 code points y de nuevo sin
+// puntos/espacios finales; 5) vacío → "archivo"; 6) si lo anterior al primer punto, en mayúsculas
+// ASCII y sin recortar, es un nombre reservado de Windows, lleva "_" delante.
 export function safeFileName(name: string): string {
   const base = name.split(/[\\/]/).pop() ?? "";
-  let clean = base
-    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_")
-    .replace(/^[. ]+|[. ]+$/g, "")
-    .slice(0, 120);
+  const cleaned = base.replace(UNSAFE_CHARS, "_").replace(EDGE_START, "").replace(EDGE_END, "");
+  const clean = Array.from(cleaned).slice(0, MAX_NAME_CHARS).join("").replace(EDGE_END, "");
   if (clean === "") return "archivo";
-  if (WINDOWS_RESERVED.test(clean.split(".")[0]!.trim())) clean = `_${clean}`;
-  return clean;
+  return WINDOWS_RESERVED.has(asciiUpper(clean.split(".")[0]!)) ? `_${clean}` : clean;
 }
 
 // `a.txt` → `a (2).txt` → `a (3).txt`… hasta que el nombre no esté en `used` (sin distinguir mayúsculas).

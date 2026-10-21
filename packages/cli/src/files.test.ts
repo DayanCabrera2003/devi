@@ -121,6 +121,48 @@ test("safeFileName: tabla compartida con la app", () => {
   for (const [input, expected] of cases) expect(safeFileName(input)).toBe(expected);
 });
 
+// Los mismos casos que `sanea_nombres` y `trunca_nombres_largos` en apps/desktop/src-tauri/src/files.rs.
+test("safeFileName: casos de los tests de Rust (sanitize_file_name)", () => {
+  const cases: [string, string][] = [
+    ["informe.txt", "informe.txt"],
+    ["../../etc/passwd", "passwd"],
+    ["..\\..\\Windows\\win.ini", "win.ini"],
+    ["..", "archivo"],
+    ["", "archivo"],
+    ["   ", "archivo"],
+    [".bashrc", "bashrc"],
+    ["nota final. ", "nota final"],
+    ['a<b>c:d"e|f?g*h.md', "a_b_c_d_e_f_g_h.md"],
+    ["tab\there.txt", "tab_here.txt"],
+    ["CON", "_CON"],
+    ["con.txt", "_con.txt"],
+    ["lpt9.log", "_lpt9.log"],
+    ["console.txt", "console.txt"],
+    ["informe ñandú.txt", "informe ñandú.txt"],
+  ];
+  for (const [input, expected] of cases) expect(safeFileName(input)).toBe(expected);
+  const long = safeFileName("a".repeat(300) + ".txt");
+  expect(long.length > 0 && Array.from(long).length <= 120).toBe(true);
+});
+
+test("safeFileName: paridad fina con Rust (code points, C1, espacios Unicode, reservados)", () => {
+  // Trunca por code points, no por unidades UTF-16: 120 emojis, no 60.
+  expect(safeFileName("😀".repeat(130))).toBe("😀".repeat(120));
+  expect(safeFileName("a".repeat(118) + "😀😀😀.txt")).toBe("a".repeat(118) + "😀😀");
+  expect(safeFileName("a".repeat(300) + ".txt")).toBe("a".repeat(120));
+  // Tras truncar se vuelven a quitar puntos y espacios finales.
+  expect(safeFileName("a".repeat(118) + ". b.txt")).toBe("a".repeat(118));
+  expect(safeFileName("a".repeat(119) + " .txt")).toBe("a".repeat(119));
+  // U+007F–U+009F también son de control.
+  expect(safeFileName("a\u007fb\u0080c\u009f.txt")).toBe("a_b_c_.txt");
+  // Espacios Unicode en los extremos (char::is_whitespace).
+  expect(safeFileName("\u00a0nota\u3000")).toBe("nota");
+  // Reservado: la parte antes del primer punto, en mayúsculas ASCII, sin recortar espacios.
+  expect(safeFileName("con .txt")).toBe("con .txt");
+  expect(safeFileName("com1.tar.gz")).toBe("_com1.tar.gz");
+  expect(safeFileName("\u017Fon.txt")).toBe("\u017Fon.txt");
+});
+
 test("uniqueName: duplicados sin distinguir mayúsculas", () => {
   const used = new Set<string>();
   expect([uniqueName("A.txt", used), uniqueName("a.txt", used)]).toEqual(["A.txt", "a (2).txt"]);
