@@ -46,7 +46,7 @@
   <div>
     {#if selected}
       {#key editorKey}
-        <RoleEditor {role} onSave={save} onDelete={role ? remove : undefined} onCancel={() => select(null)} />
+        <RoleEditor {role} team={app.team.team} onSave={save} onDelete={role ? remove : undefined} onCancel={() => select(null)} />
       {/key}
     {:else}
       <div class="empty small">Elige un rol o crea uno nuevo.</div>

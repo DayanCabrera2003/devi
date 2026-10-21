@@ -1,15 +1,17 @@
 <script lang="ts">
-  import { PERMS, PERM_LABELS, type Perm, type Role } from "@devi/protocol";
+  import { PERMS, PERM_LABELS, type Perm, type Role, type TeamView } from "@devi/protocol";
+  import { LAST_ADMIN_HINT, canDeleteRole, canRevokeAdminFromRole } from "../../lib/admins";
   import { type RoleBody, errorMessage } from "../../lib/api";
   import CapabilitiesEditor from "./CapabilitiesEditor.svelte";
 
   type Props = {
     role: Role | null;
+    team: TeamView;
     onSave: (b: RoleBody) => Promise<void>;
     onDelete?: () => Promise<void>;
     onCancel: () => void;
   };
-  let { role, onSave, onDelete, onCancel }: Props = $props();
+  let { role, team, onSave, onDelete, onCancel }: Props = $props();
 
   // Valores iniciales: RolesTab monta el editor de nuevo al elegir otro rol ({#key}).
   // svelte-ignore state_referenced_locally
@@ -24,6 +26,9 @@
   let busy = $state(false);
   let saved = $state(false);
   let error = $state<string | null>(null);
+  // Con el equipo tal como está en el servidor: ¿es este el único rol que deja algún admin?
+  const adminLocked = $derived(!!role && perms.includes("team.admin") && !canRevokeAdminFromRole(team, role.id));
+  const deleteLocked = $derived(!!role && !canDeleteRole(team, role.id));
 
   function togglePerm(p: Perm, on: boolean) {
     perms = on ? [...perms, p] : perms.filter((x) => x !== p);
@@ -71,9 +76,15 @@
   <fieldset class="field">
     <legend class="label">Permisos en Devi</legend>
     {#each PERMS as p (p)}
-      <label class="check">
-        <input type="checkbox" checked={perms.includes(p)} onchange={(e) => togglePerm(p, e.currentTarget.checked)} />
-        {PERM_LABELS[p]} <span class="mono small muted">{p}</span>
+      {@const locked = p === "team.admin" && adminLocked}
+      <label class="check" title={p}>
+        <input
+          type="checkbox"
+          checked={perms.includes(p)}
+          disabled={locked}
+          onchange={(e) => togglePerm(p, e.currentTarget.checked)}
+        />
+        {PERM_LABELS[p]}
       </label>
     {/each}
     {#if perms.includes("team.admin")}
@@ -88,10 +99,17 @@
         <button type="button" class="no" disabled={busy} onclick={() => onDelete && run(onDelete)}>Sí, borrar</button>
         <button type="button" class="ghost" onclick={() => (confirmDelete = false)}>No</button>
       {:else}
-        <button type="button" class="ghost" onclick={() => (confirmDelete = true)}>Borrar rol</button>
+        <button
+          type="button"
+          class="ghost"
+          disabled={deleteLocked}
+          title={deleteLocked ? LAST_ADMIN_HINT : undefined}
+          onclick={() => (confirmDelete = true)}>Borrar rol</button
+        >
       {/if}
     {/if}
   </div>
+  {#if adminLocked || deleteLocked}<p class="muted small">{LAST_ADMIN_HINT}</p>{/if}
   {#if confirmDelete}<p class="muted small">Las personas con este rol lo perderán, y con él sus permisos.</p>{/if}
   {#if saved}<div class="ok-text">Guardado.</div>{/if}
   {#if error}<div class="error">{error}</div>{/if}

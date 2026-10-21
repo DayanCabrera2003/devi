@@ -1,9 +1,11 @@
 <script lang="ts">
-  import type { Member, Role } from "@devi/protocol";
+  import type { Member, TeamView } from "@devi/protocol";
+  import { LAST_ADMIN_HINT, canDropMemberRole } from "../../lib/admins";
   import { type MemberBody, errorMessage } from "../../lib/api";
 
-  type Props = { member: Member | null; roles: Role[]; onSave: (b: MemberBody) => Promise<void>; onCancel: () => void };
-  let { member, roles, onSave, onCancel }: Props = $props();
+  type Props = { member: Member | null; team: TeamView; onSave: (b: MemberBody) => Promise<void>; onCancel: () => void };
+  let { member, team, onSave, onCancel }: Props = $props();
+  const roles = $derived(team.roles);
 
   // Valores iniciales: PeopleTab monta el formulario de nuevo para cada persona ({#key}).
   // svelte-ignore state_referenced_locally
@@ -14,9 +16,15 @@
   let description = $state(member?.description ?? "");
   // svelte-ignore state_referenced_locally
   let roleIds = $state<string[]>([...(member?.roleIds ?? [])]);
+  // El login es la identidad: cambiarlo a una persona existente la deja sin acceso hasta que entre con el nuevo.
+  let editLogin = $state(false);
   let busy = $state(false);
   let error = $state<string | null>(null);
   const valid = $derived(login.trim() !== "" && name.trim() !== "");
+
+  // Marcado y sin poder quitarse: es lo único que mantiene un admin en el equipo.
+  const locked = (id: string) => !!member && roleIds.includes(id) && !canDropMemberRole(team, member.id, roleIds, id);
+  const anyLocked = $derived(roles.some((r) => locked(r.id)));
 
   function toggleRole(id: string, on: boolean) {
     roleIds = on ? [...roleIds, id] : roleIds.filter((r) => r !== id);
@@ -44,7 +52,23 @@
   {/if}
   <div class="field">
     <label for="m-login">Login de Tailscale</label>
-    <input id="m-login" bind:value={login} placeholder="maria@empresa.com" autocomplete="off" />
+    <div class="cap-add">
+      <input
+        id="m-login"
+        bind:value={login}
+        readonly={!!member && !editLogin}
+        placeholder="maria@empresa.com"
+        autocomplete="off"
+      />
+      {#if member && !editLogin}
+        <button type="button" class="ghost" onclick={() => (editLogin = true)}>Cambiar login</button>
+      {/if}
+    </div>
+    {#if member && editLogin}
+      <span class="muted small">
+        Ojo: esta persona pierde el acceso hasta que se conecte con el nuevo login de Tailscale.
+      </span>
+    {/if}
   </div>
   <div class="field">
     <label for="m-name">Nombre</label>
@@ -58,10 +82,17 @@
     <legend class="label">Roles</legend>
     {#each roles as r (r.id)}
       <label class="check">
-        <input type="checkbox" checked={roleIds.includes(r.id)} onchange={(e) => toggleRole(r.id, e.currentTarget.checked)} />
+        <input
+          type="checkbox"
+          checked={roleIds.includes(r.id)}
+          disabled={locked(r.id)}
+          title={locked(r.id) ? LAST_ADMIN_HINT : undefined}
+          onchange={(e) => toggleRole(r.id, e.currentTarget.checked)}
+        />
         <span class="chip" style:color={r.color} style:border-color={r.color}>{r.name}</span>
       </label>
     {/each}
+    {#if anyLocked}<span class="muted small">{LAST_ADMIN_HINT}</span>{/if}
     {#if roles.length === 0}<span class="muted small">Aún no hay roles: créalos en la pestaña Roles.</span>{/if}
   </fieldset>
   <div class="actions">

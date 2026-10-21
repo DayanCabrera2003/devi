@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Member } from "@devi/protocol";
+  import { LAST_ADMIN_HINT, canDisableMember } from "../../lib/admins";
   import { type MemberBody, errorMessage } from "../../lib/api";
   import { useApp } from "../../lib/context";
   import MemberForm from "./MemberForm.svelte";
@@ -8,8 +9,8 @@
   let editing = $state<Member | null>(null);
   let inviting = $state(false);
   let error = $state<string | null>(null);
+  let confirmDisable = $state<string | null>(null); // id de la persona a desactivar
   const members = $derived(app.team.team.members);
-  const roles = $derived(app.team.team.roles);
 
   // Si falla, el error lo muestra MemberForm y el formulario sigue abierto.
   async function save(body: MemberBody) {
@@ -21,6 +22,7 @@
 
   async function setDisabled(m: Member, disabled: boolean) {
     error = null;
+    confirmDisable = null;
     try {
       await app.admin((a) => a.updateMember(m.id, { disabled }));
     } catch (e) {
@@ -36,7 +38,7 @@
 
 {#if editing || inviting}
   {#key editing?.id ?? "nuevo"}
-    <MemberForm member={editing} {roles} onSave={save} onCancel={close} />
+    <MemberForm member={editing} team={app.team.team} onSave={save} onCancel={close} />
   {/key}
 {:else}
   <div class="actions spread">
@@ -72,8 +74,19 @@
           </td>
           <td class="row-actions">
             <button class="ghost" onclick={() => (editing = m)}>Editar</button>
-            {#if m.id !== app.team.myId}
-              <button class="ghost" onclick={() => setDisabled(m, !m.disabled)}>{m.disabled ? "Reactivar" : "Desactivar"}</button>
+            {#if m.id === app.team.myId}
+              <!-- A uno mismo no: se quedaría fuera. -->
+            {:else if m.disabled}
+              <button class="ghost" onclick={() => setDisabled(m, false)}>Reactivar</button>
+            {:else if confirmDisable === m.id}
+              <span class="small">¿Desactivar a {m.name}?</span>
+              <button class="no" onclick={() => setDisabled(m, true)}>Sí, desactivar</button>
+              <button class="ghost" onclick={() => (confirmDisable = null)}>No</button>
+            {:else if !canDisableMember(app.team.team, m.id)}
+              <button class="ghost" disabled title={LAST_ADMIN_HINT}>Desactivar</button>
+              <span class="muted small">{LAST_ADMIN_HINT}</span>
+            {:else}
+              <button class="ghost" onclick={() => (confirmDisable = m.id)}>Desactivar</button>
             {/if}
           </td>
         </tr>

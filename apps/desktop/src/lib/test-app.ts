@@ -7,7 +7,8 @@ import type { Native } from "./native";
 import { ME, TEAM } from "./test-fixtures";
 
 // Conecta (team.refresh + subscribe con la API falsa) para que las acciones tengan API.
-export async function fakeApp(api: Record<string, unknown> = {}) {
+// native: solo los comandos Rust que use el componente bajo prueba.
+export async function fakeApp(api: Record<string, unknown> = {}, native: Partial<Record<keyof Native, unknown>> = {}) {
   const fullApi = {
     me: vi.fn(async () => ME),
     team: vi.fn(async () => TEAM),
@@ -17,12 +18,12 @@ export async function fakeApp(api: Record<string, unknown> = {}) {
     ...api,
   };
   const app = new DeviApp({
-    native: {} as Native,
+    native: native as unknown as Native,
     makeApi: () => fullApi as unknown as DeviApi,
     notify: vi.fn(),
     emitMascot: vi.fn(),
   });
   app.config = { serverUrl: "https://pc.t.ts.net", app: { notifications: true, setupDone: true } };
   await app.connect();
-  return { app, api: fullApi, context: appContext(app) };
+  return { app, api: fullApi, native, context: appContext(app) };
 }
