@@ -17,11 +17,51 @@ pub const SERVER_PORT: u16 = 4747;
 #[derive(Default)]
 pub struct ServerState(Mutex<ServerInner>);
 
-#[derive(Default)]
-struct ServerInner {
-    child: Option<CommandChild>,
+/// Genérico solo para poder probar la lógica sin un proceso real (`C = CommandChild` en la app).
+struct ServerInner<C = CommandChild> {
+    child: Option<C>,
+    /// Sube con cada arranque. La tarea que lee los eventos de un proceso lleva su generación:
+    /// si el servidor se paró y se volvió a arrancar, los eventos del viejo ya no tocan al nuevo.
+    generation: u64,
     log: VecDeque<String>,
     exit_code: Option<i32>,
+}
+
+impl<C> Default for ServerInner<C> {
+    fn default() -> Self {
+        Self { child: None, generation: 0, log: VecDeque::new(), exit_code: None }
+    }
+}
+
+impl<C> ServerInner<C> {
+    /// Registra un proceso recién arrancado y devuelve su generación.
+    fn attach(&mut self, child: C) -> u64 {
+        self.generation += 1;
+        self.child = Some(child);
+        self.exit_code = None;
+        self.log.clear();
+        self.generation
+    }
+
+    /// Suelta el proceso actual (para matarlo). Su generación sigue siendo la actual hasta el
+    /// próximo `attach`, así que su aviso de fin aún se registra.
+    fn detach(&mut self) -> Option<C> {
+        self.child.take()
+    }
+
+    fn is_current(&self, generation: u64) -> bool {
+        generation == self.generation
+    }
+
+    /// Fin del proceso de esa generación; si ya hay otro más nuevo, se ignora.
+    fn on_terminated(&mut self, generation: u64, code: Option<i32>) {
+        if !self.is_current(generation) {
+            return;
+        }
+        self.child = None;
+        self.exit_code = code;
+        push_log(&mut self.log, format!("el servidor terminó (código {code:?})"));
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -133,25 +173,23 @@ pub fn start_server(app: AppHandle, state: State<'_, ServerState>, admin_login: 
         .args(&args)
         .spawn()
         .map_err(|e| format!("no se pudo arrancar el servidor: {e}"))?;
-    inner.child = Some(child);
-    inner.exit_code = None;
-    inner.log.clear();
+    let generation = inner.attach(child);
 
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
         while let Some(event) = rx.recv().await {
             let state = handle.state::<ServerState>();
             let Ok(mut inner) = state.0.lock() else { break };
+            // Proceso de un arranque anterior: su salida no se mezcla con la del actual.
+            if !inner.is_current(generation) {
+                continue;
+            }
             match event {
                 CommandEvent::Stdout(bytes) | CommandEvent::Stderr(bytes) => {
                     push_log(&mut inner.log, String::from_utf8_lossy(&bytes).trim_end().to_string())
                 }
                 CommandEvent::Error(e) => push_log(&mut inner.log, format!("error: {e}")),
-                CommandEvent::Terminated(p) => {
-                    inner.child = None;
-                    inner.exit_code = p.code;
-                    push_log(&mut inner.log, format!("el servidor terminó (código {:?})", p.code));
-                }
+                CommandEvent::Terminated(p) => inner.on_terminated(generation, p.code),
                 _ => {}
             }
         }
@@ -162,7 +200,7 @@ pub fn start_server(app: AppHandle, state: State<'_, ServerState>, admin_login: 
 #[tauri::command]
 pub fn stop_server(state: State<'_, ServerState>) -> Result<ServerStatus, String> {
     let mut inner = state.0.lock().map_err(|_| "estado del servidor bloqueado")?;
-    if let Some(child) = inner.child.take() {
+    if let Some(child) = inner.detach() {
         child.kill().map_err(|e| format!("no se pudo detener el servidor: {e}"))?;
         push_log(&mut inner.log, "servidor detenido desde la app".into());
     }
@@ -179,7 +217,7 @@ pub fn server_status(state: State<'_, ServerState>) -> Result<ServerStatus, Stri
 pub fn kill_server(app: &AppHandle) {
     if let Some(state) = app.try_state::<ServerState>() {
         if let Ok(mut inner) = state.0.lock() {
-            if let Some(child) = inner.child.take() {
+            if let Some(child) = inner.detach() {
                 let _ = child.kill();
             }
         }
@@ -232,5 +270,22 @@ mod tests {
         }
         assert_eq!(log.len(), LOG_LINES);
         assert_eq!(log.front().unwrap(), "l5");
+    }
+
+    #[test]
+    fn un_terminated_viejo_no_borra_el_servidor_nuevo() {
+        // Parar y arrancar enseguida: el aviso de fin del primer proceso llega tarde.
+        let mut inner: ServerInner<u32> = ServerInner::default();
+        let g1 = inner.attach(1);
+        inner.detach();
+        let g2 = inner.attach(2);
+        assert_ne!(g1, g2);
+        assert!(!inner.is_current(g1));
+        inner.on_terminated(g1, Some(0));
+        assert_eq!(inner.child, Some(2));
+        assert_eq!(inner.exit_code, None);
+        inner.on_terminated(g2, Some(1));
+        assert_eq!(inner.child, None);
+        assert_eq!(inner.exit_code, Some(1));
     }
 }
