@@ -46,6 +46,28 @@ describe("suscripciones", () => {
     expect(req.headers.get("X-Devi-Dev-User")).toBe("maria@dev");
   });
 
+  test("subscribeUser entrega audit.alert con una entrada válida y descarta las mal formadas", async () => {
+    const entry = {
+      id: 7, at: 1, actorMemberId: "m1", actorLogin: "dayan@x", action: "role.updated", targetType: "role", targetId: "r1", details: {},
+    };
+    const srv = serve((req) =>
+      sseResponse(
+        [
+          { event: "audit.alert", data: { type: "audit.alert", entry } },
+          { event: "audit.alert", data: { type: "audit.alert", entry: { ...entry, id: "7" } } },
+          { event: "audit.alert", data: { type: "audit.alert", entry: { ...entry, action: "inventada" } } },
+        ],
+        false,
+        req.signal,
+      ),
+    );
+    const events: UserEvent[] = [];
+    const stop = createClient({ baseUrl: srv.url }).subscribeUser((e) => events.push(e));
+    await Bun.sleep(100);
+    stop();
+    expect(events).toEqual([{ type: "audit.alert", entry }]);
+  });
+
   test("subscribeSession solo entrega frames 'deliver'", async () => {
     const delivery = { kind: "draft_authorized", content: "salió", meta: { draft_id: "d1" } };
     const srv = serve((req) =>

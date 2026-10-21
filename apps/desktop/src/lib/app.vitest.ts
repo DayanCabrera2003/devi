@@ -444,7 +444,7 @@ describe("DeviApp", () => {
 
   describe("alertas de seguridad (audit.alert)", () => {
     const entry = {
-      id: "a1", at: 1, actorMemberId: "m1", actorLogin: "dayan@x", action: "member.updated", targetType: "member", targetId: "m2", details: {},
+      id: 1, at: 1, actorMemberId: "m1", actorLogin: "dayan@x", action: "member.updated", targetType: "member", targetId: "m2", details: {},
     };
     const alert = (e: unknown = entry) => ({ type: "audit.alert", entry: e }) as unknown as UserEvent;
 
@@ -456,7 +456,7 @@ describe("DeviApp", () => {
       t.event(alert());
       expect(t.notify).toHaveBeenCalledOnce();
       expect(t.notify).toHaveBeenCalledWith(expect.objectContaining({ title: "Devi · Cambio de seguridad: Persona modificada" }));
-      expect(t.app.auditAlerts.map((e) => e.id)).toEqual(["a1"]);
+      expect(t.app.auditAlerts.map((e) => e.id)).toEqual([1]);
       expect(t.app.inbox.cards).toHaveLength(0);
       t.app.clearAuditAlerts();
       expect(t.app.auditAlerts).toEqual([]);
@@ -479,10 +479,10 @@ describe("DeviApp", () => {
       expect(t.app.auditAlerts).toHaveLength(0);
     });
 
-    test("un audit.alert mal formado o un evento desconocido se ignoran sin romper nada", async () => {
+    // Los audit.alert mal formados ya los descarta @devi/client al validar con UserEventSchema.
+    test("un evento desconocido se ignora sin romper nada", async () => {
       const t = setup();
       await t.app.boot();
-      expect(() => t.event(alert({ id: 3 }))).not.toThrow();
       expect(() => t.event({ type: "algo.nuevo", x: 1 } as unknown as UserEvent)).not.toThrow();
       expect(t.notify).not.toHaveBeenCalled();
       expect(t.app.auditAlerts).toHaveLength(0);
