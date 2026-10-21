@@ -137,6 +137,7 @@ export class RequestsManager {
       this.timers.cancel(requestKey(r.id));
       const view = this.requestView(r);
       this.push(r.fromMemberId, { type: "response.incoming", request: view });
+      this.push(r.fromMemberId, { type: "request.updated", request: view });
       this.push(r.toMemberId, { type: "request.updated", request: view });
       this.deliverToAuthor(d, {
         kind: "draft_authorized",
@@ -273,8 +274,7 @@ export class RequestsManager {
     this.schedule(r);
     const view = this.requestView(r);
     this.push(r.toMemberId, { type: "request.incoming", request: view });
-    this.push(r.fromMemberId, { type: "request.updated", request: view });
-    return view;
+    return this.pushBoth(r, "request.updated");
   }
 
   ignore(access: Access, id: string): DeviRequest {
@@ -357,8 +357,7 @@ export class RequestsManager {
     this.timers.cancel(requestKey(r.id));
     const view = this.requestView(r);
     this.push(r.fromMemberId, { type: "response.incoming", request: view });
-    this.push(r.toMemberId, { type: "request.updated", request: view });
-    return view;
+    return this.pushBoth(r, "request.updated");
   }
 
   private close(r: RequestRecord): DeviRequest {

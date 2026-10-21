@@ -293,3 +293,68 @@ describe("tope de cuerpo JSON", () => {
     expect(res.status).toBe(413);
   });
 });
+
+describe("request.updated a las dos partes en cada transición", () => {
+  const updates = (memberId: string, id: string) =>
+    f.userEvents(memberId).filter((e) => e.type === "request.updated" && e.request.id === id).map((e) => e.request.status);
+
+  test("forward, accept, reject, answered, resend, ignore, closed", async () => {
+    f = await setupFlow();
+    // forward + accept
+    const a = await f.pendingRequest("a");
+    await post("maria@dev", `/api/v1/requests/${a.id}/forward`, { sessionId: f.mariaApi.id });
+    for (const who of ["m-dayan", "m-maria"]) expect(updates(who, a.id)).toContain("forwarded");
+    const b = await f.pendingRequest("b");
+    await post("maria@dev", `/api/v1/requests/${b.id}/accept`, {});
+    for (const who of ["m-dayan", "m-maria"]) expect(updates(who, b.id)).toContain("accepted");
+    await post("dayan@dev", `/api/v1/requests/${b.id}/response/accept`);
+    for (const who of ["m-dayan", "m-maria"]) expect(updates(who, b.id)).toContain("closed");
+    // reject
+    const c = await f.pendingRequest("c");
+    await post("maria@dev", `/api/v1/requests/${c.id}/reject`, { reason: "no" });
+    for (const who of ["m-dayan", "m-maria"]) expect(updates(who, c.id)).toContain("rejected");
+    // answered (por borrador de respuesta)
+    const d = (await f.responseDraft(a.id)).data;
+    await post("maria@dev", `/api/v1/drafts/${d.id}/authorize`);
+    for (const who of ["m-dayan", "m-maria"]) expect(updates(who, a.id)).toContain("answered");
+    // timed_out → resend → ignore
+    const e = await f.pendingRequest("e");
+    f.clock.advance(DEFAULT_SETTINGS.requestTimeoutMs);
+    await post("dayan@dev", `/api/v1/requests/${e.id}/resend`);
+    for (const who of ["m-dayan", "m-maria"]) expect(updates(who, e.id).filter((s) => s === "pending").length).toBeGreaterThan(0);
+    f.clock.advance(DEFAULT_SETTINGS.requestTimeoutMs);
+    await post("dayan@dev", `/api/v1/requests/${e.id}/ignore`);
+    for (const who of ["m-dayan", "m-maria"]) expect(updates(who, e.id)).toContain("closed");
+  });
+});
+
+describe("descarga de archivos de borradores", () => {
+  test("el autor de un borrador awaiting o autorizado puede descargar; el destinatario solo tras autorizar", async () => {
+    f = await setupFlow();
+    const d = (await f.requestDraft("x", [txt("plan.md", "# plan\n")])).data;
+    const url = `/api/v1/files/${d.files[0].id}`;
+    const own = await f.call("dayan@dev", "GET", url);
+    expect(own.status).toBe(200);
+    expect(own.data).toBe("# plan\n");
+    expect((await f.call("maria@dev", "GET", url)).status).toBe(403);
+    await post("dayan@dev", `/api/v1/drafts/${d.id}/authorize`);
+    expect((await f.call("dayan@dev", "GET", url)).status).toBe(200);
+    expect((await f.call("maria@dev", "GET", url)).status).toBe(200);
+  });
+});
+
+describe("repetición al conectar la app", () => {
+  test("borradores awaiting y tarjetas abiertas del mismo usuario", async () => {
+    f = await setupFlow();
+    const r = await f.pendingRequest("vencerá");
+    f.clock.advance(DEFAULT_SETTINGS.requestTimeoutMs); // timed_out: tarjeta abierta de Dayan
+    const draft = (await f.requestDraft("otro")).data; // borrador awaiting de Dayan
+    const before = f.userEvents("m-dayan").length;
+    await f.openStream("dayan@dev", "/api/v1/events/user");
+    const replay = f.userEvents("m-dayan").slice(before).filter((e) => e.type !== "team.updated");
+    expect(replay.map((e) => [e.type, e.draft?.id ?? e.request?.id])).toEqual([
+      ["draft.awaiting", draft.id],
+      ["request.timed_out", r.id],
+    ]);
+  });
+});
