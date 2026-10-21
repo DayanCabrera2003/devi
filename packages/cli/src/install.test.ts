@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { rename as realRename } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { claudeSteps, installBinary, isCompiledBinary, writeMarketplace } from "./install";
@@ -39,5 +40,56 @@ describe("install-integration", () => {
       ["plugin", "marketplace", "update", "devi-local"],
       ["plugin", "update", "devi@devi-local", "--scope", "user"],
     ]);
+  });
+});
+
+describe("installBinary en Windows con el binario en uso", () => {
+  const busy = () => Object.assign(new Error("busy"), { code: "EBUSY" });
+  function setup() {
+    const d = mkdtempSync(join(tmpdir(), "devi-reinstall-"));
+    writeFileSync(join(d, "nuevo"), "nuevo");
+    writeFileSync(join(d, "devi.exe"), "viejo");
+    writeFileSync(join(d, "devi.exe.old-1"), "mas viejo");
+    return d;
+  }
+
+  test("si renombrar sobre el binario falla con EBUSY, aparta el viejo y coloca el nuevo", async () => {
+    const d = setup();
+    const to = join(d, "devi.exe");
+    let first = true;
+    const rename = async (a: string, b: string) => {
+      if (first) {
+        first = false;
+        throw busy();
+      }
+      return realRename(a, b);
+    };
+    expect(await installBinary(join(d, "nuevo"), to, "win32", { rename })).toBe("copied");
+    expect(readFileSync(to, "utf8")).toBe("nuevo");
+    const files = readdirSync(d);
+    expect(files.some((f) => f.startsWith("devi.exe.old-") && f !== "devi.exe.old-1")).toBe(true);
+    expect(files).not.toContain("devi.exe.old-1");
+    expect(files.some((f) => f.includes(".tmp-"))).toBe(false);
+  });
+
+  test("si ni así se puede, borra el temporal y explica qué hacer", async () => {
+    const d = setup();
+    const to = join(d, "devi.exe");
+    const rename = async () => {
+      throw Object.assign(new Error("perm"), { code: "EPERM" });
+    };
+    await expect(installBinary(join(d, "nuevo"), to, "win32", { rename })).rejects.toThrow(
+      "Cierra tus sesiones de Claude Code con Devi y vuelve a intentarlo",
+    );
+    expect(readdirSync(d).some((f) => f.includes(".tmp-"))).toBe(false);
+    expect(existsSync(to)).toBe(true);
+  });
+
+  test("otros errores se propagan tal cual", async () => {
+    const d = setup();
+    const rename = async () => {
+      throw Object.assign(new Error("nope"), { code: "ENOENT" });
+    };
+    await expect(installBinary(join(d, "nuevo"), join(d, "devi.exe"), "win32", { rename })).rejects.toThrow("nope");
   });
 });

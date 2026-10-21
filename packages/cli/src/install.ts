@@ -1,5 +1,5 @@
-import { chmod, copyFile, mkdir, rename, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { chmod, copyFile, mkdir, readdir, rename as fsRename, rm, writeFile } from "node:fs/promises";
+import { basename, dirname, join, resolve } from "node:path";
 import { MARKETPLACE_NAME, PLUGIN_ID } from "./paths";
 import { pluginFiles, renderJson } from "./plugin";
 
@@ -9,14 +9,53 @@ export function isCompiledBinary(argv1: string | undefined): boolean {
 }
 
 // Copia el binario a la ruta estable. Escribe primero a un temporal y lo renombra.
-export async function installBinary(from: string, to: string, platform: NodeJS.Platform): Promise<"copied" | "same"> {
+// En Windows no se puede reemplazar un .exe en uso (EPERM/EBUSY), pero sí renombrarlo: se aparta
+// el viejo a `<nombre>.old-<timestamp>` y se coloca el nuevo.
+export async function installBinary(
+  from: string,
+  to: string,
+  platform: NodeJS.Platform,
+  fs: { rename?: (a: string, b: string) => Promise<void> } = {},
+): Promise<"copied" | "same"> {
+  const rename = fs.rename ?? fsRename;
   if (resolve(from) === resolve(to)) return "same";
   await mkdir(dirname(to), { recursive: true });
   const tmp = `${to}.tmp-${process.pid}`;
   await copyFile(from, tmp);
   if (platform !== "win32") await chmod(tmp, 0o755);
-  await rename(tmp, to);
+  try {
+    await rename(tmp, to);
+    return "copied";
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (platform !== "win32" || (code !== "EPERM" && code !== "EBUSY")) {
+      await rm(tmp, { force: true });
+      throw e;
+    }
+  }
+  const aside = `${to}.old-${Date.now()}`;
+  try {
+    await rename(to, aside);
+    await rename(tmp, to);
+  } catch {
+    await rm(tmp, { force: true });
+    throw new Error("Cierra tus sesiones de Claude Code con Devi y vuelve a intentarlo");
+  }
+  await removeOldBinaries(to, aside);
   return "copied";
+}
+
+// Mejor esfuerzo: borra `<nombre>.old-*` anteriores (los que sigan en uso fallan y se ignoran).
+async function removeOldBinaries(to: string, keep: string): Promise<void> {
+  try {
+    const prefix = `${basename(to)}.old-`;
+    for (const f of await readdir(dirname(to))) {
+      const full = join(dirname(to), f);
+      if (f.startsWith(prefix) && full !== keep) await rm(full, { force: true }).catch(() => {});
+    }
+  } catch {
+    // no pasa nada
+  }
 }
 
 export async function writeMarketplace(dir: string, bin: string, version: string): Promise<string[]> {
