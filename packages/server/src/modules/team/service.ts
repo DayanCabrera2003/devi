@@ -180,7 +180,9 @@ export class TeamManager implements TeamService {
 
   // Con --admin: crea (o completa) el rol "Admin Devi" con todos los permisos y se lo da a ese login.
   // Después exige que haya al menos un admin activo; si no, el servidor no arranca.
-  ensureAdmin(adminLogin: string | undefined): void {
+  // Devuelve qué hizo (el módulo lo registra en el log); nunca falla si ya hay un admin.
+  ensureAdmin(adminLogin: string | undefined): "created" | "granted" | "already_admin" | "admins_exist" {
+    let outcome: "created" | "granted" | "already_admin" | "admins_exist" = "admins_exist";
     if (adminLogin) {
       this.db.transaction(() => {
         let role = this.store.roleByName(ADMIN_ROLE_NAME);
@@ -192,6 +194,8 @@ export class TeamManager implements TeamService {
         }
         this.store.setRolePerms(role.id, [...PERMS]);
         const existing = this.store.memberByLogin(adminLogin);
+        const wasAdmin = !!existing && !existing.disabled && existing.roleIds.includes(role.id);
+        outcome = !existing ? "created" : wasAdmin ? "already_admin" : "granted";
         if (!existing) {
           const id = crypto.randomUUID();
           this.store.insertMember({
@@ -208,6 +212,7 @@ export class TeamManager implements TeamService {
     if (this.store.countActiveAdmins() === 0) {
       throw new Error("No hay ningún admin de Devi. Arranca el servidor con --admin <tu login de Tailscale>");
     }
+    return outcome;
   }
 
   // ---- reglas ---------------------------------------------------------------

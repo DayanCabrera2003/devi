@@ -32,6 +32,10 @@ export const teamModule: DeviModule = {
       const n = team.importLegacy(await readLegacyTeam(ctx.config.importTeam));
       ctx.log(`importadas ${n} personas de ${ctx.config.importTeam}. Su login es el id del team.json: cámbialo por su login de Tailscale en Admin → Personas`);
     }
-    team.ensureAdmin(ctx.config.adminLogin);
+    const outcome = team.ensureAdmin(ctx.config.adminLogin);
+    if (ctx.config.adminLogin) {
+      const what = { created: "creado como admin", granted: "ahora es admin", already_admin: "ya era admin (no se cambia nada)", admins_exist: "ya hay admins" }[outcome];
+      ctx.log(`--admin ${ctx.config.adminLogin}: ${what}`);
+    }
   },
 };

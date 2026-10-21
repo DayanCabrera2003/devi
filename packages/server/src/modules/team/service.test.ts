@@ -53,6 +53,16 @@ describe("bootstrap del admin", () => {
     expect(team.view(() => false).members).toHaveLength(1);
   });
 
+  test("--admin nunca falla al reiniciar y dice qué pasó (la app lo pasa en cada arranque)", () => {
+    const { team } = setup();
+    expect(team.ensureAdmin("dayan@x")).toBe("created");
+    expect(team.ensureAdmin("dayan@x")).toBe("already_admin");
+    expect(team.ensureAdmin(undefined)).toBe("admins_exist");
+    expect(team.ensureAdmin("maria@x")).toBe("created"); // otra persona: se añade, sin romper nada
+    expect(team.ensureAdmin("maria@x")).toBe("already_admin");
+    expect(team.view(() => false).members).toHaveLength(2);
+  });
+
   test("--admin sobre una persona existente le añade el rol sin quitarle los suyos", () => {
     const { team, back, maria } = withAdmin();
     team.ensureAdmin("maria@x");
