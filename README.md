@@ -21,9 +21,9 @@ La respuesta vuelve como notificación a quien preguntó, que puede **aceptarla*
 ```
 
 - **Servidor de Devi** (`packages/server/`): la única fuente de verdad. Módulos `team`, `settings`, `sessions`, `files` y `requests` sobre SQLite (ver `docs/superpowers/specs/2026-10-21-devi-produccion-design.md`).
-- **MCP de Devi** (`src/mcp/devi-channel.ts`): uno por sesión de Claude Code. Ofrece `list_teammates`, `send_request` y `respond_to_request`, y es un [**Claude Code channel**](https://code.claude.com/docs/en/channels-reference): empuja las solicitudes y respuestas dentro de la sesión abierta.
+- **MCP de Devi** (`devi mcp`, en `packages/cli/`): uno por sesión de Claude Code. Ofrece `list_teammates`, `send_request` y `respond_to_request`, y es un [**Claude Code channel**](https://code.claude.com/docs/en/channels-reference): empuja las solicitudes y respuestas dentro de la sesión abierta.
 - **Ventana de Devi** (`web/`): HTML, CSS y JS sin framework. Muestra las tarjetas y lanza notificaciones del sistema.
-- **Hooks** (`src/hooks/status.ts`): marcan cada sesión como *trabajando* o *libre*.
+- **Hooks** (`devi hook`): marcan cada sesión como *trabajando* o *libre*.
 
 ## Requisitos
 
@@ -31,26 +31,42 @@ La respuesta vuelve como notificación a quien preguntó, que puede **aceptarla*
 - [Claude Code](https://code.claude.com) con **Channels** permitidos. Funcionan por defecto en Pro/Max y con API key de Console; en organizaciones Team o Enterprise, un Owner debe activar `channelsEnabled`.
 - Chromium o Firefox para la ventana de Devi.
 
-## Probarlo (servidor nuevo)
+## Probarlo (modo dev, una sola máquina)
 
 ```bash
 bun install
-bun run server:dev -- --admin dayan@dev --import team.json   # la primera vez: crea el admin e importa el equipo
-bun run server:dev                                           # las siguientes
+bun run devi server --dev --admin dayan@dev --data-dir /tmp/devi-dev   # servidor en 127.0.0.1:4747
 ```
 
-En modo dev la identidad va en la cabecera `X-Devi-Dev-User` (o en `?devUser=` en los SSE) y todas las peticiones llevan `X-Devi-Version: 1.0.0`:
+En modo dev la identidad va en la cabecera `X-Devi-Dev-User` y la CLI lee `~/.config/devi/config.json` (normalmente lo escribe la app de escritorio):
 
 ```bash
-curl -s -H "X-Devi-Version: 1.0.0" -H "X-Devi-Dev-User: dayan@dev" http://127.0.0.1:4747/api/v1/me
+mkdir -p ~/.config/devi
+echo '{ "serverUrl": "http://127.0.0.1:4747", "devUser": "dayan@dev" }' > ~/.config/devi/config.json
 ```
 
-El MCP (`src/mcp/`) y la ventana (`web/`) del proof of concept se están migrando: la Fase 2 los sustituye por `devi mcp` y la Fase 3, por la app de escritorio.
+Compila el binario e instala el plugin de Claude Code (binario estable y marketplace local `devi-local`):
+
+```bash
+bun scripts/build-cli.ts --current
+./dist/bin/devi-bun-linux-x64 install-integration   # el nombre depende de la plataforma
+```
+
+Lanza una sesión con el canal de Devi y comprueba el entorno:
+
+```bash
+~/.local/share/devi/bin/devi claude --session frontend
+~/.local/share/devi/bin/devi doctor
+```
+
+La primera vez, Claude Code pide confirmar el canal en modo desarrollo. El estado trabajando/libre solo se empareja en sesiones lanzadas con `devi claude`.
+
+La ventana de `web/` del proof of concept sigue ahí hasta que la Fase 3 la sustituya por la app de escritorio.
 
 ## Tests
 
 ```bash
-bun test packages/          # unitarios por módulo + recorrido completo por HTTP y SSE
+bun run test        # unitarios de todos los paquetes + smoke de integración (devi mcp contra un servidor dev)
 bun run typecheck
 ```
 
