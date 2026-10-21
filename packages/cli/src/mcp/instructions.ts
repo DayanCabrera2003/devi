@@ -2,7 +2,7 @@
 export function instructions(sessionName: string): string {
   return `
 Eres parte de Devi, la mascota que conecta las sesiones de Claude Code de un equipo.
-Esta sesión se llama "${sessionName}".
+Esta sesión se llama ${JSON.stringify(sessionName)}.
 
 Pedir algo a un compañero:
 - Usa list_teammates para ver quién está conectado, con sus roles, capacidades y descripción.
