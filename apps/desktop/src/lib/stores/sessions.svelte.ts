@@ -7,6 +7,14 @@ export function sortSessions(list: Session[], preferredId?: string): Session[] {
   );
 }
 
+// Cómo le llega a esa sesión lo que se le envía: con canal, al momento; sin canal, cuando su usuario escribe
+// (el hook de Claude Code recoge la bandeja).
+export function deliveryBadge(s: Pick<Session, "channel">): { label: string; title: string } {
+  return s.channel
+    ? { label: "en tiempo real", title: "Llega a la sesión al momento" }
+    : { label: "al escribir", title: "Llegará cuando escribas algo en esa sesión" };
+}
+
 // Sesiones vivas de Claude Code de la persona de esta app (selector "Enviar a sesión").
 export class SessionsStore {
   list = $state<Session[]>([]);

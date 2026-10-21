@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Session } from "@devi/protocol";
   import { errorMessage } from "../lib/api";
-  import { sortSessions } from "../lib/stores/sessions.svelte";
+  import { deliveryBadge, sortSessions } from "../lib/stores/sessions.svelte";
 
   type Props = {
     sessions: Session[];
@@ -43,9 +43,11 @@
       <div class="muted">No tienes sesiones de Claude Code abiertas con Devi.</div>
     {:else}
       {#each sorted as s (s.id)}
+        {@const badge = deliveryBadge(s)}
         <button class="session" class:preferred={s.id === preferredId} disabled={busy} onclick={() => pick(s)}>
           <span class="dot" class:busy={s.status === "working"} class:on={s.status !== "working"}></span>
           <span class="mono">{s.name}</span>
+          <span class="badge" class:live={s.channel} title={badge.title}>{badge.label}</span>
           <span class="state">{s.status === "working" ? "trabajando" : "libre"}</span>
         </button>
       {/each}
@@ -54,3 +56,18 @@
   <div class="actions"><button onclick={onBack}>Volver</button></div>
   {#if pickError ?? error}<div class="error">{pickError ?? error}</div>{/if}
 </div>
+
+<style>
+  .badge {
+    font-size: 11px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--muted);
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .badge.live {
+    border-color: var(--ok);
+    color: var(--ok);
+  }
+</style>

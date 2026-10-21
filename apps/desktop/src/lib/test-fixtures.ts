@@ -54,6 +54,6 @@ export function draft(over: Record<string, unknown> = {}): Draft {
 }
 
 export const SESSIONS: Session[] = [
-  { id: "s1", memberId: "m1", name: "frontend", cwd: "/w/front", status: "idle", lastSeen: 1 },
-  { id: "s2", memberId: "m1", name: "api", cwd: "/w/api", status: "working", lastSeen: 1 },
+  { id: "s1", memberId: "m1", name: "frontend", cwd: "/w/front", status: "idle", lastSeen: 1, channel: true },
+  { id: "s2", memberId: "m1", name: "api", cwd: "/w/api", status: "working", lastSeen: 1, channel: false },
 ];
