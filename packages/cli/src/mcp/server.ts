@@ -7,6 +7,7 @@ import { loadClientConfig } from "../config";
 import { debugPairing, pairing } from "../pairing";
 import type { Sys } from "../paths";
 import { CLI_VERSION } from "../version";
+import { approvalFor } from "./approval";
 import { instructions } from "./instructions";
 import { relayDelivery } from "./relay";
 import { startSessionLoop } from "./session";
@@ -41,8 +42,14 @@ export async function runMcp(sys: Sys): Promise<void> {
     { capabilities: { experimental: { "claude/channel": {} }, tools: {} }, instructions: instructions(sessionName) },
   );
   mcp.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
+  // Dónde aprueba el humano los envíos: se decide con el clientInfo del initialize (o DEVI_APPROVAL).
+  const approval = () => approvalFor(mcp.getClientVersion(), sys.env.DEVI_APPROVAL);
+  mcp.oninitialized = () => {
+    const c = mcp.getClientVersion();
+    log(`cliente MCP: ${c ? `${c.name} ${c.version}` : "desconocido"}; los envíos se aprueban en ${approval() === "chat" ? "el chat" : "la app de Devi"}`);
+  };
   mcp.setRequestHandler(CallToolRequestSchema, async (req) =>
-    callTool(req.params.name, req.params.arguments ?? {}, { client, configError, cwd, sessionId: () => sessionId }),
+    callTool(req.params.name, req.params.arguments ?? {}, { client, configError, cwd, sessionId: () => sessionId, approval }),
   );
 
   mcp.onclose = () => process.exit(0); // sin servidor configurado no hay nada que cerrar

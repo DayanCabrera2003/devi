@@ -1,9 +1,24 @@
 import type { DeviClient } from "@devi/client";
-import { SECRETS_FLAG, scanForInjection, scanForSecrets } from "@devi/protocol";
+import { type Approval, type CreateDraftResult, SECRETS_FLAG, scanForInjection, scanForSecrets } from "@devi/protocol";
 import { readLocalFiles } from "../files";
 import { readableError } from "./errors";
 
 export type ToolResult = { content: { type: "text"; text: string }[]; isError: boolean };
+
+// Claude Code muestra el aviso de permisos de estas herramientas en CADA llamada, en cualquier modo de
+// permisos y sin "no volver a preguntar": ese aviso es la aprobación del humano (ver approval.ts).
+const ASK_EVERY_TIME = { "anthropic/requiresUserInteraction": true } as const;
+
+const FILES_ARG = {
+  type: "array",
+  items: { type: "string" },
+  description: "Opcional: rutas de los archivos de texto que se adjuntan (relativas a la carpeta de la sesión), máx. 5 de 1 MB",
+};
+const ALLOW_SECRETS_ARG = {
+  type: "boolean",
+  description:
+    "Solo si el usuario confirmó expresamente enviar algo que parece un secreto (tras el aviso de Devi). Saldrá marcado con un aviso.",
+};
 
 export const TOOLS = [
   {
@@ -15,51 +30,42 @@ export const TOOLS = [
   {
     name: "send_request",
     description:
-      "Prepara una solicitud para un compañero. Crea un BORRADOR que el usuario debe autorizar en la app de Devi; no se envía hasta entonces. Úsalo solo después de que el usuario confirme el destinatario. La respuesta llegará más tarde como evento kind=\"response\".",
+      "Envía una solicitud a un compañero de Devi. Claude Code te pide aprobarla antes: revisa a quién va (to_name), el mensaje y los archivos; " +
+      "al aprobar, se envía. Si la aprobación en el chat no está disponible, queda como borrador para autorizar en la app de Devi. " +
+      "Úsalo solo después de que el usuario confirme el destinatario. La respuesta llegará más tarde como evento kind=\"response\".",
     inputSchema: {
       type: "object" as const,
       properties: {
         to: { type: "string", description: "id del compañero (de list_teammates)" },
+        to_name: { type: "string", description: "Nombre del compañero tal como sale en list_teammates; Devi comprueba que es el de 'to'" },
         message: {
           type: "string",
-          description: "Qué necesita el usuario, con el contexto suficiente para entenderlo sin ver esta sesión",
+          description: "Lo que se le envía: qué necesita el usuario, con el contexto suficiente para entenderlo sin ver esta sesión",
         },
-        files: {
-          type: "array",
-          items: { type: "string" },
-          description: "Opcional: rutas de archivos de texto a adjuntar (relativas a la carpeta de la sesión), máx. 5 de 1 MB",
-        },
-        allow_secrets: {
-          type: "boolean",
-          description:
-            "Solo si el usuario confirmó expresamente enviar algo que parece un secreto (tras el aviso de Devi). El borrador lo mostrará con un aviso.",
-        },
+        files: FILES_ARG,
+        allow_secrets: ALLOW_SECRETS_ARG,
       },
       required: ["to", "message"],
     },
+    _meta: ASK_EVERY_TIME,
   },
   {
     name: "respond_to_request",
     description:
-      "Prepara la respuesta a una solicitud de un compañero (evento kind=\"request\") con lo que el usuario decidió. Crea un BORRADOR que el usuario debe autorizar en la app de Devi. Úsalo solo después de que el usuario lo diga.",
+      "Envía la respuesta a una solicitud de un compañero (evento kind=\"request\") con lo que el usuario decidió. Claude Code te pide " +
+      "aprobarla antes: revisa el mensaje y los archivos; al aprobar, se envía. Si la aprobación en el chat no está disponible, queda como " +
+      "borrador para autorizar en la app de Devi. Úsalo solo después de que el usuario lo diga.",
     inputSchema: {
       type: "object" as const,
       properties: {
         request_id: { type: "string", description: "request_id del evento de Devi" },
-        message: { type: "string", description: "Lo que el usuario va a hacer o su respuesta, en sus palabras" },
-        files: {
-          type: "array",
-          items: { type: "string" },
-          description: "Opcional: rutas de archivos de texto a adjuntar (relativas a la carpeta de la sesión), máx. 5 de 1 MB",
-        },
-        allow_secrets: {
-          type: "boolean",
-          description:
-            "Solo si el usuario confirmó expresamente enviar algo que parece un secreto (tras el aviso de Devi). El borrador lo mostrará con un aviso.",
-        },
+        message: { type: "string", description: "Lo que se le responde: lo que el usuario va a hacer o su respuesta, en sus palabras" },
+        files: FILES_ARG,
+        allow_secrets: ALLOW_SECRETS_ARG,
       },
       required: ["request_id", "message"],
     },
+    _meta: ASK_EVERY_TIME,
   },
 ];
 
@@ -68,6 +74,7 @@ export type ToolDeps = {
   configError: string | null;
   cwd: string;
   sessionId: () => string | null;
+  approval: () => Approval; // dónde aprueba el humano (según el cliente MCP; ver approval.ts)
 };
 
 const ok = (text: string): ToolResult => ({ content: [{ type: "text", text }], isError: false });
@@ -114,19 +121,36 @@ export async function callTool(name: string, args: Record<string, unknown>, deps
         if (!files.ok) return fail(files.error);
         const secrets = secretsIn(message, files.files);
         if (secrets.length > 0 && args.allow_secrets !== true) return fail(secretsRefusal(secrets));
+        if (name === "send_request" && typeof args.to_name === "string" && args.to_name.trim()) {
+          const mismatch = await nameMismatch(client, target, args.to_name);
+          if (mismatch) return fail(mismatch);
+        }
         const outgoing = secrets.length > 0 ? `${SECRETS_FLAG}\n\n${message}` : message;
+        const injection = injectionWarnings(message, files.files);
+        // Si lo que sale parece una inyección, no se envía directo aunque se aprobara en el chat: queda en la app.
+        const asked = deps.approval();
+        const approval: Approval = injection ? "app" : asked;
         const draft =
           name === "send_request"
-            ? await client.createDraft({ kind: "request", sessionId, to: target, message: outgoing }, files.files)
-            : await client.createDraft({ kind: "response", sessionId, requestId: target, message: outgoing }, files.files);
+            ? await client.createDraft({ kind: "request", sessionId, to: target, message: outgoing, approval }, files.files)
+            : await client.createDraft({ kind: "response", sessionId, requestId: target, message: outgoing, approval }, files.files);
         const adj = files.files.length > 0 ? ` con ${files.files.length} archivo(s) (${files.files.map((f) => f.name).join(", ")})` : "";
         const what = name === "send_request" ? "Solicitud" : "Respuesta";
+        const secretsNote = secrets.length > 0 ? `\n\nAviso: incluye posibles secretos (confirmado por el usuario); la app lo marcará.` : "";
+        if (draft.approval === "chat" && draft.sent) return ok(sentText(what, adj, draft.sent) + secretsNote + injection);
+        const why =
+          asked === "chat" && injection
+            ? "No se envió directamente porque parece contener una inyección: el usuario debe revisarlo en la app de Devi. "
+            : asked === "chat"
+              ? "La aprobación en el chat está desactivada en este equipo de Devi. "
+              : "";
         return ok(
-          `${what} preparada${adj}: borrador ${draft.id}, esperando autorización en la app de Devi. ` +
+          why +
+            `${what} preparada${adj}: borrador ${draft.id}, esperando autorización en la app de Devi. ` +
             `No se envía hasta que el usuario la autorice allí (${expiryText(draft)}). ` +
             `Te llegará un evento kind="draft_authorized" o kind="draft_discarded". Puedes seguir trabajando.` +
-            (secrets.length > 0 ? `\n\nAviso: el borrador incluye posibles secretos (confirmado por el usuario); la app lo marcará.` : "") +
-            injectionWarnings(message, files.files),
+            secretsNote +
+            injection,
         );
       }
       default:
@@ -160,9 +184,27 @@ function injectionWarnings(message: string, files: Outgoing): string {
   const hits = parts.filter((p) => p.scan.level !== "none");
   if (hits.length === 0) return "";
   return (
-    `\n\nPosible prompt injection en lo que vas a enviar (díselo al usuario antes de que lo autorice):\n` +
+    `\n\nPosible prompt injection en lo que vas a enviar (díselo al usuario; tendrá que revisarlo en la app de Devi):\n` +
     hits.map((h) => `- ${h.where} (${h.scan.level === "high" ? "alto" : "aviso"}): ${h.scan.reasons.join("; ")}`).join("\n")
   );
+}
+
+// Ya enviado (aprobado en el chat). El plazo de respuesta se calcula con los tiempos del servidor.
+function sentText(what: string, adj: string, sent: NonNullable<CreateDraftResult["sent"]>): string {
+  const head = `Enviado a ${sent.toName}. ${what}${adj} entregada (request_id ${sent.requestId}).`;
+  if (sent.deadline === undefined) return `${head} Ya le llegó; no hace falta nada más.`;
+  const min = Math.max(1, Math.round((sent.deadline - sent.sentAt) / 60_000));
+  return `${head} Si no responde en ${min} min, caduca y se te avisará. La respuesta llegará como evento kind="response"; puedes seguir trabajando.`;
+}
+
+// to_name es lo que el humano lee en el aviso: tiene que ser la persona de `to`.
+async function nameMismatch(client: DeviClient, to: string, toName: string): Promise<string | null> {
+  const team = await client.call("team");
+  const m = team.members.find((x) => x.id === to);
+  if (!m) return `"${to}" no está en el equipo de Devi. No se envió nada.`;
+  const norm = (v: string) => v.trim().toLocaleLowerCase("es");
+  if (norm(m.name) === norm(toName)) return null;
+  return `El id "${to}" es de ${m.name}, no de "${toName.trim()}". No se envió nada: confirma con el usuario a quién va y vuelve a llamar.`;
 }
 
 // El plazo es un ajuste del servidor (draftTtlMs): se calcula con los dos tiempos del servidor,
