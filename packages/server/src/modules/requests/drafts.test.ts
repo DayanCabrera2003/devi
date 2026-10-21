@@ -247,7 +247,7 @@ describe("autorizar re-comprueba permisos actuales", () => {
 });
 
 describe("tope de cuerpo de POST /drafts", () => {
-  const post = (body: BodyInit, headers: Record<string, string> = {}) =>
+  const post = (body: string | ReadableStream, headers: Record<string, string> = {}) =>
     f.app.fetch(
       new Request("http://127.0.0.1/api/v1/drafts", {
         method: "POST", body, duplex: "half", headers: { "X-Devi-Version": API_VERSION, "X-Devi-Dev-User": "dayan@dev", ...headers },
