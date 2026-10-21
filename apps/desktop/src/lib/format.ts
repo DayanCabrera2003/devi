@@ -1,4 +1,4 @@
-import type { DeviRequest } from "@devi/protocol";
+import type { DeviRequest, Settings } from "@devi/protocol";
 
 export function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -60,4 +60,53 @@ export function lastJsonLine<T>(stdout: string): T | null {
   } catch {
     return null;
   }
+}
+
+// ---- ajustes del servidor (Admin → Servidor) ----------------------------------------
+
+// El formulario usa minutos y días; los rangos son los de SettingsSchema en @devi/protocol.
+export type SettingsForm = { timeoutMin: number; draftMin: number; retentionDays: number; maxAgeDays: number };
+
+export const SETTINGS_BOUNDS: Record<keyof SettingsForm, { min: number; max: number; range: string }> = {
+  timeoutMin: { min: 1, max: 7 * 24 * 60, range: "entre 1 minuto y 7 días (10080 min)" },
+  draftMin: { min: 1, max: 24 * 60, range: "entre 1 minuto y 24 horas (1440 min)" },
+  retentionDays: { min: 1, max: 30, range: "entre 1 y 30 días" },
+  maxAgeDays: { min: 1, max: 30, range: "entre 1 y 30 días" },
+};
+
+export type SettingsCheck =
+  | { ok: true; settings: Settings }
+  | { ok: false; errors: Partial<Record<keyof SettingsForm, string>> };
+
+export function settingsFromForm(f: SettingsForm): SettingsCheck {
+  const errors: Partial<Record<keyof SettingsForm, string>> = {};
+  for (const key of Object.keys(SETTINGS_BOUNDS) as (keyof SettingsForm)[]) {
+    const v = f[key];
+    const b = SETTINGS_BOUNDS[key];
+    if (typeof v !== "number" || !Number.isInteger(v) || v < b.min || v > b.max) {
+      errors[key] = `Escribe un número entero ${b.range}.`;
+    }
+  }
+  if (!errors.retentionDays && !errors.maxAgeDays && f.maxAgeDays < f.retentionDays) {
+    errors.maxAgeDays = "No puede ser menor que la retención tras cerrar la solicitud.";
+  }
+  if (Object.keys(errors).length > 0) return { ok: false, errors };
+  return {
+    ok: true,
+    settings: {
+      requestTimeoutMs: minutesToMs(f.timeoutMin),
+      draftTtlMs: minutesToMs(f.draftMin),
+      fileRetentionDays: f.retentionDays,
+      fileMaxAgeDays: f.maxAgeDays,
+    },
+  };
+}
+
+export function formFromSettings(s: Settings): SettingsForm {
+  return {
+    timeoutMin: msToMinutes(s.requestTimeoutMs),
+    draftMin: msToMinutes(s.draftTtlMs),
+    retentionDays: s.fileRetentionDays,
+    maxAgeDays: s.fileMaxAgeDays,
+  };
 }

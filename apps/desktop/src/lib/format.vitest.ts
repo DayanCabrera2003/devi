@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { formatBytes, lastJsonLine, minutesToMs, msToMinutes, normalizeServerUrl, truncate, waited } from "./format";
+import { formatBytes, lastJsonLine, settingsFromForm, minutesToMs, msToMinutes, normalizeServerUrl, truncate, waited } from "./format";
 
 describe("format", () => {
   test("formatBytes", () => {
@@ -43,5 +43,35 @@ describe("lastJsonLine", () => {
     expect(lastJsonLine("hola\n")).toBeNull();
     expect(lastJsonLine("")).toBeNull();
     expect(lastJsonLine("{roto")).toBeNull();
+  });
+});
+
+describe("settingsFromForm (los rangos del servidor)", () => {
+  const ok = { timeoutMin: 60, draftMin: 15, retentionDays: 7, maxAgeDays: 30 };
+
+  test("convierte a milisegundos dentro de los rangos", () => {
+    expect(settingsFromForm(ok)).toEqual({
+      ok: true,
+      settings: { requestTimeoutMs: 3_600_000, draftTtlMs: 900_000, fileRetentionDays: 7, fileMaxAgeDays: 30 },
+    });
+    expect(settingsFromForm({ timeoutMin: 10_080, draftMin: 1_440, retentionDays: 30, maxAgeDays: 30 }).ok).toBe(true);
+    expect(settingsFromForm({ timeoutMin: 1, draftMin: 1, retentionDays: 1, maxAgeDays: 1 }).ok).toBe(true);
+  });
+
+  test("fuera de rango, vacío o con decimales: error por campo", () => {
+    const r = settingsFromForm({ timeoutMin: 10_081, draftMin: 0, retentionDays: 31, maxAgeDays: Number.NaN });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(Object.keys(r.errors).sort()).toEqual(["draftMin", "maxAgeDays", "retentionDays", "timeoutMin"]);
+    expect(r.errors.timeoutMin).toContain("7 días");
+    expect(settingsFromForm({ ...ok, draftMin: 1_441 }).ok).toBe(false);
+    expect(settingsFromForm({ ...ok, retentionDays: 1.5 }).ok).toBe(false);
+    expect(settingsFromForm({ ...ok, timeoutMin: null as unknown as number }).ok).toBe(false);
+  });
+
+  test("el tope absoluto no puede ser menor que la retención", () => {
+    const r = settingsFromForm({ ...ok, retentionDays: 10, maxAgeDays: 5 });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors.maxAgeDays).toContain("retención");
   });
 });
