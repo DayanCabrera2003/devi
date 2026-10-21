@@ -119,6 +119,12 @@ pub fn save_files(base: &Path, request_id: &str, kind: FileKind, files: &[Incomi
         FileKind::Request => req_dir,
         FileKind::Response => {
             let d = req_dir.join(RESPONSE_SUBDIR);
+            if fs::symlink_metadata(&d).is_ok_and(|m| m.is_file()) {
+                return Err(format!(
+                    "{} existe pero es un archivo, no es una carpeta: muévelo o bórralo para guardar la respuesta",
+                    d.display()
+                ));
+            }
             fs::create_dir_all(&d).map_err(io_err("crear la carpeta de la respuesta"))?;
             let d = d.canonicalize().map_err(io_err("resolver la carpeta de la respuesta"))?;
             if d.parent() != Some(req_dir.as_path()) {
@@ -152,6 +158,24 @@ pub fn save_files(base: &Path, request_id: &str, kind: FileKind, files: &[Incomi
     Ok(out)
 }
 
+/// Tope de la copia de la base de datos.
+pub const MAX_EXPORT_BYTES: usize = 512 * 1024 * 1024;
+
+/// Escribe la copia en `path` sin sobrescribir nunca un archivo (ni seguir un enlace) que ya exista.
+pub fn write_export(path: &Path, data: &[u8], max_bytes: usize) -> Result<(), String> {
+    if data.len() > max_bytes {
+        return Err(format!("la copia supera el máximo de {} MB", max_bytes / (1024 * 1024)));
+    }
+    let mut file = match fs::OpenOptions::new().write(true).create_new(true).open(path) {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            return Err(format!("{} ya existe; no se sobrescribe", path.display()))
+        }
+        Err(e) => return Err(io_err("crear la copia")(e)),
+    };
+    file.write_all(data).map_err(io_err("guardar la copia"))
+}
+
 pub fn export_path(dir: &Path, unix_secs: u64) -> PathBuf {
     dir.join(format!("devi-copia-{unix_secs}.db"))
 }
@@ -175,7 +199,7 @@ pub fn save_db_export(request: tauri::ipc::Request<'_>) -> Result<String, String
         .ok_or("no encuentro la carpeta de descargas")?;
     let secs = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     let path = export_path(&dir, secs);
-    fs::write(&path, data).map_err(io_err("guardar la copia"))?;
+    write_export(&path, data, MAX_EXPORT_BYTES)?;
     Ok(path.to_string_lossy().into_owned())
 }
 
@@ -322,6 +346,30 @@ mod tests {
         std::os::unix::fs::symlink(&outside, base.join("q1").join("respuesta")).unwrap();
         assert!(save_files(&base, "q1", FileKind::Response, &[file("a.txt", "b")]).is_err());
         assert_eq!(fs::read_dir(&outside).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn respuesta_como_archivo_da_un_error_claro() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path().join("recibidos");
+        fs::create_dir_all(base.join("q1")).unwrap();
+        fs::write(base.join("q1").join("respuesta"), "x").unwrap();
+        let err = save_files(&base, "q1", FileKind::Response, &[file("a.txt", "b")]).unwrap_err();
+        assert!(err.contains("no es una carpeta"), "{err}");
+    }
+
+    #[test]
+    fn la_copia_no_sobrescribe_ni_supera_el_tope() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("devi-copia-1.db");
+        write_export(&path, b"uno", 10).unwrap();
+        let err = write_export(&path, b"dos", 10).unwrap_err();
+        assert!(err.contains("ya existe"), "{err}");
+        assert_eq!(fs::read(&path).unwrap(), b"uno");
+        let big = tmp.path().join("grande.db");
+        assert!(write_export(&big, &[0u8; 11], 10).is_err());
+        assert!(!big.exists());
+        assert_eq!(MAX_EXPORT_BYTES, 512 * 1024 * 1024);
     }
 
     #[test]
