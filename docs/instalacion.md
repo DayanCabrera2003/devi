@@ -99,6 +99,8 @@ Sin la extensión, Devi funciona igual: la **ventanita de la mascota** muestra e
 
 Lanza las sesiones con `devi claude`: abre Claude Code con el canal de Devi y empareja el estado trabajando/libre.
 
+**El canal es opcional.** Una sesión abierta con `claude` a secas (desde un IDE, o si tu organización no permite canales) también recibe solicitudes y respuestas: no llegan al momento, sino **cuando escribes algo en esa sesión** (o al abrirla), junto con tus archivos adjuntos ya descargados. En el selector «Enviar a sesión» de la app, cada sesión lo indica: «en tiempo real» (con canal) o «al escribir» (sin canal).
+
 ```bash
 devi claude --session frontend
 ```
@@ -111,7 +113,7 @@ devi claude --session frontend
 | macOS | `~/Library/Application Support/Devi/bin/devi` |
 | Windows | `%LOCALAPPDATA%\Devi\bin\devi.exe` |
 
-**Canales y organizaciones.** Sin política de la organización, Claude Code pide confirmar el canal en modo desarrollo la primera vez. En organizaciones Team o Enterprise, un Owner puede permitir el canal de Devi sin ese aviso con estas managed settings:
+**Canales y organizaciones.** El canal solo hace falta para la entrega en tiempo real. Sin política de la organización, Claude Code pide confirmar el canal en modo desarrollo la primera vez. En organizaciones Team o Enterprise, un Owner puede permitir el canal de Devi sin ese aviso con estas managed settings:
 
 ```json
 {
@@ -120,7 +122,7 @@ devi claude --session frontend
 }
 ```
 
-`devi doctor` comprueba si la política lo permite y muestra este fragmento si falta. Sin el canal, la app sigue mostrando las tarjetas; solo las solicitudes no entran solas en la sesión.
+`devi doctor` comprueba si la política lo permite y muestra este fragmento si falta. `channelsEnabled` solo es necesario para la entrega en tiempo real: sin el canal, la app sigue mostrando las tarjetas y lo que envíes a una sesión le llega cuando escribas en ella.
 
 ## 5. Actualizaciones
 
