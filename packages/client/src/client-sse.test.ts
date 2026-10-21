@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { API_VERSION, type SessionDelivery, type UserEvent } from "@devi/protocol";
+import { API_VERSION, type AuditEntry, type SessionDelivery, type UserEvent } from "@devi/protocol";
 import { createClient } from "./client";
 import { DeviApiError } from "./errors";
 import { fakeServer, sseResponse } from "./fake-server";
@@ -47,7 +47,7 @@ describe("suscripciones", () => {
   });
 
   test("subscribeUser entrega audit.alert con una entrada válida y descarta las mal formadas", async () => {
-    const entry = {
+    const entry: AuditEntry = {
       id: 7, at: 1, actorMemberId: "m1", actorLogin: "dayan@x", action: "role.updated", targetType: "role", targetId: "r1", details: {},
     };
     const srv = serve((req) =>
