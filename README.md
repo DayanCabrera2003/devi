@@ -17,19 +17,19 @@ La respuesta vuelve como notificación a quien preguntó, que puede **aceptarla*
 ```
  Claude Code (dayan) ─stdio─ MCP devi ─HTTP/SSE─┐                 ┌─SSE─ Ventana Devi (dayan)
                                                 ├─ Devi Hub :4747 ┤
- Claude Code (maria) ─stdio─ MCP devi ─HTTP/SSE─┘   team.json     └─SSE─ Ventana Devi (maria)
+ Claude Code (maria) ─stdio─ MCP devi ─HTTP/SSE─┘   SQLite        └─SSE─ Ventana Devi (maria)
 ```
 
 - **Servidor de Devi** (`packages/server/`): la única fuente de verdad. Módulos `team`, `settings`, `sessions`, `files` y `requests` sobre SQLite (ver `docs/superpowers/specs/2026-10-21-devi-produccion-design.md`).
 - **MCP de Devi** (`devi mcp`, en `packages/cli/`): uno por sesión de Claude Code. Ofrece `list_teammates`, `send_request` y `respond_to_request`, y es un [**Claude Code channel**](https://code.claude.com/docs/en/channels-reference): empuja las solicitudes y respuestas dentro de la sesión abierta.
-- **Ventana de Devi** (`web/`): HTML, CSS y JS sin framework. Muestra las tarjetas y lanza notificaciones del sistema.
+- **App de escritorio** (`apps/desktop/`): Tauri v2 + Svelte 5. Bandeja de tarjetas, autorizaciones, selector de sesiones, admin y modo servidor. Instalación: [docs/instalacion.md](docs/instalacion.md).
 - **Hooks** (`devi hook`): marcan cada sesión como *trabajando* o *libre*.
 
 ## Requisitos
 
 - [Bun](https://bun.sh) 1.x
 - [Claude Code](https://code.claude.com) con **Channels** permitidos. Funcionan por defecto en Pro/Max y con API key de Console; en organizaciones Team o Enterprise, un Owner debe activar `channelsEnabled`.
-- Chromium o Firefox para la ventana de Devi.
+- Para usar la app instalada no hace falta Bun: sigue [docs/instalacion.md](docs/instalacion.md).
 
 ## Probarlo (modo dev, una sola máquina)
 
@@ -61,7 +61,7 @@ Lanza una sesión con el canal de Devi y comprueba el entorno:
 
 La primera vez, Claude Code pide confirmar el canal en modo desarrollo. El estado trabajando/libre solo se empareja en sesiones lanzadas con `devi claude`.
 
-La ventana de `web/` del proof of concept sigue ahí hasta que la Fase 3 la sustituya por la app de escritorio.
+La interfaz es la app de escritorio (`apps/desktop/`, `bun run --cwd apps/desktop tauri dev`).
 
 ## Tests
 
@@ -70,10 +70,9 @@ bun run test        # unitarios de todos los paquetes + smoke de integración (d
 bun run typecheck
 ```
 
-## Simplificaciones (proof of concept)
+## Estructura
 
-- Hub local en `localhost`, no un servidor de equipo en red.
-- Identidad por `?user=` y `--user`, sin login.
-- Equipo en `team.json` (datos de ejemplo), sin interfaz de administración.
-- Estado en memoria: se pierde al reiniciar el hub.
-- Solo Claude Code, solo texto (sin archivos).
+- `packages/protocol`, `server`, `client`, `cli`: contrato, servidor, cliente HTTP y binario `devi`.
+- `apps/desktop`: app de escritorio (Tauri + Svelte).
+- `plugin/`: plugin de Claude Code. `scripts/`: compilación del binario por plataforma.
+- `docs/ejemplos/team.json`: ejemplo para importar un equipo con `devi server --import docs/ejemplos/team.json`.
