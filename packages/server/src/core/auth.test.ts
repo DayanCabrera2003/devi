@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { DevIdentity, TailscaleServeIdentity } from "./auth";
+import { DevIdentity, decodeMimeWords, TailscaleServeIdentity } from "./auth";
 
 const req = (headers: Record<string, string> = {}, url = "http://127.0.0.1:4747/api/v1/me") =>
   new Request(url, { headers });
@@ -17,6 +17,27 @@ describe("TailscaleServeIdentity", () => {
   });
   test("si falta el nombre usa el login", () => {
     expect(id.identify(req({ "Tailscale-User-Login": "leo@example.com" }))?.displayName).toBe("leo@example.com");
+  });
+});
+
+describe("decodeMimeWords (RFC 2047)", () => {
+  test("Q: =XX y _", () => {
+    expect(decodeMimeWords("=?utf-8?q?Mar=C3=ADa?=")).toBe("María");
+    expect(decodeMimeWords("=?UTF-8?Q?Mar=C3=ADa_L=C3=B3pez?=")).toBe("María López");
+  });
+  test("B: base64", () => {
+    expect(decodeMimeWords("=?utf-8?b?TWFyw61h?=")).toBe("María");
+    expect(decodeMimeWords("=?UTF-8?B?TWFyw61h?=")).toBe("María");
+  });
+  test("texto plano sin cambios", () => {
+    expect(decodeMimeWords("Maria Lopez")).toBe("Maria Lopez");
+  });
+  test("palabras contiguas con un carácter partido", () => {
+    expect(decodeMimeWords("=?utf-8?q?Mar=C3?= =?utf-8?q?=ADa?=")).toBe("María");
+  });
+  test("TailscaleServeIdentity lo aplica", () => {
+    const id = new TailscaleServeIdentity().identify(req({ "Tailscale-User-Login": "m@x.com", "Tailscale-User-Name": "=?utf-8?q?Mar=C3=ADa?=" }));
+    expect(id?.displayName).toBe("María");
   });
 });
 
