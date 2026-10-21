@@ -33,3 +33,74 @@ export function createSseParser(onFrame: (f: SseFrame) => void): (chunk: string)
 export function backoffDelay(attempt: number, baseMs: number, maxMs: number): number {
   return Math.min(maxMs, baseMs * 2 ** attempt);
 }
+
+export type SubscribeSseOptions = {
+  url: string;
+  headers: Record<string, string>;
+  fetch: FetchFn;
+  onFrame: (f: SseFrame) => void;
+  onStatus?: (s: SseStatus) => void;
+  baseDelayMs?: number;
+  maxDelayMs?: number;
+};
+
+// Abre el stream y lo reabre con espera exponencial si se cae o el servidor responde con error.
+// Devuelve la función para cancelar: aborta la conexión y no vuelve a intentarlo.
+export function subscribeSse(opts: SubscribeSseOptions): () => void {
+  const base = opts.baseDelayMs ?? 1000;
+  const max = opts.maxDelayMs ?? 30_000;
+  let stopped = false;
+  let ctrl: AbortController | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let attempt = 0;
+
+  const status = (s: SseStatus) => {
+    if (!stopped) opts.onStatus?.(s);
+  };
+
+  async function connectOnce(): Promise<void> {
+    ctrl = new AbortController();
+    const res = await opts.fetch(opts.url, {
+      headers: { Accept: "text/event-stream", ...opts.headers },
+      signal: ctrl.signal,
+    });
+    if (!res.ok || !res.body) {
+      await res.body?.cancel().catch(() => {});
+      throw new Error(`SSE ${res.status}`);
+    }
+    attempt = 0;
+    status("open");
+    const parse = createSseParser(opts.onFrame);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) return;
+      parse(decoder.decode(value, { stream: true }));
+    }
+  }
+
+  async function loop(): Promise<void> {
+    status("connecting");
+    while (!stopped) {
+      try {
+        await connectOnce();
+      } catch {
+        // caída de red, error HTTP o abort: se decide abajo
+      }
+      if (stopped) return;
+      status("reconnecting");
+      const delay = backoffDelay(attempt++, base, max);
+      await new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, delay);
+      });
+    }
+  }
+
+  void loop();
+  return () => {
+    stopped = true;
+    if (timer) clearTimeout(timer);
+    ctrl?.abort();
+  };
+}
