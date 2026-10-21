@@ -1,0 +1,103 @@
+# Builds de la app de escritorio en los tres SO y release en GitHub (borrador).
+# Se lanza al subir una etiqueta vX.Y.Z. Sin firma de código del SO (coste cero);
+# los artefactos del updater se firman con TAURI_SIGNING_PRIVATE_KEY si el secreto existe.
+name: Release desktop
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - name: macOS Apple Silicon
+            os: macos-14
+            target: aarch64-apple-darwin
+          - name: macOS Intel
+            os: macos-15-intel # macos-13 se retiró en diciembre de 2025
+            target: x86_64-apple-darwin
+          - name: Linux x64
+            os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+
+      - name: Dependencias de sistema (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf xdg-utils
+
+      - name: Dependencias de JS
+        run: bun install --frozen-lockfile
+
+      # El sidecar debe existir como dist/bin/devi-<target>[.exe] antes del build de Tauri.
+      # `build:devi` ya lleva `--target`: aquí solo se pasa el triple de Rust.
+      - name: Binario devi (sidecar)
+        run: bun run build:devi ${{ matrix.target }}
+
+      # Comprobaciones completas solo en Linux (el más barato). cargo test necesita el sidecar
+      # (externalBin) y el frontend compilado (frontendDist), por eso va después de ambos.
+      - name: Comprobaciones y tests (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          bun run test
+          bun run --cwd apps/desktop check
+          bun run --cwd apps/desktop test --maxWorkers=2
+          bun run --cwd apps/desktop build
+          cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
+
+      # Hasta que exista la clave del updater (secretos TAURI_SIGNING_PRIVATE_KEY[_PASSWORD]),
+      # se desactivan los artefactos del updater: sin clave, tauri build falla al firmarlos.
+      # Con la clave configurada, no se pasa nada y rige tauri.conf.json.
+      - name: Firma del updater (opcional)
+        id: updater
+        shell: bash
+        env:
+          SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$SIGNING_KEY" ]; then
+            echo "Sin TAURI_SIGNING_PRIVATE_KEY: se omiten los artefactos del updater."
+            echo 'args=--config {"bundle":{"createUpdaterArtifacts":false}}' >> "$GITHUB_OUTPUT"
+          else
+            echo "args=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/desktop
+          tauriScript: bun run tauri
+          args: --target ${{ matrix.target }} ${{ steps.updater.outputs.args }}
+          tagName: ${{ github.ref_name }}
+          releaseName: Devi ${{ github.ref_name }}
+          releaseBody: |
+            Instaladores de Devi. Cómo instalarlos y abrirlos por primera vez (no están firmados): docs/instalacion.md
+          releaseDraft: true
+          prerelease: false
