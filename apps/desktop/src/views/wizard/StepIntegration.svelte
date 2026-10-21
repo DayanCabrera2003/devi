@@ -13,7 +13,8 @@
 
   function onDone(out: DeviOutput) {
     result = lastJsonLine<InstallResult>(out.stdout);
-    done = out.code === 0 && (result?.ok ?? true);
+    // Solo cuenta como instalada con la línea JSON final y ok: true (sin ella no se sabe qué pasó).
+    done = out.code === 0 && result?.ok === true;
   }
 </script>
 

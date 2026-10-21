@@ -16,6 +16,7 @@
 
   async function check() {
     status = "checking";
+    error = "";
     try {
       self = await app.native.tailscaleSelf();
       status = "ok";

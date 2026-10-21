@@ -26,7 +26,10 @@
     step = 2;
   }
 
-  function afterServer(p: { serverUrl: string; serverAdminLogin?: string }) {
+  async function afterServer(p: { serverUrl: string; serverAdminLogin?: string }) {
+    // Red de seguridad: sin modo servidor, el sidecar no puede quedarse en marcha sin dueño
+    // (StepServer ya pide confirmación antes de llegar aquí).
+    if (!p.serverAdminLogin && app.server?.running) await app.stopLocalServer().catch(() => {});
     draft = { ...draft, serverUrl: p.serverUrl, app: { ...prefsOf(draft), serverAdminLogin: p.serverAdminLogin } };
     step = 3;
   }

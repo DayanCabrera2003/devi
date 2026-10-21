@@ -48,8 +48,9 @@
     }
   }
 
+  // --admin da el primer admin a ese login: solo tras confirmar que es el de esta persona.
   async function startServer() {
-    if (!self) return;
+    if (!self || !confirmed) return;
     busy = true;
     error = null;
     try {
@@ -66,6 +67,22 @@
     if (!self) return;
     onNext({ serverUrl: `https://${self.dnsName}`, serverAdminLogin: self.login });
   }
+
+  // Pasar a "me conecto a otro servidor" con el sidecar en marcha: se detiene (tras confirmar)
+  // para no dejar un servidor huérfano que ya nadie gestiona desde Ajustes.
+  async function stopAndUseRemote() {
+    busy = true;
+    error = null;
+    try {
+      await app.stopLocalServer();
+      serveOk = null;
+      confirmed = false;
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      busy = false;
+    }
+  }
 </script>
 
 <section class="card">
@@ -76,7 +93,14 @@
     <label class="check"><input type="radio" bind:group={mode} value="server" /> Este equipo es el servidor</label>
   </div>
 
-  {#if mode === "remote"}
+  {#if mode === "remote" && server?.running}
+    <p>El servidor de Devi sigue en marcha en este equipo (PID {server.pid}).</p>
+    <p class="muted small">Si te conectas a otro servidor, se detiene y este equipo deja de ser el servidor.</p>
+    <div class="actions">
+      <button class="no" disabled={busy} onclick={stopAndUseRemote}>Sí, detener el servidor</button>
+      <button disabled={busy} onclick={() => (mode = "server")}>No, este equipo es el servidor</button>
+    </div>
+  {:else if mode === "remote"}
     <div class="field">
       <label for="wiz-url">URL del servidor</label>
       <input id="wiz-url" type="url" bind:value={url} placeholder="https://pc.tu-tailnet.ts.net" />
@@ -102,17 +126,25 @@
       </div>
     {:else}
       <p class="ok-text">Servidor en marcha (PID {server.pid}).</p>
-      {#if serveOk === null}
-        <div class="actions"><button onclick={checkServe}>Comprobar la publicación en la tailnet</button></div>
-      {:else if serveOk === false}
-        <ServeHint />
-        <div class="actions"><button onclick={checkServe}>Ya lo ejecuté, comprobar de nuevo</button></div>
-      {:else}
+      {#if serveOk}
         <p class="muted small">Publicado en <span class="mono">https://{self.dnsName}</span></p>
         <div class="actions">
           <button class="primary" onclick={nextServer}>Continuar</button>
           <button onclick={onBack}>Atrás</button>
         </div>
+      {:else}
+        {#if serveOk === false}<ServeHint />{/if}
+        <div class="actions">
+          <button onclick={checkServe}>
+            {serveOk === false ? "Ya lo ejecuté, comprobar de nuevo" : "Comprobar la publicación en la tailnet"}
+          </button>
+          <button class="ghost" onclick={nextServer}>Continuar de todos modos (solo en este equipo)</button>
+          <button onclick={onBack}>Atrás</button>
+        </div>
+        <p class="muted small">
+          Sin <span class="mono">tailscale serve</span> el resto del equipo no puede conectarse; puedes publicarlo
+          después y comprobarlo en Ajustes.
+        </p>
       {/if}
     {/if}
     {#if server && !server.running && server.log.length > 0}
