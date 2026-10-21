@@ -144,3 +144,24 @@ describe("createDraft y downloadFile", () => {
     expect(srv.seen[0]!.path).toBe("/api/v1/files/f1");
   });
 });
+
+describe("timeout de petición", () => {
+  const colgado = () => new Promise<Response>(() => {}); // el servidor nunca responde
+
+  test("call, createDraft y downloadFile fallan como unreachable si no hay respuesta", async () => {
+    const srv = serve(colgado);
+    const c = createClient({ baseUrl: srv.url, requestTimeoutMs: 100 });
+    const casos = [
+      () => c.call("me"),
+      () => c.createDraft({ toMemberId: "m2", message: "hola" } as never, []),
+      () => c.downloadFile("f1"),
+    ];
+    for (const caso of casos) {
+      const err = (await caso().catch((e) => e)) as DeviApiError;
+      expect(err).toBeInstanceOf(DeviApiError);
+      expect(err.status).toBe(0);
+      expect(err.body.code).toBe("unreachable");
+      expect(err.body.error).toContain("no respondió");
+    }
+  });
+});

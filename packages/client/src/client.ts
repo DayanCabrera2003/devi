@@ -20,7 +20,12 @@ import { z } from "zod";
 import { DeviApiError } from "./errors";
 import { subscribeSse, type FetchFn, type SseStatus } from "./sse";
 
-export type ClientOptions = { baseUrl: string; devUser?: string; fetch?: typeof fetch };
+// requestTimeoutMs: opción interna (por defecto 15 s) para call, createDraft y downloadFile; los SSE no la usan.
+export type ClientOptions = { baseUrl: string; devUser?: string; fetch?: typeof fetch; requestTimeoutMs?: number };
+
+// Rutas cuya respuesta no es JSON validable (z.any()): bytes, texto o SSE. Se listan por nombre
+// porque `instanceof z.ZodAny` no es fiable en zod 4 (los esquemas ya no son instancias de esa clase).
+const RAW_ROUTES: ReadonlySet<ApiRoute> = new Set<ApiRoute>(["exportDb", "downloadFile", "userEvents", "sessionEvents"]);
 
 type SubscribeOpts = { onStatus?: (s: SseStatus) => void };
 
@@ -44,6 +49,7 @@ export function createClient(opts: ClientOptions): DeviClient {
     if (opts.devUser) h["X-Devi-Dev-User"] = opts.devUser;
     return h;
   };
+  const timeoutMs = opts.requestTimeoutMs ?? 15_000;
   const urlFor = (path: string) => `${base}${path}`;
   // Los SSE llevan además versión y usuario de dev en la query (el servidor solo la mira en /events/*).
   const sseUrlFor = (path: string) => {
@@ -57,8 +63,14 @@ export function createClient(opts: ClientOptions): DeviClient {
     if (init.json) h["Content-Type"] = "application/json";
     let res: Response;
     try {
-      res = await doFetch(urlFor(path), { method, headers: h, body: init.body });
-    } catch {
+      res = await doFetch(urlFor(path), { method, headers: h, body: init.body, signal: AbortSignal.timeout(timeoutMs) });
+    } catch (e) {
+      if (e instanceof Error && e.name === "TimeoutError") {
+        throw new DeviApiError(0, {
+          error: `El servidor de Devi no respondió a tiempo (${base}). Inténtalo de nuevo en unos segundos.`,
+          code: "unreachable",
+        });
+      }
       throw new DeviApiError(0, {
         error: `No se pudo conectar con el servidor de Devi (${base}). ¿Está encendido y estás en la tailnet?`,
         code: "unreachable",
@@ -68,8 +80,8 @@ export function createClient(opts: ClientOptions): DeviClient {
     return res;
   }
 
-  async function parsed<S extends z.ZodType>(res: Response, schema: S): Promise<z.infer<S>> {
-    if (schema instanceof z.ZodAny) return (await raw(res)) as z.infer<S>;
+  async function parsed<S extends z.ZodType>(res: Response, schema: S, isRaw = false): Promise<z.infer<S>> {
+    if (isRaw) return (await raw(res)) as z.infer<S>;
     const data: unknown = await res.json().catch(() => undefined);
     const r = schema.safeParse(data);
     if (!r.success) {
@@ -87,7 +99,7 @@ export function createClient(opts: ClientOptions): DeviClient {
       const path = buildPath(route.path, callOpts.params ?? {});
       const hasBody = route.method === "POST" || route.method === "PATCH";
       const res = await send(route.method, path, hasBody ? { body: JSON.stringify(callOpts.body ?? {}), json: true } : {});
-      return parsed(res, route.response);
+      return parsed(res, route.response, RAW_ROUTES.has(name));
     },
 
     async createDraft(meta, files) {
