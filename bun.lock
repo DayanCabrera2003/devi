@@ -19,6 +19,7 @@
       "name": "@devi/desktop",
       "version": "0.3.0",
       "dependencies": {
+        "@devi/client": "workspace:*",
         "@devi/protocol": "workspace:*",
         "@tauri-apps/api": "^2.12.4",
         "@tauri-apps/plugin-autostart": "^2.7.0",
