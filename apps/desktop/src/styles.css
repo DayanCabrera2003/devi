@@ -259,3 +259,7 @@ body.mascota { max-width: none; margin: 0; padding: 0; min-height: 0; overflow: 
 .injection.high, .secrets { border-color: color-mix(in srgb, var(--no) 55%, transparent); color: var(--no); }
 .injection .small { margin-top: 4px; }
 .send-confirm { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 8px 0; }
+.audit-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.audit-head select { max-width: 280px; }
+table.audit td { overflow-wrap: anywhere; }
+.tab-count { margin-left: 6px; font-size: 11px; padding: 0 6px; border-radius: 999px; background: var(--no); color: var(--bg); }

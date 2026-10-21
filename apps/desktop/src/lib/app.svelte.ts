@@ -1,5 +1,6 @@
 import type { DeviRequest, Draft, FileMeta, UserEvent } from "@devi/protocol";
 import { type DeviApi, errorMessage } from "./api";
+import { type AuditEntry, auditNotice, parseAuditAlert } from "./audit";
 import { Clock } from "./clock.svelte";
 import type { MascotState } from "./mascot";
 import { type AppPrefs, type ClientConfig, type Native, type ServerStatus, prefsOf } from "./native";
@@ -37,6 +38,8 @@ export class DeviApp {
   paused = $state(false);
   pokeKey = $state(0);
   server = $state<ServerStatus | null>(null);
+  // Alertas de seguridad (audit.alert) aún no vistas en Admin → Auditoría: dan el número de la pestaña.
+  auditAlerts = $state<AuditEntry[]>([]);
   serverError = $state<string | null>(null);
 
   readonly conn = new ConnectionStore();
@@ -53,6 +56,7 @@ export class DeviApp {
   // Cada connect()/disconnect() la sube; un connect() que despierta con otra generación se retira.
   private generation = 0;
   private readonly notified = new Set<string>();
+  private readonly alerted = new Set<string>();
   private replay: Replay | null = null;
 
   constructor(deps: AppDeps) {
@@ -159,6 +163,11 @@ export class DeviApp {
   private onEvent(ev: UserEvent): void {
     const me = this.team.myId;
     if (!me || !this.api) return;
+    // audit.alert puede no estar aún en UserEvent: se reconoce por su forma y se valida aparte.
+    if ((ev as { type: string }).type === "audit.alert") {
+      this.onAuditAlert(ev);
+      return;
+    }
     if (ev.type === "team.updated") {
       void this.team.refresh(this.api).catch(() => {});
       return;
@@ -173,6 +182,19 @@ export class DeviApp {
       else this.announce(added);
     }
     this.publishMascot();
+  }
+
+  private onAuditAlert(ev: unknown): void {
+    const entry = parseAuditAlert(ev);
+    if (!entry || !this.team.isAdmin || this.alerted.has(entry.id)) return;
+    this.alerted.add(entry.id);
+    this.auditAlerts = [entry, ...this.auditAlerts];
+    // Un cambio de seguridad avisa aunque Devi esté en pausa; solo lo silencia desactivar los avisos.
+    if (this.prefs.notifications) void this.deps.notify(auditNotice(entry, (id) => this.team.nameOf(id)));
+  }
+
+  clearAuditAlerts(): void {
+    this.auditAlerts = [];
   }
 
   private announce(card: Card): void {

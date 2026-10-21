@@ -23,7 +23,11 @@ import {
   type UserEvent,
 } from "@devi/protocol";
 import type { z } from "zod";
+import { type AuditPage, parseAuditPage } from "./audit";
 import type { ClientConfig } from "./native";
+
+// Ruta de la auditoría. Cuando @devi/protocol tenga API.audit, audit() puede pasar a this.call("audit").
+export const AUDIT_PATH = "/api/v1/audit";
 
 export type MemberBody = z.input<typeof CreateMemberBody>;
 export type MemberPatch = z.input<typeof UpdateMemberBody>;
@@ -166,11 +170,35 @@ export class DeviApi {
     return this.client.subscribeUser(onEvent, { onStatus });
   }
 
-  // Binario (application/octet-stream): se pide con fetch directo y las mismas cabeceras.
-  async exportDb(): Promise<Uint8Array> {
+  // Las mismas cabeceras que pone @devi/client.
+  private headers(): Record<string, string> {
     const headers: Record<string, string> = { [VERSION_HEADER]: API_VERSION };
     if (this.devUser) headers["X-Devi-Dev-User"] = this.devUser;
-    const res = await fetch(new URL(API.exportDb.path, this.baseUrl), { headers });
+    return headers;
+  }
+
+  // GET con fetch directo, para rutas que aún no están en API. Devuelve el JSON sin validar.
+  async getJson(path: string, query: Record<string, string> = {}): Promise<unknown> {
+    const url = new URL(path, this.baseUrl);
+    for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
+    const res = await fetch(url, { headers: this.headers() });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as ErrorBody | null;
+      throw new HttpFailure(res.status, body ?? { error: `Error ${res.status} del servidor de Devi` });
+    }
+    return res.json();
+  }
+
+  // Admin → Auditoría: página de entradas más recientes que `before` (si se da).
+  async audit(opts: { limit: number; before?: number }): Promise<AuditPage> {
+    const query: Record<string, string> = { limit: String(opts.limit) };
+    if (opts.before !== undefined) query.before = String(opts.before);
+    return parseAuditPage(await this.getJson(AUDIT_PATH, query));
+  }
+
+  // Binario (application/octet-stream): se pide con fetch directo y las mismas cabeceras.
+  async exportDb(): Promise<Uint8Array> {
+    const res = await fetch(new URL(API.exportDb.path, this.baseUrl), { headers: this.headers() });
     if (!res.ok) {
       const body = (await res.json().catch(() => null)) as ErrorBody | null;
       throw new HttpFailure(res.status, body ?? { error: `Error ${res.status} al exportar la base de datos` });

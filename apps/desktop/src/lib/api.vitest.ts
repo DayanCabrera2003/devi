@@ -66,4 +66,25 @@ describe("DeviApi", () => {
     const api = new DeviApi(fakeClient().client, "https://pc.t.ts.net");
     await expect(api.exportDb()).rejects.toMatchObject({ status: 403 });
   });
+
+  test("audit: GET /api/v1/audit con limit y before, mismas cabeceras, respuesta validada", async () => {
+    const page = { entries: [{ id: "a1", at: 1, actorLogin: "d@x", action: "role.updated", targetType: "role", details: {} }], nextBefore: 1 };
+    const fetchMock = vi.fn(async () => Response.json(page));
+    vi.stubGlobal("fetch", fetchMock);
+    const api = new DeviApi(fakeClient().client, "http://127.0.0.1:4747", "dayan@dev");
+    expect(await api.audit({ limit: 50, before: 123 })).toEqual(page);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [URL, RequestInit];
+    expect(String(url)).toBe("http://127.0.0.1:4747/api/v1/audit?limit=50&before=123");
+    expect(init.headers).toMatchObject({ "X-Devi-Version": "1.0.0", "X-Devi-Dev-User": "dayan@dev" });
+    await api.audit({ limit: 20 });
+    expect(String((fetchMock.mock.calls[1] as unknown as [URL])[0])).toBe("http://127.0.0.1:4747/api/v1/audit?limit=20");
+  });
+
+  test("audit: error del servidor y respuesta con forma inesperada", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: "no", code: "missing_perm", perm: "team.admin" }, { status: 403 })));
+    const api = new DeviApi(fakeClient().client, "https://pc.t.ts.net");
+    await expect(api.audit({ limit: 50 })).rejects.toMatchObject({ status: 403 });
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ nada: true })));
+    await expect(api.audit({ limit: 50 })).rejects.toThrow(/inesperada/);
+  });
 });
