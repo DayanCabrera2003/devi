@@ -1,4 +1,5 @@
 import type { Perm } from "@devi/protocol";
+import { isSseRoute } from "./http";
 
 // Quién llama, según la red (aún sin saber si es del equipo).
 export type Principal = { login: string; displayName: string };
@@ -27,7 +28,10 @@ export class TailscaleServeIdentity implements IdentityProvider {
 export class DevIdentity implements IdentityProvider {
   readonly name = "dev";
   identify(req: Request): Principal | null {
-    const login = req.headers.get("X-Devi-Dev-User") || new URL(req.url).searchParams.get("devUser");
+    const url = new URL(req.url);
+    // ?devUser= solo en los SSE (EventSource no admite cabeceras); el resto usa la cabecera.
+    const fromQuery = isSseRoute(req.method, url.pathname) ? url.searchParams.get("devUser") : null;
+    const login = req.headers.get("X-Devi-Dev-User") || fromQuery;
     return login ? { login, displayName: login } : null;
   }
 }

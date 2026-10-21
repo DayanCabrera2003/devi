@@ -4,7 +4,7 @@ import { ZodError } from "zod";
 import type { AccessResolver, IdentityProvider } from "./auth";
 import { Bus } from "./bus";
 import { migrate, openDb } from "./db";
-import { HttpError, corsHeaders, errorResponse, isAllowedOrigin, json } from "./http";
+import { HttpError, corsHeaders, errorResponse, isAllowedOrigin, isSseRoute, json } from "./http";
 import type { DeviModule, ModuleContext } from "./module";
 import { Router } from "./router";
 import { SseHub } from "./sse";
@@ -37,9 +37,16 @@ export function createApp(opts: AppOptions) {
 
   async function handle(req: Request): Promise<Response> {
     const url = new URL(req.url);
+    // Anti-CSRF: un navegador siempre manda Origin en peticiones entre sitios. La CLI y el MCP
+    // (Bun) no lo mandan y siguen permitidos.
+    const origin = req.headers.get("Origin");
+    if (origin !== null && !isAllowedOrigin(origin, opts.allowedOrigins)) {
+      throw new HttpError(403, "Origen no permitido", { code: "origin" });
+    }
     if (req.method === "GET" && url.pathname === API.health.path) return json({ ok: true, version: API_VERSION });
 
-    const version = req.headers.get(VERSION_HEADER) ?? url.searchParams.get(VERSION_QUERY);
+    // La versión por ?v= solo vale en los SSE (EventSource no admite cabeceras).
+    const version = req.headers.get(VERSION_HEADER) ?? (isSseRoute(req.method, url.pathname) ? url.searchParams.get(VERSION_QUERY) : null);
     if (!isCompatible(version)) {
       throw new HttpError(426, "Actualiza Devi: tu versión no es compatible con el servidor", {
         code: "version",

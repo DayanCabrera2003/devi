@@ -28,6 +28,10 @@ describe("DevIdentity", () => {
   test("query devUser (EventSource no admite cabeceras)", () => {
     expect(id.identify(req({}, "http://127.0.0.1:4747/api/v1/events/user?devUser=leo@dev"))?.login).toBe("leo@dev");
   });
+  test("query devUser solo en las rutas SSE", () => {
+    expect(id.identify(req({}, "http://127.0.0.1:4747/api/v1/me?devUser=leo@dev"))).toBeNull();
+    expect(id.identify(req({}, "http://127.0.0.1:4747/api/v1/events/session/s1?devUser=leo@dev"))?.login).toBe("leo@dev");
+  });
   test("sin nada → null", () => {
     expect(id.identify(req())).toBeNull();
   });

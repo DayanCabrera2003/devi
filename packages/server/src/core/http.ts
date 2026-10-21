@@ -1,4 +1,4 @@
-import type { ErrorBody } from "@devi/protocol";
+import { API, matchPath, type ErrorBody } from "@devi/protocol";
 
 // Error con código HTTP que el núcleo convierte en respuesta JSON ({ error, ...extra }).
 export class HttpError extends Error {
@@ -28,3 +28,9 @@ export function corsHeaders(origin: string): Record<string, string> {
     Vary: "Origin",
   };
 }
+
+// Las únicas rutas que usa EventSource, que no admite cabeceras: ahí (y solo ahí) se aceptan
+// la versión por ?v= y la identidad de desarrollo por ?devUser=. En el resto una página web
+// ajena podría lanzar POST "simples" (sin preflight) con la query puesta.
+export const isSseRoute = (method: string, pathname: string) =>
+  method === "GET" && (!!matchPath(API.userEvents.path, pathname) || !!matchPath(API.sessionEvents.path, pathname));

@@ -6,6 +6,7 @@ import { DevIdentity } from "./auth";
 import { HttpError, json } from "./http";
 import type { DeviModule } from "./module";
 
+let handlerCalls = 0;
 const testModule: DeviModule = {
   name: "test",
   migrations: [{ version: 1, sql: "CREATE TABLE test_t (x TEXT)" }],
@@ -19,6 +20,11 @@ const testModule: DeviModule = {
     );
     r.on(API.me, ({ access, principal }) => json({ memberId: access.memberId, login: principal.login }));
     r.on(API.getSettings, () => json({ ok: true }));
+    r.on(API.userEvents, () => json({ sse: true }));
+    r.on(API.createDraft, () => {
+      handlerCalls++;
+      return json({ ok: true });
+    });
     r.on(API.forwardRequest, ({ params }) => {
       if (params.id === "missing") throw new HttpError(404, "no existe");
       z.object({ n: z.number() }).parse({ n: "no" });
@@ -43,10 +49,40 @@ describe("createApp", () => {
     expect(((await res.json()) as { code: string }).code).toBe("version");
   });
 
-  test("versión por query en SSE", async () => {
+  test("versión por query en la ruta SSE de usuario", async () => {
     const app = make();
-    const res = await app.fetch(new Request(`http://127.0.0.1/api/v1/me?v=${API_VERSION}`, { headers: { "X-Devi-Dev-User": "maria@dev" } }));
+    const res = await app.fetch(new Request(`http://127.0.0.1/api/v1/events/user?v=${API_VERSION}&devUser=maria@dev`));
     expect(res.status).toBe(200);
+  });
+
+  test("versión por query en una ruta no SSE → 426", async () => {
+    const res = await make().fetch(new Request(`http://127.0.0.1/api/v1/me?v=${API_VERSION}`, { headers: { "X-Devi-Dev-User": "maria@dev" } }));
+    expect(res.status).toBe(426);
+  });
+
+  test("?devUser= en una ruta no SSE → 401", async () => {
+    const res = await call(make(), "GET", "/api/v1/me?devUser=maria@dev");
+    expect(res.status).toBe(401);
+  });
+
+  test("Origin no permitido en POST → 403 sin ejecutar el handler", async () => {
+    handlerCalls = 0;
+    const res = await call(make(), "POST", "/api/v1/drafts", { Origin: "https://evil.example", "X-Devi-Dev-User": "maria@dev" });
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { code: string }).code).toBe("origin");
+    expect(handlerCalls).toBe(0);
+  });
+
+  test("health también rechaza Origin no permitido", async () => {
+    const res = await call(make(), "GET", "/api/v1/health", { Origin: "https://evil.example" });
+    expect(res.status).toBe(403);
+  });
+
+  test("sin Origin (CLI/MCP) → permitido", async () => {
+    handlerCalls = 0;
+    const res = await call(make(), "POST", "/api/v1/drafts", { "X-Devi-Dev-User": "maria@dev" });
+    expect(res.status).toBe(200);
+    expect(handlerCalls).toBe(1);
   });
 
   test("sin identidad → 401; login desconocido → 403 con login", async () => {
