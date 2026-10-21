@@ -14,6 +14,11 @@ export function openDb(path = ":memory:"): Database {
 // Aplica, en una transacción por migración, las que el módulo aún no tiene. Devuelve cuántas aplicó.
 export function migrate(db: Database, module: string, migrations: Migration[]): number {
   const row = db.query("SELECT version FROM schema_versions WHERE module = ?").get(module) as { version: number } | null;
+  const seen = new Set<number>();
+  for (const m of migrations) {
+    if (seen.has(m.version)) throw new Error(`migraciones duplicadas en "${module}": versión ${m.version}`);
+    seen.add(m.version);
+  }
   const current = row?.version ?? 0;
   const pending = [...migrations].sort((a, b) => a.version - b.version).filter((m) => m.version > current);
   for (const m of pending) {

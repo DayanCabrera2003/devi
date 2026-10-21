@@ -6,6 +6,6 @@ export const ErrorBodySchema = z.object({
   code: z.string().optional(), // p. ej. "unknown_login", "missing_perm", "version"
   login: z.string().optional(), // con unknown_login: el login detectado
   perm: z.string().optional(), // con missing_perm
-  minVersion: z.string().optional(), // con version (426)
+  minVersion: z.string().optional(), // con version (426): la versión actual del servidor (la mayor debe coincidir)
 });
 export type ErrorBody = z.infer<typeof ErrorBodySchema>;

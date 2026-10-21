@@ -86,13 +86,21 @@ export function createApp(opts: AppOptions) {
       res = await handle(req);
     } catch (e) {
       if (e instanceof HttpError) res = errorResponse(e);
-      else if (e instanceof ZodError) res = errorResponse(new HttpError(400, e.issues.map((i) => i.message).join("; "), { code: "invalid" }));
+      else if (e instanceof ZodError) res = errorResponse(new HttpError(400, e.issues.map((i) => (i.path.length ? `${i.path.join(".")}: ${i.message}` : i.message)).join("; "), { code: "invalid" }));
       else {
         ctx.log("error interno", e);
         res = errorResponse(new HttpError(500, "Error interno del servidor de Devi", { code: "internal" }));
       }
     }
-    if (cors) for (const [k, v] of Object.entries(cors)) res.headers.set(k, v);
+    if (cors) {
+      try {
+        for (const [k, v] of Object.entries(cors)) res.headers.set(k, v);
+      } catch {
+        // Cabeceras inmutables (p. ej. Response.redirect): se reenvuelve y se ponen en la copia.
+        res = new Response(res.body, res);
+        for (const [k, v] of Object.entries(cors)) res.headers.set(k, v);
+      }
+    }
     return res;
   }
 

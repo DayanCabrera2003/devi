@@ -21,7 +21,15 @@ const testModule: DeviModule = {
     );
     r.on(API.me, ({ access, principal }) => json({ memberId: access.memberId, login: principal.login }));
     r.on(API.getSettings, () => json({ ok: true }));
-    r.on(API.userEvents, () => json({ sse: true }));
+    r.on(API.userEvents, ({ url }) => {
+      if (url.searchParams.get("kind") === "redirect") return Response.redirect("http://127.0.0.1/otra", 302); // cabeceras inmutables
+      const body = new ReadableStream({
+        start(c) {
+          c.enqueue(new TextEncoder().encode("event: hello\ndata: {}\n\n"));
+        },
+      });
+      return new Response(body, { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-store" } });
+    });
     r.on(API.createDraft, () => {
       handlerCalls++;
       return json({ ok: true });
@@ -132,6 +140,33 @@ describe("createApp", () => {
     expect(pre.headers.get("Access-Control-Allow-Headers")).not.toContain("X-Devi-Dev-User");
     const dev = await make().fetch(new Request("http://127.0.0.1/api/v1/me", { method: "OPTIONS", headers: { Origin: "tauri://localhost" } }));
     expect(dev.headers.get("Access-Control-Allow-Headers")).toContain("X-Devi-Dev-User");
+  });
+
+  test("SSE a través de createApp conserva el stream y añade CORS", async () => {
+    const res = await make().fetch(
+      new Request(`http://127.0.0.1/api/v1/events/user?v=${API_VERSION}&devUser=maria@dev`, { headers: { Origin: "tauri://localhost" } }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("text/event-stream");
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("tauri://localhost");
+    const reader = res.body!.getReader();
+    const chunk = await reader.read();
+    expect(new TextDecoder().decode(chunk.value)).toContain("event: hello");
+    await reader.cancel();
+  });
+
+  test("respuesta con cabeceras inmutables: se reenvuelve y lleva CORS", async () => {
+    const res = await make().fetch(
+      new Request(`http://127.0.0.1/api/v1/events/user?v=${API_VERSION}&devUser=maria@dev&kind=redirect`, { headers: { Origin: "tauri://localhost" } }),
+    );
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("tauri://localhost");
+  });
+
+  test("400 de Zod incluye la ruta del campo", async () => {
+    const res = await call(make(), "POST", "/api/v1/requests/q1/forward", { "X-Devi-Dev-User": "maria@dev" });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(/^n: /);
   });
 
   test("los módulos ven ctx.config", () => {

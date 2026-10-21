@@ -33,6 +33,17 @@ describe("migraciones", () => {
     expect(db.query("SELECT name FROM sqlite_master WHERE name = 'ok'").get()).toBeNull();
   });
 
+  test("versiones duplicadas → error y no aplica nada", () => {
+    const db = openDb();
+    expect(() =>
+      migrate(db, "d", [
+        { version: 1, sql: "CREATE TABLE dup (a TEXT)" },
+        { version: 1, sql: "CREATE TABLE dup2 (a TEXT)" },
+      ]),
+    ).toThrow(/duplicad/);
+    expect(db.query("SELECT name FROM sqlite_master WHERE name = 'dup'").get()).toBeNull();
+  });
+
   test("foreign keys activadas", () => {
     const db = openDb();
     expect(db.query("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
