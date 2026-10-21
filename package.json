@@ -9,7 +9,7 @@
     "hub": "bun src/hub/server.ts",
     "server": "bun packages/server/src/main.ts",
     "test": "bun test",
-    "typecheck": "bunx tsc -p packages/protocol && bunx tsc -p packages/server",
+    "typecheck": "bunx tsc -p packages/protocol && bunx tsc -p packages/server && bunx tsc -p packages/client",
     "smoke": "bun scripts/smoke-mcp.ts"
   },
   "dependencies": {
