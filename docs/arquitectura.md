@@ -45,7 +45,7 @@ Fuera de alcance: tiendas de apps, clientes móviles, integraciones distintas de
 | Subcomando | Qué hace |
 |---|---|
 | `devi server` | Arranca el servidor (como servicio del SO o como sidecar de la app). |
-| `devi mcp` | Servidor MCP por stdio y canal de Claude Code. Herramientas de lectura: `whoami`, `list_teammates`, `get_conversation`, `list_pending`, `get_request`; de envío: `send_request`, `respond_to_request`. Prompts: `pedir`, `pendientes`, `equipo`. |
+| `devi mcp` | Servidor MCP por stdio y canal de Claude Code. Herramientas de lectura: `whoami`, `list_teammates`, `get_conversation`, `list_pending`, `get_request`, `search_knowledge`; de envío: `send_request`, `respond_to_request` (con `share_with_team` para guardar la respuesta en la base del equipo). Prompts: `pedir`, `pendientes`, `equipo`. |
 | `devi hook <start\|working\|idle>` | Lo llaman los hooks: marca la sesión como trabajando o libre y, sin canal, entrega lo pendiente (ver más abajo). Nunca falla ni bloquea. |
 | `devi claude [--session <nombre>] [-- args]` | Lanza `claude` con el canal de Devi cargado. |
 | `devi doctor` | Diagnóstico: Tailscale, servidor, login, plugin y política de canales. |
@@ -94,13 +94,15 @@ Todas las rutas están declaradas en `API` (`packages/protocol/src/api.ts`) con 
 | `POST /requests/:id/forward` · `/accept` · `/reject` | destinatario, humana | Decisiones de quien recibe. |
 | `POST /requests/:id/response/accept` · `/response/forward` | remitente, humana | Decisiones sobre la respuesta. |
 | `POST /requests/:id/resend` · `/ignore` | remitente, humana | Tras un plazo vencido. |
+| `GET /knowledge?q=&limit=` | miembro | Base del equipo: búsqueda de texto completo (sin `q`, las más recientes; 10 por defecto, hasta 50). Lo usa `search_knowledge`. |
+| `DELETE /knowledge/:id` | quien respondió o admin, humana | Retirar una entrada de la base del equipo. |
 | `GET /files/:id` | remitente o destinatario | Descargar un archivo. |
 | `GET /events/user` · `GET /events/session/:id` | miembro / dueño | SSE de la app y del MCP. |
 | `POST /debug/push` | admin | Solo en modo dev (404 en producción). |
 
 ### Eventos
 
-**SSE de usuario** (app): `draft.awaiting`, `draft.discarded`, `request.incoming`, `request.updated`, `response.incoming`, `request.timed_out`, `conversation.updated` (`{ memberId }`: cambió una solicitud o borrador con esa persona; llega a las dos partes), `team.updated`, `sessions.updated` y, solo a admins, `audit.alert`. Al conectar, el servidor reenvía las tarjetas abiertas.
+**SSE de usuario** (app): `draft.awaiting`, `draft.discarded`, `request.incoming`, `request.updated`, `response.incoming`, `request.timed_out`, `conversation.updated` (`{ memberId }`: cambió una solicitud o borrador con esa persona; llega a las dos partes), `team.updated`, `sessions.updated`, `knowledge.saved` / `knowledge.refused` (a quien respondió: su respuesta entró en la base del equipo o no se publicó por posibles secretos) y, solo a admins, `audit.alert`. Al conectar, el servidor reenvía las tarjetas abiertas.
 
 **SSE de sesión** (MCP → canal): un único evento `deliver` con `kind` = `request`, `response`, `draft_authorized`, `draft_discarded` o `debug`, el texto para el agente y los atributos del canal (`request_id`, `draft_id`, rutas de archivos…).
 
@@ -129,8 +131,9 @@ Módulos, en el orden en que se registran (`MODULES` en `packages/server/src/mai
 | `sessions` | Sesiones de Claude Code, estado trabajando/libre, presencia y bandeja de entregas. |
 | `files` | Validación, almacenamiento, descarga y retención de archivos. |
 | `requests` | Borradores, solicitudes, respuestas y plazos. |
+| `knowledge` | Base de conocimiento del equipo: indexa con FTS5 las respuestas compartidas, búsqueda y retirada. |
 
-Los módulos no se importan entre sí: se comunican por el **bus** (`draft.discarded`, `request.closed`, `session.closed`) y por **servicios** que se ofrecen en `ctx.services` (`team`, `settings`, `sessions`, `files`, `audit`).
+Los módulos no se importan entre sí: se comunican por el **bus** (`draft.discarded`, `request.closed`, `session.closed`, `request.shared`) y por **servicios** que se ofrecen en `ctx.services` (`team`, `settings`, `sessions`, `files`, `audit`).
 
 ## Modelo de datos
 
@@ -148,18 +151,21 @@ sessions       id, member_id, name, cwd, parent_pid, status (idle|working),
 session_inbox  id, session_id, kind, content, meta, created_at, acked_at
 drafts         id, kind (request|response), author_member, author_session, author_session_name,
                to_member (request), request_id (response), message,
-               status (awaiting|authorized|discarded), created_at, expires_at, context
+               status (awaiting|authorized|discarded), created_at, expires_at, context, share_with_team
 requests       id, origin (session|app), from_member, from_session, from_session_name, to_member, message,
                status, forwarded_session, outcome, outcome_text, created_at, sent_at, deadline,
                responded_at, context
 files          id, draft_id, request_id, direction (request|response), name, size, sha256, path,
                author_member, peer_member, created_at, released_at, deleted_at
 audit_log      id, at, actor_member_id, actor_login, action, target_type, target_id, details
+knowledge_entries  id, request_id (único), question, answer, asked_by, answered_by, created_at
+knowledge_fts      entry_id, question, answer   -- FTS5, sin acentos ni mayúsculas
 ```
 
 - Los **borradores** son una tabla aparte: una solicitud de un agente solo existe en `requests` cuando su borrador se autoriza. Las escritas en la app (`origin = app`) se crean directamente, con `from_session` y `from_session_name` vacíos y sus archivos ya unidos a la solicitud (`draft_id` vacío).
 - **Permisos** (`packages/protocol/src/perms.ts`): `requests.send`, `files.send` y `team.admin`. Los de una persona son la unión de los de sus roles. Siempre debe quedar al menos un admin.
 - **Ajustes por defecto**: plazo de una solicitud 1 h, 15 min para autorizar un borrador, archivos 7 días tras cerrarse la solicitud y 30 días como máximo, dominios permitidos vacíos.
+- **Base del equipo**: quien responde decide si guarda la respuesta («Guardar en la base del equipo» en la app al aceptar con nota, o `share_with_team` en `respond_to_request`; queda en el borrador como `share_with_team`). Al enviarse, `requests` emite `request.shared` y `knowledge` lo indexa: pregunta (el mensaje original), respuesta, quién preguntó, quién respondió y cuándo, nunca los archivos. Si el detector de secretos salta en la pregunta o en la respuesta, no se publica y se avisa a quien respondió. Al agente le llega encuadrada como cualquier texto de compañeros (`DEVI-UNTRUSTED`).
 - **Auditoría**: solo se añade (un trigger impide modificar filas) y se borra a los 365 días. De los mensajes guarda su SHA-256, nunca el texto.
 
 ## Ciclo de vida
