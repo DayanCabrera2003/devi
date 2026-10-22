@@ -56,6 +56,9 @@ export interface FilesService {
   forDraft(draftId: string): FileMeta[];
   forRequest(requestId: string): { files: FileMeta[]; responseFiles: FileMeta[] };
   attachToRequest(draftId: string, requestId: string): void;
+  // Archivos de la solicitud (dirección "request") leídos del disco, listos para write + recordForRequest en
+  // otra solicitud (pedírsela a otra persona). Los que ya no están en el servidor se omiten.
+  readForCopy(requestId: string): ValidFile[];
 }
 
 // Una entrada del registro de auditoría. actorMemberId null/ausente = el servidor (caducidades, plazos).

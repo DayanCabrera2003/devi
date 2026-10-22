@@ -78,6 +78,16 @@ export const requestsMigrations: Migration[] = [
       ALTER TABLE drafts ADD COLUMN request_kind TEXT NOT NULL DEFAULT 'request' CHECK (request_kind IN ('request', 'handoff'));
     `,
   },
+  {
+    // Escalado: escalated_at = cuándo se avisó al autor (una sola vez). Al pedírsela a otra persona, la original
+    // queda closed con closed_note ("Reenviada a …") y replaced_by = id de la solicitud nueva.
+    version: 6,
+    sql: `
+      ALTER TABLE requests ADD COLUMN escalated_at INTEGER;
+      ALTER TABLE requests ADD COLUMN closed_note TEXT;
+      ALTER TABLE requests ADD COLUMN replaced_by TEXT;
+    `,
+  },
 ];
 
 // Lee el JSON guardado; si no es válido (corrupto o de otra versión), como si no hubiera contexto.
@@ -128,6 +138,10 @@ export type RequestRecord = {
   createdAt: number;
   sentAt: number;
   deadline: number;
+  // Escalado y reasignación (opcionales al insertar; al leer, null si no hay).
+  escalatedAt?: number | null;
+  closedNote?: string | null;
+  replacedBy?: string | null;
 };
 
 const DRAFT_COLS = `id, kind, author_member AS authorMemberId, author_session AS authorSessionId,
@@ -136,7 +150,8 @@ const DRAFT_COLS = `id, kind, author_member AS authorMemberId, author_session AS
 
 const REQUEST_COLS = `id, from_member AS fromMemberId, from_session AS fromSessionId, from_session_name AS fromSessionName,
   to_member AS toMemberId, message, status, forwarded_session AS forwardedSessionId, outcome, outcome_text AS outcomeText,
-  created_at AS createdAt, sent_at AS sentAt, deadline, origin, kind`;
+  created_at AS createdAt, sent_at AS sentAt, deadline, origin, kind, escalated_at AS escalatedAt, closed_note AS closedNote,
+  replaced_by AS replacedBy`;
 
 // Solicitudes entre $a y $b, en cualquier sentido.
 const PAIR = `((from_member = $a AND to_member = $b) OR (from_member = $b AND to_member = $a))`;
@@ -234,13 +249,27 @@ export class RequestsStore {
       .query(
         `UPDATE requests SET status = $status, forwarded_session = $forwardedSessionId, outcome = $outcome,
                              outcome_text = $outcomeText, sent_at = $sentAt, deadline = $deadline,
+                             closed_note = $closedNote, replaced_by = $replacedBy,
                              responded_at = CASE WHEN responded_at IS NULL AND $outcome IS NOT NULL THEN $at ELSE responded_at END
          WHERE id = $id`,
       )
       .run({
         id: r.id, status: r.status, forwardedSessionId: r.forwardedSessionId, outcome: r.outcome,
         outcomeText: r.outcomeText, sentAt: r.sentAt, deadline: r.deadline, at: this.now(),
+        closedNote: r.closedNote ?? null, replacedBy: r.replacedBy ?? null,
       });
+  }
+
+  // Marca el aviso de escalado solo si aún no se dio (true si lo marcó esta llamada): una vez por solicitud.
+  markEscalated(id: string, at: number): boolean {
+    return this.db.query("UPDATE requests SET escalated_at = $at WHERE id = $id AND escalated_at IS NULL").run({ id, at }).changes === 1;
+  }
+
+  // Solicitudes pending a las que aún no se ha avisado del escalado (para reprogramar al arrancar).
+  unescalatedPending(): RequestRecord[] {
+    return this.db
+      .query(`SELECT ${REQUEST_COLS} FROM requests WHERE status = 'pending' AND escalated_at IS NULL ORDER BY created_at`)
+      .all() as RequestRecord[];
   }
 
   // Solicitudes con temporizador posible (pendientes o reenviadas).

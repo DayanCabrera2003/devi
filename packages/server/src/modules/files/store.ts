@@ -86,6 +86,10 @@ export class FilesStore {
     return rows.map(toMeta);
   }
 
+  recordsOfRequest(requestId: string): FileRecord[] {
+    return this.db.query(`SELECT ${COLS} FROM files WHERE request_id = $requestId ORDER BY rowid`).all({ requestId }) as FileRecord[];
+  }
+
   attach(draftId: string, requestId: string): void {
     this.db.query("UPDATE files SET request_id = $requestId WHERE draft_id = $draftId").run({ draftId, requestId });
   }

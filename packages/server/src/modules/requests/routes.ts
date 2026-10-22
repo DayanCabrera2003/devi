@@ -61,6 +61,10 @@ export function registerRequestRoutes(r: Router, ctx: ModuleContext, requests: R
   });
   r.on(API.resendRequest, ({ params, access }) => json(requests.resend(access, params.id!)));
   r.on(API.ignoreRequest, ({ params, access }) => json(requests.ignore(access, params.id!)));
+  r.on(API.reassignRequest, async ({ request, params, access }) => {
+    const { to } = await readBody(request, API.reassignRequest.body);
+    return json(requests.reassign(access, params.id!, to));
+  });
 
   // SSE de la app. Al (re)conectar recibe las tarjetas que siguen abiertas.
   r.on(API.userEvents, ({ request, access }) =>

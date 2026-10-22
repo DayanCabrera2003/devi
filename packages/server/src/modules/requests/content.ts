@@ -93,3 +93,16 @@ export function discardedContent(
   if (reason === "replaced") return `El borrador ${what} se sustituyó por uno más reciente. No se envió nada.`;
   return `Tu usuario descartó el borrador ${what}. No se envió nada.`;
 }
+
+// Aviso de escalado a la sesión autora: su solicitud sigue sin respuesta. El servidor no elige a nadie: el agente
+// propone a otra persona y el usuario decide. El mensaje es del propio usuario, pero se neutraliza igual.
+export function escalationContent(r: { id: string; toName: string; minutes: number; message: string }): string {
+  const to = neutralizeInline(r.toName, 100);
+  return (
+    `${to} lleva ${r.minutes} min sin responder a tu solicitud (request_id="${r.id}"): no la ha aceptado, ` +
+    `rechazado ni enviado a una de sus sesiones.\n\nTu solicitud era: "${neutralize(r.message)}"\n\n` +
+    `(Díselo a tu usuario. Si quiere pedírselo a otra persona, mira list_teammates y propón a quien encaje por ` +
+    `capacidades y esté conectado, con el MENOR PRIVILEGIO NECESARIO; decide él. Lo más directo es el botón ` +
+    `"Pedírselo a otra persona" de la app de Devi: lleva el mismo mensaje y archivos y cierra la original.)`
+  );
+}

@@ -9,7 +9,7 @@ import { HttpError } from "../../core/http";
 import type { ModuleContext } from "../../core/module";
 import { deliverToSession, pushUser } from "../../core/push";
 import type { AuditDetails } from "../../core/services";
-import { authorizedContent, type DiscardReason, discardedContent, handoffContent, requestContent, responseContent } from "./content";
+import { authorizedContent, type DiscardReason, discardedContent, escalationContent, handoffContent, requestContent, responseContent } from "./content";
 import type { DraftRecord, RequestRecord, RequestsStore } from "./store";
 import { KeyedTimers } from "./timers";
 
@@ -17,6 +17,7 @@ type DraftMeta = z.output<typeof CreateDraftMeta>;
 
 const draftKey = (id: string) => `draft:${id}`;
 const requestKey = (id: string) => `request:${id}`;
+const escalationKey = (id: string) => `escalation:${id}`;
 const RESPONSE_OPEN = ["accepted", "rejected", "answered"] as const;
 const isResponseOpen = (s: RequestRecord["status"]) => (RESPONSE_OPEN as readonly string[]).includes(s);
 
@@ -446,6 +447,46 @@ export class RequestsManager {
     return this.close(r);
   }
 
+  // Pedírselo a otra persona (pending o timed_out): solicitud nueva para `to` con el mismo mensaje, origen y
+  // archivos (copiados: los de la original se liberan al cerrarla), y la original queda closed con una nota.
+  // Lo decide una persona en la app; el servidor nunca elige a quién.
+  reassign(access: Access, id: string, to: string): { request: DeviRequest; original: DeviRequest } {
+    const r = this.sent(access, id);
+    if (r.status !== "pending" && r.status !== "timed_out") throw conflict(`la solicitud ya está ${r.status}`);
+    const toId = this.recipientFor(access, to);
+    if (toId === r.toMemberId) throw new HttpError(400, `la solicitud ya es para ${this.team.nameOf(toId)}`, { code: "invalid" });
+    if (this.files.forRequest(r.id).files.length > 0 && !access.perms.has("files.send")) {
+      throw new HttpError(403, 'Te falta el permiso "files.send"', { code: "missing_perm", perm: "files.send" });
+    }
+    const now = this.ctx.now();
+    const next: RequestRecord = {
+      ...r, id: this.newRequestId(), toMemberId: toId, status: "pending", forwardedSessionId: null, outcome: null,
+      outcomeText: null, createdAt: now, sentAt: now, deadline: now + this.settings.requestTimeoutMs,
+      escalatedAt: null, closedNote: null, replacedBy: null,
+    };
+    const toName = this.team.nameOf(toId);
+    const written = this.files.write(this.files.readForCopy(r.id));
+    try {
+      this.store.transaction(() => {
+        this.store.insertRequest(next);
+        this.files.recordForRequest({ requestId: next.id, direction: "request", authorMemberId: r.fromMemberId, peerMemberId: toId, written });
+        r.status = "closed";
+        r.closedNote = `Reenviada a ${toName}`;
+        r.replacedBy = next.id;
+        this.store.saveRequest(r);
+      });
+    } catch (e) {
+      this.files.removeWritten(written);
+      throw e;
+    }
+    this.audit("request.reassigned", access.memberId, "request", r.id, { from: r.toMemberId, to: toId, toName, requestId: next.id });
+    this.schedule(next);
+    const view = this.requestView(next);
+    this.push(toId, { type: "request.incoming", request: view });
+    this.push(r.fromMemberId, { type: "request.updated", request: view });
+    return { request: view, original: this.close(r) };
+  }
+
   // ---- tiempo ---------------------------------------------------------------
 
   // Nadie actuó a tiempo. En pausa mientras haya un borrador de respuesta esperando.
@@ -464,6 +505,55 @@ export class RequestsManager {
 
   private schedule(r: RequestRecord): void {
     this.timers.at(requestKey(r.id), r.deadline, () => this.onDeadline(r.id));
+    this.scheduleEscalation(r);
+  }
+
+  // ---- escalado ---------------------------------------------------------------
+
+  // Cuándo toca avisar al autor: sentAt + escalateAfterMs, si está activado y cae antes del timeout.
+  private escalationDue(r: RequestRecord): number | null {
+    const after = this.settings.escalateAfterMs;
+    if (after === null || r.status !== "pending" || r.escalatedAt != null) return null;
+    const due = r.sentAt + after;
+    return due < r.deadline ? due : null;
+  }
+
+  // Si ya venció (p. ej. el servidor estuvo apagado), avisa ahora mismo; si no, programa el aviso.
+  private scheduleEscalation(r: RequestRecord): void {
+    const due = this.escalationDue(r);
+    if (due === null) return;
+    if (due <= this.ctx.now()) this.onEscalate(r.id);
+    else this.timers.at(escalationKey(r.id), due, () => this.onEscalate(r.id));
+  }
+
+  // Sigue pending (nadie la aceptó, rechazó ni envió a una sesión): aviso a la sesión autora (si existe; queda en
+  // su bandeja para los hooks) y evento a su app. markEscalated garantiza que sea una sola vez por solicitud.
+  private onEscalate(id: string): void {
+    this.timers.cancel(escalationKey(id));
+    const r = this.store.getRequest(id);
+    if (!r) return;
+    const due = this.escalationDue(r);
+    if (due === null) return;
+    const now = this.ctx.now();
+    if (now < due) return void this.timers.at(escalationKey(id), due, () => this.onEscalate(id));
+    const toName = this.team.nameOf(r.toMemberId);
+    const delivery: SessionDelivery = {
+      kind: "escalation",
+      content: escalationContent({ id: r.id, toName, minutes: Math.round((now - r.sentAt) / 60_000), message: r.message }),
+      meta: { request_id: r.id, to: r.toMemberId, to_name: toName },
+    };
+    const sessionId = r.origin === "app" ? "" : r.fromSessionId;
+    let staged: SessionDelivery | null = null;
+    let marked = false;
+    this.store.transaction(() => {
+      marked = this.store.markEscalated(r.id, now);
+      if (marked && sessionId && this.sessions.get(sessionId)) staged = this.sessions.enqueue(sessionId, delivery);
+    });
+    if (!marked) return;
+    r.escalatedAt = now;
+    this.audit("request.escalated", null, "request", r.id, { from: r.fromMemberId, to: r.toMemberId });
+    if (staged) this.deliver(sessionId, staged);
+    this.push(r.fromMemberId, { type: "request.escalated", request: this.requestView(r) });
   }
 
   // Al arrancar: caduca o reprograma borradores y reprograma (o vence) plazos.
@@ -564,7 +654,8 @@ export class RequestsManager {
       case "request.incoming":
       case "request.updated":
       case "response.incoming":
-      case "request.timed_out": {
+      case "request.timed_out":
+      case "request.escalated": {
         const r = event.request;
         return r.fromMemberId === memberId ? r.toMemberId : r.fromMemberId;
       }
@@ -660,6 +751,9 @@ export class RequestsManager {
       toMemberId: r.toMemberId, message: r.message, status: r.status, forwardedSessionId: r.forwardedSessionId ?? undefined,
       outcome: r.outcome ?? undefined, outcomeText: r.outcomeText ?? undefined, files, responseFiles,
       createdAt: r.createdAt, sentAt: r.sentAt, deadline: r.deadline, ...withContext(this.store.requestContext(r.id)),
+      ...(r.escalatedAt != null ? { escalatedAt: r.escalatedAt } : {}),
+      ...(r.closedNote != null ? { closedNote: r.closedNote } : {}),
+      ...(r.replacedBy != null ? { replacedBy: r.replacedBy } : {}),
     };
   }
 }

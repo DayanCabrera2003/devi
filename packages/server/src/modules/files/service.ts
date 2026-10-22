@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { FileMeta, Settings } from "@devi/protocol";
 import { HttpError } from "../../core/http";
@@ -100,6 +100,18 @@ export class FileManager implements FilesService {
 
   attachToRequest(draftId: string, requestId: string): void {
     this.repo.attach(draftId, requestId);
+  }
+
+  // Copia propia de los bytes (no la misma ruta): la original se libera y se borra con su solicitud.
+  readForCopy(requestId: string): ValidFile[] {
+    const out: ValidFile[] = [];
+    for (const f of this.repo.recordsOfRequest(requestId)) {
+      if (f.direction !== "request" || f.deletedAt !== null) continue;
+      const absPath = join(this.dataDir, f.path);
+      if (!existsSync(absPath)) continue;
+      out.push({ name: f.name, bytes: new Uint8Array(readFileSync(absPath)), size: f.size, sha256: f.sha256 });
+    }
+    return out;
   }
 
   // Solo las partes: el autor siempre; la otra parte cuando el borrador ya se autorizó.
