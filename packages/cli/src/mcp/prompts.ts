@@ -44,7 +44,8 @@ export function getPrompt(name: string, args: Record<string, string | undefined>
         `${what}\n\n` +
           'Sigue la skill "devi":\n' +
           "1. Aclara la necesidad: qué hace falta exactamente, en qué repo, rama, PR, entorno o recurso, qué se ha probado y la urgencia.\n" +
-          "2. Usa whoami por si ya puedo hacerlo yo, y list_teammates para ver roles y capacidades. Recomienda a la persona de " +
+          "2. Busca primero en la base del equipo con search_knowledge: si ya está resuelto, enséñamelo citando quién lo explicó y cuándo. " +
+          "Usa whoami por si ya puedo hacerlo yo, y list_teammates para ver roles y capacidades. Recomienda a la persona de " +
           "menor privilegio cuya capacidad cubre justo la necesidad; si varias encajan, dame las opciones con el porqué y tu recomendación.\n" +
           "3. Usa get_conversation con esa persona para no duplicar algo que ya esté abierto.\n" +
           "4. Redacta el mensaje autocontenido (y qué archivos del proyecto adjuntarías y por qué, sin secretos) y enséñamelo.\n" +

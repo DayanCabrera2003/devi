@@ -61,3 +61,11 @@ test("núcleo: identidad, herramientas, menor privilegio y la skill con la guía
   expect(text).toMatch(/skill "devi"/);
   for (const k of ["request", "response", "draft_authorized", "draft_discarded"]) expect(text).toContain(`kind="${k}"`);
 });
+
+test("base del equipo: buscar antes de recomendar a alguien, citar y proponer guardar al responder", () => {
+  const text = instructions("ana");
+  expect(text).toContain("search_knowledge");
+  expect(text).toMatch(/ANTES de recomendar/);
+  expect(text).toMatch(/explicó esto el/);
+  expect(text).toContain("share_with_team");
+});

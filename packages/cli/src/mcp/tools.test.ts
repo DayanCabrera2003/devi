@@ -34,15 +34,16 @@ const deps = (client: ReturnType<typeof fakeClient>["client"] | null, sessionId:
   approval: () => approval,
 });
 
-test("herramientas: cinco de lectura y dos de envío, con files opcional", () => {
+test("herramientas: seis de lectura y dos de envío, con files opcional", () => {
   expect(TOOLS.map((t) => t.name)).toEqual([
-    "whoami", "list_teammates", "get_conversation", "list_pending", "get_request", "send_request", "respond_to_request",
+    "whoami", "list_teammates", "get_conversation", "list_pending", "get_request", "search_knowledge", "send_request", "respond_to_request",
   ]);
   const byName = Object.fromEntries(TOOLS.map((t) => [t.name, t]));
   expect(byName.send_request!.inputSchema.required).toEqual(["to", "message"]);
   expect(byName.respond_to_request!.inputSchema.required).toEqual(["request_id", "message"]);
   expect(byName.get_conversation!.inputSchema.required).toEqual(["member"]);
   expect(byName.get_request!.inputSchema.required).toEqual(["request_id"]);
+  expect(byName.search_knowledge!.inputSchema.required).toEqual(["query"]);
 });
 
 test("las de lectura van marcadas como solo lectura y sin aviso; las de envío, al revés", () => {
@@ -136,6 +137,40 @@ test("respond_to_request crea un borrador de respuesta", async () => {
   expect(r.isError).toBe(false);
   expect(f.drafts[0]!.meta).toEqual({ kind: "response", sessionId: "s1", requestId: "q1", message: "Lo reviso ahora", approval: "app" });
   expect(r.content[0]!.text).toStartWith("Respuesta preparada");
+});
+
+describe("respond_to_request: guardar en la base del equipo", () => {
+  test("share_with_team: manda shareWithTeam y el resultado lo dice", async () => {
+    const f = fakeClient({ createDraft: DRAFT });
+    const r = await callTool("respond_to_request", { request_id: "q1", message: "Con make deploy", share_with_team: true }, deps(f.client));
+    expect(r.isError).toBe(false);
+    expect(f.drafts[0]!.meta).toMatchObject({ kind: "response", requestId: "q1", shareWithTeam: true });
+    expect(r.content[0]!.text).toMatch(/base del equipo/);
+  });
+
+  test("sin la opción no se manda nada nuevo (compatible con servidores anteriores)", async () => {
+    const f = fakeClient({ createDraft: DRAFT });
+    await callTool("respond_to_request", { request_id: "q1", message: "ok", share_with_team: false }, deps(f.client));
+    expect(f.drafts[0]!.meta).not.toHaveProperty("shareWithTeam");
+  });
+
+  test("con posibles secretos confirmados (allow_secrets) no se comparte, y se avisa", async () => {
+    const f = fakeClient({ createDraft: DRAFT });
+    const msg = "Usa ghp_abcdefghijklmnopqrstuvwxyz0123456789AB";
+    const r = await callTool("respond_to_request", { request_id: "q1", message: msg, share_with_team: true, allow_secrets: true }, deps(f.client));
+    expect(r.isError).toBe(false);
+    expect(f.drafts[0]!.meta).not.toHaveProperty("shareWithTeam");
+    expect(r.content[0]!.text).toMatch(/no se guardará en la base del equipo/i);
+  });
+
+  test("el esquema la ofrece solo en respond_to_request y explica que decide el usuario", () => {
+    const respond = TOOLS.find((t) => t.name === "respond_to_request")!;
+    const props = respond.inputSchema.properties as Record<string, { type: string; description: string }>;
+    expect(props.share_with_team!.type).toBe("boolean");
+    expect(props.share_with_team!.description).toMatch(/usuario/);
+    const send = TOOLS.find((t) => t.name === "send_request")!;
+    expect(send.inputSchema.properties).not.toHaveProperty("share_with_team");
+  });
 });
 
 test("sin configuración, todas las herramientas lo explican", async () => {

@@ -6,6 +6,7 @@ import { readLocalFiles } from "../files";
 import { type ContextResult, contextNote, contextScanText, outgoingContext } from "./context-arg";
 import { readableError } from "./errors";
 import { collectGitContext } from "./git-context";
+import { searchKnowledge } from "./knowledge-tool";
 import { ToolInputError, getConversation, getRequest, listPending, listTeammates, whoami } from "./read-tools";
 
 export type ToolResult = { content: { type: "text"; text: string }[]; isError: boolean };
@@ -45,6 +46,8 @@ export async function callTool(name: string, args: Record<string, unknown>, deps
         return ok(await listPending(readDeps(client, deps)));
       case "get_request":
         return ok(await getRequest(readDeps(client, deps), args));
+      case "search_knowledge":
+        return ok(await searchKnowledge(client, args));
       case "send_request":
       case "respond_to_request": {
         const message = str(args.message);
@@ -71,6 +74,9 @@ export async function callTool(name: string, args: Record<string, unknown>, deps
           if (mismatch) return fail(mismatch);
         }
         const outgoing = secrets.length > 0 ? `${SECRETS_FLAG}\n\n${message}` : message;
+        // Guardar en la base del equipo: nunca con posibles secretos (el servidor también lo comprueba).
+        const shareAsked = name === "respond_to_request" && args.share_with_team === true;
+        const share = shareAsked && secrets.length === 0;
         const injection = injectionWarnings(message, files.files, context);
         // Si lo que sale parece una inyección, no se envía directo aunque se aprobara en el chat: queda en la app.
         const asked = deps.approval();
@@ -78,11 +84,12 @@ export async function callTool(name: string, args: Record<string, unknown>, deps
         const draft =
           name === "send_request"
             ? await client.createDraft({ kind: "request", sessionId, to: target, message: outgoing, approval, ...(context ? { context } : {}) }, files.files)
-            : await client.createDraft({ kind: "response", sessionId, requestId: target, message: outgoing, approval }, files.files);
+            : await client.createDraft({ kind: "response", sessionId, requestId: target, message: outgoing, approval, ...(share ? { shareWithTeam: true } : {}) }, files.files);
         const adj = files.files.length > 0 ? ` con ${files.files.length} archivo(s) (${files.files.map((f) => f.name).join(", ")})` : "";
         const what = name === "send_request" ? "Solicitud" : "Respuesta";
         const secretsNote =
-          (secrets.length > 0 ? `\n\nAviso: incluye posibles secretos (confirmado por el usuario); la app lo marcará.` : "") + contextNote(context);
+          (secrets.length > 0 ? `\n\nAviso: incluye posibles secretos (confirmado por el usuario); la app lo marcará.` : "") + contextNote(context) +
+          (share ? `\n\n${SHARE_NOTE}` : shareAsked ? `\n\n${NO_SHARE_NOTE}` : "");
         if (draft.approval === "chat" && draft.sent) return ok(sentText(what, adj, draft.sent) + secretsNote + injection);
         const why =
           asked === "chat" && injection
@@ -116,6 +123,11 @@ const SELF_SEND =
   "Ese id eres tú: todas tus sesiones de Claude Code (en este u otro equipo) son el mismo miembro de Devi, así que no " +
   "puedes enviarte una solicitud. Si quieres pasar algo a otra de tus sesiones, hazlo desde la app de Devi: al reenviar " +
   "una solicitud o una respuesta, el selector de sesiones muestra todas las tuyas. No se envió nada.";
+
+const SHARE_NOTE =
+  "Al enviarse se guardará en la base del equipo (pregunta y respuesta, sin archivos). Si Devi detecta posibles secretos " +
+  "en la pregunta original, no se publica y la app de Devi avisa al usuario.";
+const NO_SHARE_NOTE = "No se guardará en la base del equipo: incluye posibles secretos.";
 
 type Outgoing = { name: string; content: string }[];
 
