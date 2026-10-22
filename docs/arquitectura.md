@@ -45,7 +45,7 @@ Fuera de alcance: tiendas de apps, clientes móviles, integraciones distintas de
 | Subcomando | Qué hace |
 |---|---|
 | `devi server` | Arranca el servidor (como servicio del SO o como sidecar de la app). |
-| `devi mcp` | Servidor MCP por stdio y canal de Claude Code. Herramientas: `list_teammates`, `send_request`, `respond_to_request`. |
+| `devi mcp` | Servidor MCP por stdio y canal de Claude Code. Herramientas de lectura: `whoami`, `list_teammates`, `get_conversation`, `list_pending`, `get_request`; de envío: `send_request`, `respond_to_request`. Prompts: `pedir`, `pendientes`, `equipo`. |
 | `devi hook <start\|working\|idle>` | Lo llaman los hooks: marca la sesión como trabajando o libre y, sin canal, entrega lo pendiente (ver más abajo). Nunca falla ni bloquea. |
 | `devi claude [--session <nombre>] [-- args]` | Lanza `claude` con el canal de Devi cargado. |
 | `devi doctor` | Diagnóstico: Tailscale, servidor, login, plugin y política de canales. |
@@ -54,7 +54,9 @@ Fuera de alcance: tiendas de apps, clientes móviles, integraciones distintas de
 
 La configuración del cliente (URL del servidor) vive en `devi/config.json` del directorio de configuración del SO; la escribe la app.
 
-**Emparejamiento de sesiones.** El MCP y los hooks son hijos directos del mismo proceso de Claude Code, así que comparten el PID del padre. El MCP registra la sesión con ese PID y los hooks se emparejan con ella por PID y, si no, por `claude_session_id`.
+**Plugin.** `plugin/` es la copia de referencia que genera `scripts/gen-plugin.ts` (la instalación real la escribe `devi install-integration` con la ruta absoluta del binario): el MCP, el canal, los hooks `SessionStart`, `UserPromptSubmit` y `Stop`, y la skill `devi` (`skills/devi/SKILL.md`, guía completa para el agente; su fuente es `packages/cli/src/skill.md`). Las instrucciones del MCP son solo el núcleo, por debajo del corte de 4.096 caracteres de Claude Code.
+
+**Emparejamiento de sesiones.** Ver [Identidad y sesiones](#identidad-y-sesiones).
 
 ### App de escritorio
 
@@ -86,6 +88,8 @@ Todas las rutas están declaradas en `API` (`packages/protocol/src/api.ts`) con 
 | `POST /drafts/:id/authorize` · `/discard` | autor, humana | Autorizar o descartar un borrador. |
 | `POST /requests` | `requests.send` (+ `files.send` con archivos), humana | Solicitud escrita en la app (multipart: `meta` = `{ to, message }` + archivos). Sale ya en `pending`, sin borrador; mismos límites de ritmo que los borradores. |
 | `GET /conversations` | miembro | Una fila por compañero activo: última actividad (fecha, 120 caracteres, si fue mía) y cuántas cosas esperan mi acción. |
+| `GET /pending` | miembro | Lo que espera a quien llama (solicitudes para mí, respuestas sin aceptar, caducadas, borradores por autorizar) y sus solicitudes abiertas. Lo usa `list_pending`. |
+| `GET /requests/:id` | remitente o destinatario | Una solicitud (404 para cualquier otro). Lo usa `get_request`. |
 | `GET /conversations/:memberId?before=&limit=` | miembro (solo las suyas) | Solicitudes entre quien llama y esa persona, en los dos sentidos, de la más nueva a la más vieja (30 por defecto, hasta 100). |
 | `POST /requests/:id/forward` · `/accept` · `/reject` | destinatario, humana | Decisiones de quien recibe. |
 | `POST /requests/:id/response/accept` · `/response/forward` | remitente, humana | Decisiones sobre la respuesta. |
@@ -140,7 +144,7 @@ role_perms     role_id, perm                      -- permisos de Devi
 member_roles   member_id, role_id
 settings       key, value (JSON)                  -- solo los que el admin cambia
 sessions       id, member_id, name, cwd, parent_pid, status (idle|working),
-               claude_session_id, last_seen, channel
+               claude_session_id, last_seen, channel, machine, instance_id
 session_inbox  id, session_id, kind, content, meta, created_at, acked_at
 drafts         id, kind (request|response), author_member, author_session, author_session_name,
                to_member (request), request_id (response), message,
@@ -208,6 +212,31 @@ Claude Code solo carga un canal si la sesión se lanzó con un flag de canal. De
 **Sin canal** (`claude` a secas, desde un IDE, u organizaciones sin canales). Cada entrega `request`, `response`, `draft_authorized` o `draft_discarded` se guarda en `session_inbox` en la misma transacción que el cambio de estado que la provoca. Los hooks `start` (SessionStart) y `working` (UserPromptSubmit) piden la bandeja, descargan los archivos con el mismo código que el MCP, devuelven el texto como `additionalContext` del hook (cada entrega en `<devi kind="…" request_id="…">`, recortado por debajo del límite de Claude Code) y confirman. Llega cuando la persona escribe en la sesión o la abre. Las entregas sin confirmar caducan a los 7 días.
 
 El selector de sesiones de la app marca cada una como «en tiempo real» (con canal) o «al escribir» (sin canal).
+
+## Identidad y sesiones
+
+**La persona** sale siempre del login de Tailscale (cabecera `Tailscale-User-Login`), que corresponde a un miembro. Todas las sesiones de una persona, en la misma máquina o en otras, son el **mismo miembro**: `list_teammates`, las conversaciones y la presencia nunca la cuentan como compañera de sí misma, y no puede enviarse solicitudes (el servidor lo rechaza y `send_request` da un error que lo explica). Para pasar algo a otra de sus sesiones, la persona usa el selector de sesiones de la app al reenviar.
+
+**Qué distingue una sesión de otra de la misma persona** (`RegisterSessionBody` y `HookBody`):
+
+| Campo | Qué es |
+|---|---|
+| `parentPid` | PID de Claude Code. El MCP y los hooks son hijos directos suyos, así que lo comparten. |
+| `machine` | Id estable de la máquina para la cuenta del SO: `<datos de Devi>/machine-id`, creado una vez y compartido por el MCP y los hooks (`DEVI_MACHINE_ID` lo fija). Un PID solo es único dentro de una máquina. |
+| `instanceId` | Id aleatorio de cada proceso `devi mcp`, estable mientras vive. |
+| `claudeSessionId` | `session_id` de Claude Code: lo mandan los hooks y, si lo conoce (`CLAUDE_CODE_SESSION_ID`), el MCP. |
+
+**Registro** (`POST /sessions`):
+
+1. Mismo `instanceId`: es una reconexión del mismo MCP (el servidor se reinició o se cayó el stream) y devuelve la misma sesión.
+2. Si no, sustituye a las sesiones del mismo Claude Code (misma persona, máquina y PID): Claude Code relanzó su MCP. El MCP sustituido recibe `409 session_replaced` si vuelve a registrarse y deja de intentarlo.
+3. **Nombre**: el que pide el MCP (la carpeta, o `--session`), único entre las sesiones activas de la persona: "api", "api (2)", "api (3)"… Dos Claude Code en la misma carpeta conviven; nunca se sustituye una sesión por llamarse igual. El MCP adopta el nombre que devuelve el servidor (`whoami`).
+
+**Emparejamiento de los hooks** (`POST /sessions/hook` y `GET /sessions/inbox`), solo entre las sesiones **activas** de quien llama, nunca de otra persona ni una ya muerta (aunque el sistema reutilice su PID): primero mismo Claude Code (máquina y PID) y mismo `claudeSessionId`; después mismo Claude Code; por último mismo `claudeSessionId`. El PID manda sobre un `claudeSessionId` que otra sesión pudo heredar, así que el hook de una sesión nunca cambia el estado de otra ni recoge su bandeja.
+
+**Cierre.** Al cerrarse stdin (Claude Code terminó) o con `SIGTERM`, `SIGINT` o `SIGHUP`, el MCP cierra su sesión en el servidor (`DELETE /sessions/:id`, con un plazo de 1,5 s si el servidor no responde) y sale. Las solicitudes reenviadas a esa sesión vuelven a `pending` para que la persona las reenvíe a otra.
+
+**No soportado:** dos personas de Devi en la misma cuenta del SO. La configuración (`devi/config.json`), el id de máquina y los procesos son de la cuenta, así que todo lo que se lance desde ella cuenta como la misma persona.
 
 ## Presencia
 

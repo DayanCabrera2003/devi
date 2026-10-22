@@ -157,6 +157,18 @@ Limitaciones:
 
 `devi doctor` comprueba si la política lo permite y muestra este fragmento si falta. `channelsEnabled` solo es necesario para la entrega en tiempo real: sin el canal, la app sigue mostrando las tarjetas y lo que envíes a una sesión le llega cuando escribas en ella.
 
+### Qué incluye el plugin
+
+El asistente (o `devi install-integration`) instala el plugin `devi@devi-local` en Claude Code. Incluye:
+
+- **Herramientas** (MCP). De solo lectura, que el agente usa libremente para razonar: `whoami` (quién eres, tus roles y permisos, el nombre de esta sesión y si tiene canal), `list_teammates` (las personas del equipo sin ti, con roles, capacidades, conexión y la última interacción), `get_conversation` (el historial con una persona), `list_pending` (lo que te espera y tus solicitudes abiertas) y `get_request` (una solicitud completa). De envío, siempre con tu aprobación: `send_request` y `respond_to_request`.
+- **Skill `devi`**: la guía completa para el agente (qué es Devi, cómo elegir a quién pedir por menor privilegio, cómo escribir una buena solicitud, qué hacer con lo que llega, seguridad). Claude Code la carga sola cuando hablas de compañeros, permisos, revisiones o de Devi.
+- **Prompts** como comandos: `pedir` (pedir algo a un compañero), `pendientes` (qué te espera) y `equipo` (quién puede ayudar con qué). Escribe `/` en Claude Code y búscalos: salen marcados como «(MCP)»; también se pueden escribir como `/mcp__plugin_devi_devi__pedir`. Si les pasas un argumento, Claude Code lo corta en la primera palabra; si falta algo, el agente te lo pregunta.
+- **Canal** para la entrega en tiempo real (ver arriba).
+- **Hooks** `SessionStart`, `UserPromptSubmit` y `Stop`: marcan la sesión como trabajando o libre y, sin canal, entregan lo pendiente al escribir.
+
+Cada sesión se llama como su carpeta; si ya tienes otra sesión con ese nombre, Devi le añade un número: «api», «api (2)». Todas tus sesiones eres tú: no aparecen como compañeros ni puedes enviarles solicitudes desde el agente. Para pasar algo a otra de tus sesiones, reenvíalo desde la app (el selector muestra todas las tuyas). Dos personas de Devi en la misma cuenta del sistema operativo no están soportadas.
+
 ### Aprobar envíos en el chat
 
 Cuando tu agente envía algo a un compañero (`send_request`) o le responde (`respond_to_request`), lo apruebas **en el propio Claude Code**, en el aviso de permisos, y no hace falta abrir la app de Devi.
