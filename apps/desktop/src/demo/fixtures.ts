@@ -91,7 +91,7 @@ export const PABLO_HISTORY: ThreadRequest[] = [
 ];
 
 export const DRAFT_TO_MARIA: Draft = {
-  id: "d-1", kind: "request", toMemberId: "m-maria", authorMemberId: ME_ID, authorSessionId: "s-1",
+  id: "d-1", kind: "request", requestKind: "request", toMemberId: "m-maria", authorMemberId: ME_ID, authorSessionId: "s-1",
   message: "Hola María, ¿puedes revisar si la migración 0043 rompe los reportes mensuales? Te adjunto la consulta.",
   status: "awaiting", files: [{ id: "f-3", name: "reporte.sql", size: 1310, direction: "request" }], createdAt: ago(3), expiresAt: now + 11 * MIN,
 };

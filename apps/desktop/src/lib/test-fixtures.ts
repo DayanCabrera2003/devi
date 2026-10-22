@@ -44,6 +44,7 @@ export function draft(over: Record<string, unknown> = {}): Draft {
     id: "d1",
     kind: "request",
     toMemberId: "m2",
+    requestKind: "request",
     authorMemberId: "m1",
     authorSessionId: "s1",
     message: "Hola María, ¿me miras esto?",
