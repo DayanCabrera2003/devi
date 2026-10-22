@@ -39,4 +39,17 @@ describe("Shell", () => {
     expect(queryByRole("button", { name: "Invitar por login" })).toBeNull();
     expect(queryByRole("button", { name: "Personas" })).toBeNull();
   });
+
+  test("«Tu semana» se abre bajo demanda desde la barra lateral", async () => {
+    const myWeek = vi.fn(async () => ({ from: 0, to: 1, sent: 1, received: 0, answered: 0, avgResponseMs: null, topHelped: [] }));
+    const { app } = await fakeApp({ me: vi.fn(async () => ME), team: vi.fn(async () => TEAM), myWeek });
+    app.boot = vi.fn(async () => {});
+    app.phase = "app";
+    holder.app = app;
+    const { getByRole, findByRole } = render(Shell);
+    await fireEvent.click(getByRole("button", { name: "Tu semana" }));
+    expect(await findByRole("heading", { name: "Tu semana" })).toBeTruthy();
+    expect(myWeek).toHaveBeenCalledOnce();
+  });
 });
+

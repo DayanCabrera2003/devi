@@ -13,6 +13,7 @@
   import Thread from "./chat/Thread.svelte";
   import Welcome from "./chat/Welcome.svelte";
   import KnowledgeView from "./knowledge/KnowledgeView.svelte";
+  import WeekView from "./week/WeekView.svelte";
   import Wizard from "./wizard/Wizard.svelte";
 
   const app = useApp();
@@ -21,7 +22,7 @@
   $effect(() => applyTheme(app.prefs.theme));
 
   const page = $derived(
-    app.view === "ajustes" ? "ajustes" : app.view === "base" ? "base" : app.view === "admin" && app.team.isAdmin ? "admin" : app.selected ? "thread" : "none",
+    app.view === "ajustes" ? "ajustes" : app.view === "base" ? "base" : app.view === "semana" ? "semana" : app.view === "admin" && app.team.isAdmin ? "admin" : app.selected ? "thread" : "none",
   );
 </script>
 
@@ -49,6 +50,8 @@
             <KnowledgeView />
           {:else if page === "admin"}
             <Admin />
+          {:else if page === "semana"}
+            <WeekView />
           {:else if page === "thread" && app.selected}
             <Thread memberId={app.selected} />
           {:else}

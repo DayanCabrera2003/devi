@@ -24,6 +24,7 @@ import {
   type Settings,
   type TeamView,
   type UpdateMemberBody,
+  type Week,
   type UpdateRoleBody,
   type UserEvent,
 } from "@devi/protocol";
@@ -142,6 +143,8 @@ export class DeviApi {
   me() { return this.call<Me>("me"); }
   team() { return this.call<TeamView>("team"); }
   memberSessions(memberId: string) { return this.call<Session[]>("memberSessions", { params: { id: memberId } }); }
+  // «Tu semana»: resumen de los últimos 7 días (solo mis datos).
+  myWeek() { return this.call<Week>("myWeek"); }
 
   authorizeDraft(id: string) { return this.call<Draft>("authorizeDraft", { params: { id }, body: {} }); }
   discardDraft(id: string) { return this.call<Draft>("discardDraft", { params: { id }, body: {} }); }

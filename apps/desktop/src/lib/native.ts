@@ -10,6 +10,7 @@ export type AppPrefs = {
   serverAdminLogin?: string; // presente = este equipo es el servidor
   theme?: ThemePref; // sin valor = sigue al sistema
   showMascot?: boolean; // burbuja flotante con Devi; sin valor (instalaciones anteriores) = apagada
+  weekDismissed?: string; // semana ISO ("2026-W43") en la que se descartó la tarjeta «Tu semana»
 };
 
 export const DEFAULT_PREFS: AppPrefs = { notifications: true, setupDone: false, showMascot: false };

@@ -10,6 +10,7 @@
   import type { Card } from "../../lib/stores/inbox.svelte";
   import { AGENT_THREAD, cardPeer } from "../../lib/thread-items";
   import UpdateBanner from "../UpdateBanner.svelte";
+  import WeekBanner from "../week/WeekBanner.svelte";
 
   const app = useApp();
   let search: HTMLInputElement;
@@ -74,6 +75,9 @@
       <button class="icon" class:active={app.view === "base"} aria-label="Base del equipo" title="Base del equipo" onclick={() => app.goto(app.view === "base" ? "bandeja" : "base")}>
         <Icon name="book" />
       </button>
+      <button class="icon" class:active={app.view === "semana"} aria-label="Tu semana" title="Tu semana" onclick={() => app.goto(app.view === "semana" ? "bandeja" : "semana")}>
+        <Icon name="calendar" />
+      </button>
       <button class="icon" class:active={app.view === "ajustes"} aria-label="Ajustes" title="Ajustes" onclick={() => app.goto(app.view === "ajustes" ? "bandeja" : "ajustes")}>
         <Icon name="gear" />
       </button>
@@ -112,6 +116,7 @@
 
   <div class="side-banners">
     <UpdateBanner />
+    <WeekBanner />
     {#if app.paused}
       <div class="banner">
         <span>Avisos en pausa.</span>

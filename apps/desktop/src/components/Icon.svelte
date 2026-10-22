@@ -1,6 +1,6 @@
 <script lang="ts">
   // Iconos de trazo fino al estilo de SF Symbols. Siempre decorativos: el nombre lo da el botón.
-  type Name = "gear" | "people" | "power" | "search" | "back" | "plus" | "up" | "close" | "doc" | "tray" | "book";
+  type Name = "gear" | "people" | "power" | "search" | "back" | "plus" | "up" | "close" | "doc" | "tray" | "book" | "calendar";
   type Props = { name: Name };
   let { name }: Props = $props();
 </script>
@@ -36,5 +36,8 @@
   {:else if name === "tray"}
     <path d="M4 13l2.5-7h11L20 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
     <path d="M4 13h4.5l1 2h5l1-2H20" />
+  {:else if name === "calendar"}
+    <rect x="4" y="5" width="16" height="15" rx="2" />
+    <path d="M4 10h16M9 3v4M15 3v4" />
   {/if}
 </svg>

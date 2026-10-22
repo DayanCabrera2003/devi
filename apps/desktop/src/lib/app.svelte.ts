@@ -1,10 +1,11 @@
-import type { DeviRequest, Draft, FileMeta, UserEvent } from "@devi/protocol";
+import type { DeviRequest, Draft, FileMeta, UserEvent, Week } from "@devi/protocol";
 import { type DeviApi, errorMessage } from "./api";
 import { type AuditEntry, auditNotice } from "./audit";
 import { Clock } from "./clock.svelte";
 import { type ConversationsHttp, type NativeFiles, conversationsHttp, nativeFiles } from "./conversations-api";
 import type { MascotState } from "./mascot";
 import { HAPPY_MS, deriveMood, overdueCount, quietSinceAfter } from "./mood";
+import { isWeekDue, weekKey } from "./week";
 import { type AppPrefs, type ClientConfig, type Native, type ServerStatus, prefsOf } from "./native";
 import { type Notice, noticeFor, noticeKey, shouldNotify, summaryNotice } from "./notify";
 import { ConnectionStore } from "./stores/connection.svelte";
@@ -16,7 +17,7 @@ import { TeamStore } from "./stores/team.svelte";
 import { AGENT_THREAD, waitingByPeer } from "./thread-items";
 import { ThreadStore } from "./stores/thread.svelte";
 
-export type View = "bandeja" | "ajustes" | "admin" | "base";
+export type View = "bandeja" | "ajustes" | "admin" | "base" | "semana";
 export type Phase = "loading" | "wizard" | "app";
 
 export type AppDeps = {
@@ -84,6 +85,9 @@ export class DeviApp {
       now: this.clock.now,
     }),
   );
+  // «Tu semana»: el resumen se pide al abrirla; los lunes la tarjeta sale sola hasta que se descarta.
+  week = $state<Week | null>(null);
+  weekDue = $derived(isWeekDue(this.clock.now, this.prefs.weekDismissed));
 
   private readonly deps: AppDeps;
   private api: DeviApi | null = null;
@@ -525,6 +529,19 @@ export class DeviApp {
     return () => {
       for (const off of offs) void off.then((f) => f()).catch(() => {});
     };
+  }
+
+  // ---- tu semana ----------------------------------------------------------------------
+
+  async loadWeek(): Promise<Week> {
+    const w = await this.need().myWeek();
+    this.week = w;
+    return w;
+  }
+
+  // Descarta la tarjeta de esta semana (preferencia en config.json, como el resto de la app).
+  async dismissWeek(): Promise<void> {
+    await this.updatePrefs({ weekDismissed: weekKey(this.clock.now) });
   }
 
   // ---- configuración y navegación ------------------------------------------------------
