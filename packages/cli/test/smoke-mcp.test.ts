@@ -86,6 +86,7 @@ async function fakeClaude(
 // Entorno de un "Claude Code falso": DEVI_CHANNEL=1 solo si se lanzó con canal (como hace `devi claude`).
 function fakeEnv(home: string, config: string, session: string, project: string, channel: boolean): Record<string, string> {
   const env: Record<string, string> = { ...(process.env as Record<string, string>), HOME: home, DEVI_CONFIG: config, DEVI_SESSION: session, CLAUDE_PROJECT_DIR: project };
+  env.DEVI_MACHINE_ID = "maquina-test"; // las dos personas en el mismo equipo (y nada en la carpeta de datos real)
   delete env.DEVI_CHANNEL;
   if (channel) env.DEVI_CHANNEL = "1";
   return env;

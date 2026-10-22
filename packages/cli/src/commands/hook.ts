@@ -2,7 +2,7 @@ import { createClient, type DeviClient } from "@devi/client";
 import type { HookEvent } from "../args";
 import { loadClientConfig } from "../config";
 import { type DeliveryMessage, materializeDelivery } from "../deliveries";
-import { debugPairing, pairing } from "../pairing";
+import { type Pairing, debugPairing, pairing } from "../pairing";
 import type { Sys } from "../paths";
 
 export const HOOK_DEADLINE_MS = 1000; // aviso de estado (trabajando/libre)
@@ -75,10 +75,11 @@ async function collectInbox(
   input: ParsedHookInput,
   eventName: string,
   cfg: { serverUrl: string; devUser?: string; receivedDir: string },
+  pair: Pairing,
 ): Promise<{ output: string; ids: string[] } | null> {
   const client = clientWith(cfg, AbortSignal.timeout(INBOX_DEADLINE_MS));
   const items = await client.call("sessionInbox", {
-    query: { parentPid: String(pairing().parentPid), claudeSessionId: input.claudeSessionId },
+    query: { parentPid: String(pair.parentPid), claudeSessionId: input.claudeSessionId, machine: pair.machine },
   });
   if (items.length === 0) return null;
   const messages: (DeliveryMessage & { kind: string })[] = [];
@@ -107,12 +108,13 @@ export async function runHook(
   if (!input) return;
   const cfg = await loadClientConfig(sys).catch(() => null);
   if (!cfg) return;
+  const pair = pairing(sys);
 
   const status = STATUS[event];
   const statusWork = status
     ? (async () => {
         const client = clientWith(cfg, AbortSignal.timeout(HOOK_DEADLINE_MS));
-        await client.call("sessionHook", { body: { claudeSessionId: input.claudeSessionId, cwd: input.cwd, parentPid: pairing().parentPid, status } });
+        await client.call("sessionHook", { body: { claudeSessionId: input.claudeSessionId, cwd: input.cwd, ...pair, status } });
       })().catch(() => {})
     : Promise.resolve();
 
@@ -120,7 +122,7 @@ export async function runHook(
   const inboxWork =
     eventName && sys.env.DEVI_CHANNEL !== "1"
       ? (async () => {
-          const got = await Promise.race([collectInbox(input, input.eventName ?? eventName, cfg), timeout(INBOX_DEADLINE_MS)]);
+          const got = await Promise.race([collectInbox(input, input.eventName ?? eventName, cfg, pair), timeout(INBOX_DEADLINE_MS)]);
           if (!got) return;
           await write(got.output);
           // Se confirma después de imprimir: si esto falla, se repetirá la próxima vez (mejor que perderlo).

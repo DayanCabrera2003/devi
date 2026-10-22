@@ -1,11 +1,13 @@
-import type { DeviClient } from "@devi/client";
-import type { SessionDelivery } from "@devi/protocol";
+import { DeviApiError, type DeviClient } from "@devi/client";
+import type { RegisterSessionBody, Session, SessionDelivery } from "@devi/protocol";
+import type { z } from "zod";
 import { backoffDelayMs } from "./backoff";
 
 export type SessionLoopOptions = {
   client: DeviClient;
-  register: { name: string; cwd: string; parentPid: number; channel?: boolean };
-  onSession: (id: string | null) => void;
+  register: z.input<typeof RegisterSessionBody>;
+  // La sesión registrada (con el nombre definitivo que eligió el servidor: "api (2)"…) o null si se perdió.
+  onSession: (session: Session | null) => void;
   onDelivery: (d: SessionDelivery) => void;
   log: (...a: unknown[]) => void;
   sleep?: (ms: number) => Promise<void>;
@@ -45,7 +47,7 @@ export function startSessionLoop(opts: SessionLoopOptions): () => void {
       try {
         const session = await opts.client.call("registerSession", { body: opts.register });
         attempt = 0;
-        opts.onSession(session.id);
+        opts.onSession(session);
         opts.log(`sesión registrada: ${session.name} (${session.id})`);
         await streamUntilBroken(session.id);
         if (fatal) {
@@ -54,6 +56,12 @@ export function startSessionLoop(opts: SessionLoopOptions): () => void {
         }
         if (!stopped) opts.log("se perdió la conexión con el servidor, reconectando…");
       } catch (e) {
+        if (e instanceof DeviApiError && e.body.code === "session_replaced") {
+          // Claude Code relanzó su MCP y el nuevo ocupa ya esta sesión: este proceso sobra.
+          opts.log("otro MCP de Devi del mismo Claude Code sustituyó a este. Se deja de reintentar.");
+          opts.onSession(null);
+          return;
+        }
         opts.log(`no se pudo registrar la sesión: ${(e as Error).message}`);
       }
       opts.onSession(null);

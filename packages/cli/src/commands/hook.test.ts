@@ -18,7 +18,9 @@ function serve(handler: (req: Request) => Response | Promise<Response>) {
   return { url: `http://127.0.0.1:${s.port}` };
 }
 const sys = (url: string, env: Record<string, string> = {}) => ({
-  platform: "linux" as const, env: { DEVI_CONFIG: "/no/existe.json", DEVI_SERVER_URL: url, DEVI_DEV_USER: "maria@dev", ...env }, home: "/h",
+  platform: "linux" as const,
+  env: { DEVI_CONFIG: "/no/existe.json", DEVI_SERVER_URL: url, DEVI_DEV_USER: "maria@dev", DEVI_MACHINE_ID: "M1", ...env },
+  home: "/h",
 });
 
 test("parseHookInput", () => {
@@ -29,7 +31,7 @@ test("parseHookInput", () => {
 });
 
 describe("runHook", () => {
-  test("manda el estado con session_id, cwd y el pid del padre", async () => {
+  test("manda el estado con session_id, cwd, el pid del padre y la máquina", async () => {
     let body: unknown;
     let headers: Headers | undefined;
     const srv = serve(async (req) => {
@@ -38,7 +40,7 @@ describe("runHook", () => {
       return Response.json({ ok: true });
     });
     await runHook("working", sys(srv.url, { DEVI_CHANNEL: "1" }), stdin(INPUT));
-    expect(body).toEqual({ claudeSessionId: "c1", cwd: "/p", parentPid: process.ppid, status: "working" });
+    expect(body).toEqual({ claudeSessionId: "c1", cwd: "/p", parentPid: process.ppid, machine: "M1", status: "working" });
     expect(headers?.get("X-Devi-Dev-User")).toBe("maria@dev");
   });
 
@@ -91,7 +93,7 @@ describe("runHook sin canal: bandeja", () => {
     const srv = inboxServer([REQUEST_ITEM], { f1: "el PR es el #12" });
     writeFileSync(config, JSON.stringify({ serverUrl: srv.url, devUser: "maria@dev", receivedDir: received }));
     const out: string[] = [];
-    const s = { platform: "linux" as const, env: { DEVI_CONFIG: config }, home: dir };
+    const s = { platform: "linux" as const, env: { DEVI_CONFIG: config, DEVI_MACHINE_ID: "M1" }, home: dir };
     await runHook("working", s, stdin(INPUT), (t) => void out.push(t));
     expect(out).toHaveLength(1);
     const parsed = JSON.parse(out[0]!);
@@ -105,6 +107,7 @@ describe("runHook sin canal: bandeja", () => {
     const inbox = srv.seen.find((x) => x.path === "/api/v1/sessions/inbox")!;
     expect(inbox.query.get("claudeSessionId")).toBe("c1");
     expect(inbox.query.get("parentPid")).toBe(String(process.ppid));
+    expect(inbox.query.get("machine")).toBe("M1");
     expect(srv.seen.find((x) => x.path === "/api/v1/sessions/inbox/ack")?.body).toEqual({ ids: ["i1"] });
 
     // Ya confirmadas: la siguiente vez no imprime nada.

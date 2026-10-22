@@ -1,5 +1,5 @@
 import type { DeviClient } from "@devi/client";
-import { type Approval, type CreateDraftResult, SECRETS_FLAG, scanForInjection, scanForSecrets } from "@devi/protocol";
+import { type Approval, type CreateDraftResult, SECRETS_FLAG, type Session, scanForInjection, scanForSecrets } from "@devi/protocol";
 import { readLocalFiles } from "../files";
 import { readableError } from "./errors";
 
@@ -73,7 +73,7 @@ export type ToolDeps = {
   client: DeviClient | null; // null si la configuración no es válida
   configError: string | null;
   cwd: string;
-  sessionId: () => string | null;
+  session: () => Session | null; // la sesión de Devi de esta conexión (null hasta registrarse)
   approval: () => Approval; // dónde aprueba el humano (según el cliente MCP; ver approval.ts)
 };
 
@@ -115,8 +115,10 @@ export async function callTool(name: string, args: Record<string, unknown>, deps
         if (!target) return fail(name === "send_request" ? "Falta 'to' (id del compañero)." : "Falta 'request_id'.");
         if (!message) return fail("Falta 'message'.");
         if (!paths) return fail("'files' debe ser una lista de rutas.");
-        const sessionId = deps.sessionId();
-        if (!sessionId) return fail("Esta sesión aún no está registrada en Devi (¿el servidor está encendido?). Prueba en unos segundos.");
+        const session = deps.session();
+        if (!session) return fail("Esta sesión aún no está registrada en Devi (¿el servidor está encendido?). Prueba en unos segundos.");
+        const sessionId = session.id;
+        if (name === "send_request" && target === session.memberId) return fail(SELF_SEND);
         const files = await readLocalFiles(paths, deps.cwd);
         if (!files.ok) return fail(files.error);
         const secrets = secretsIn(message, files.files);
@@ -160,6 +162,12 @@ export async function callTool(name: string, args: Record<string, unknown>, deps
     return fail(readableError(e));
   }
 }
+
+// Todas las sesiones de una persona son el mismo miembro de Devi: no hay solicitudes a uno mismo.
+const SELF_SEND =
+  "Ese id eres tú: todas tus sesiones de Claude Code (en este u otro equipo) son el mismo miembro de Devi, así que no " +
+  "puedes enviarte una solicitud. Si quieres pasar algo a otra de tus sesiones, hazlo desde la app de Devi: al reenviar " +
+  "una solicitud o una respuesta, el selector de sesiones muestra todas las tuyas. No se envió nada.";
 
 type Outgoing = { name: string; content: string }[];
 

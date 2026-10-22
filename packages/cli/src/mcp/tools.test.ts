@@ -27,8 +27,11 @@ const TEAM = {
   ],
 };
 const DRAFT = { id: "d1" };
+// La sesión de esta conexión: es de Dayan (m1), como ME.
+const SESSION = (id: string) => ({ id, memberId: "m1", name: "api (2)", cwd, status: "idle" as const, lastSeen: 1, channel: true });
 const deps = (client: ReturnType<typeof fakeClient>["client"] | null, sessionId: string | null = "s1", approval: "app" | "chat" = "app") => ({
-  client, configError: client ? null : "Devi no está configurado: falta la URL del servidor.", cwd, sessionId: () => sessionId,
+  client, configError: client ? null : "Devi no está configurado: falta la URL del servidor.", cwd,
+  session: () => (sessionId ? SESSION(sessionId) : null),
   approval: () => approval,
 });
 
@@ -93,6 +96,16 @@ describe("send_request", () => {
   test("sin sesión registrada", async () => {
     const r = await callTool("send_request", { to: "m2", message: "x" }, deps(fakeClient().client, null));
     expect(r.content[0]!.text).toContain("aún no está registrada");
+  });
+
+  test("a ti mismo (cualquiera de tus sesiones): error claro, sin borrador; tus otras sesiones salen al reenviar desde la app", async () => {
+    const f = fakeClient({ createDraft: DRAFT, team: TEAM });
+    const r = await callTool("send_request", { to: "m1", to_name: "Dayan", message: "x" }, deps(f.client));
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain("eres tú");
+    expect(r.content[0]!.text).toContain("reenviar");
+    expect(f.drafts).toEqual([]);
+    expect(f.calls).toEqual([]);
   });
 
   test("servidor caído o permiso que falta → texto legible", async () => {

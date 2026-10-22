@@ -12,7 +12,7 @@ async function connect(env: Record<string, string>) {
     new StdioClientTransport({
       command: process.execPath,
       args: [MAIN, "mcp"],
-      env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "/tmp", DEVI_CONFIG: "/no/existe/config.json", ...env },
+      env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "/tmp", DEVI_CONFIG: "/no/existe/config.json", DEVI_MACHINE_ID: "maquina-test", ...env },
       stderr: "ignore",
     }),
   );
