@@ -1,7 +1,7 @@
 {
   "name": "devi",
   "displayName": "Devi",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Devi: conecta las sesiones de Claude Code de tu equipo (solicitudes, respuestas y archivos con autorización humana)",
   "author": {
     "name": "Dayan Cabrera",
