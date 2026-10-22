@@ -3,6 +3,7 @@ export * from "./version";
 export * from "./perms";
 export * from "./limits";
 export * from "./errors";
+export * from "./context";
 export * from "./entities";
 export * from "./audit";
 export * from "./conversations";

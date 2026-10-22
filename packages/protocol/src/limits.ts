@@ -14,3 +14,14 @@ export const DEFAULT_SETTINGS = {
 // tardar en abortar el stream. Los clientes mandan POST /presence/heartbeat cada heartbeatMs; sin
 // latido en staleMs cuentan como desconectados. El servidor revisa la presencia cada sweepMs.
 export const PRESENCE = { heartbeatMs: 20_000, staleMs: 60_000, sweepMs: 15_000 } as const;
+
+// Contexto opcional de una solicitud (lo que se intentó, el error, la urgencia y lo que el MCP saca de git).
+// diffStatLines: el MCP recorta `git diff --stat` a estas líneas; el diff completo solo va como archivo adjunto.
+export const CONTEXT_LIMITS = {
+  textChars: 2_000, // summary y tried
+  errorChars: 4_000,
+  branchChars: 200,
+  commitChars: 300,
+  diffStatLines: 50,
+  diffStatChars: 6_000,
+} as const;

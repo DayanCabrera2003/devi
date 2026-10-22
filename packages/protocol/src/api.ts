@@ -5,6 +5,7 @@ import {
 } from "./entities";
 import type { Perm } from "./perms";
 import { AuditPageSchema } from "./audit";
+import { RequestContextSchema } from "./context";
 import { ConversationPageSchema, ConversationsResponseSchema, SendFromAppMeta } from "./conversations";
 import { PendingSchema } from "./pending";
 
@@ -73,7 +74,10 @@ export const AckInboxBody = z.object({ ids: z.array(z.string()).max(200) });
 export const ApprovalSchema = z.enum(["app", "chat"]);
 export type Approval = z.infer<typeof ApprovalSchema>;
 export const CreateDraftMeta = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("request"), sessionId: z.string(), to: z.string(), message: NonEmpty, approval: ApprovalSchema.default("app") }),
+  z.object({
+    kind: z.literal("request"), sessionId: z.string(), to: z.string(), message: NonEmpty, approval: ApprovalSchema.default("app"),
+    context: RequestContextSchema.optional(),
+  }),
   z.object({ kind: z.literal("response"), sessionId: z.string(), requestId: z.string(), message: NonEmpty, approval: ApprovalSchema.default("app") }),
 ]);
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RequestContextSchema } from "./context";
 import { PERMS } from "./perms";
 
 export const PermSchema = z.enum(PERMS);
@@ -61,6 +62,7 @@ const DraftBase = z.object({
   files: z.array(FileMetaSchema),
   createdAt: z.number(),
   expiresAt: z.number(),
+  context: RequestContextSchema.optional(), // solo borradores de solicitud que lo traigan
 });
 export const DraftSchema = z.discriminatedUnion("kind", [
   DraftBase.extend({ kind: z.literal("request"), toMemberId: z.string() }),
@@ -92,6 +94,7 @@ export const DeviRequestSchema = z.object({
   createdAt: z.number(),
   sentAt: z.number(),
   deadline: z.number(),
+  context: RequestContextSchema.optional(), // contexto que añadió el agente (y git de su sesión), si lo hay
 });
 export type DeviRequest = z.infer<typeof DeviRequestSchema>;
 
