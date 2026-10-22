@@ -148,10 +148,10 @@ sessions       id, member_id, name, cwd, parent_pid, status (idle|working),
 session_inbox  id, session_id, kind, content, meta, created_at, acked_at
 drafts         id, kind (request|response), author_member, author_session, author_session_name,
                to_member (request), request_id (response), message,
-               status (awaiting|authorized|discarded), created_at, expires_at
+               status (awaiting|authorized|discarded), created_at, expires_at, context
 requests       id, origin (session|app), from_member, from_session, from_session_name, to_member, message,
                status, forwarded_session, outcome, outcome_text, created_at, sent_at, deadline,
-               responded_at
+               responded_at, context
 files          id, draft_id, request_id, direction (request|response), name, size, sha256, path,
                author_member, peer_member, created_at, released_at, deleted_at
 audit_log      id, at, actor_member_id, actor_login, action, target_type, target_id, details
@@ -194,7 +194,8 @@ Una solicitud escrita en la app entra directamente en `pending` (auditoría `req
 
 ### Recorrido completo
 
-1. **Enviar.** El agente de A llama a `send_request(to, message, files?)`. El MCP resuelve las rutas respecto al `cwd` de la sesión, valida los archivos (texto UTF-8 sin NUL, ≤ 1 MB, ≤ 5) y busca secretos; después crea el borrador. El servidor repite la validación y comprueba permisos.
+1. **Enviar.** El agente de A llama a `send_request(to, message, context?, files?)`. El MCP resuelve las rutas respecto al `cwd` de la sesión, valida los archivos (texto UTF-8 sin NUL, ≤ 1 MB, ≤ 5) y busca secretos en el mensaje, el contexto y los archivos; después crea el borrador. El servidor repite la validación y comprueba permisos.
+   - **Contexto** (opcional, límites en `CONTEXT_LIMITS`): `summary`, `tried`, `error` y `urgency` (`baja|normal|alta`) los pone el agente; el MCP añade `git` (rama, último commit y `git diff --stat` recortado a 50 líneas) ejecutando `git` en el `cwd` de la sesión, con un plazo de 2 s por orden y sin diff externo, textconv ni fsmonitor. Fuera de un repo, o sin git, no hay `git` y no es un error. El diff completo solo viaja como archivo adjunto. Se guarda como JSON en `drafts.context` y pasa a `requests.context` al enviarse; al agente receptor le llega dentro del mismo bloque `DEVI-UNTRUSTED` que el mensaje, y la app lo muestra plegado en la tarjeta (también en el borrador, antes de autorizar).
 2. **Autorizar.** La app de A muestra «Claude quiere enviar esto a María» con el mensaje y la vista previa de los archivos. Al autorizar se crea la solicitud y B la recibe.
 3. **Recibir.** La app de B muestra la tarjeta con la vista previa (nada se escribe en disco todavía) y avisos si el contenido parece una prompt injection. B elige Aceptar (nota opcional), Rechazar (motivo obligatorio) o Enviar a sesión.
 4. **Enviar a sesión.** La sesión elegida recibe la entrega; el MCP (o el hook) descarga los archivos en `<carpeta de recibidos>/<request-id>/` con nombres saneados.
