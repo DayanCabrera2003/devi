@@ -69,3 +69,13 @@ test("base del equipo: buscar antes de recomendar a alguien, citar y proponer gu
   expect(text).toMatch(/explicó esto el/);
   expect(text).toContain("share_with_team");
 });
+
+test("escalado: avisar al usuario, proponer a otra persona con list_teammates y que decida él", () => {
+  const text = instructions("ana");
+  const start = text.indexOf('kind="escalation"');
+  expect(start).toBeGreaterThan(0);
+  const line = text.slice(start, text.indexOf("\n- ", start));
+  expect(line).toContain("list_teammates");
+  expect(line).toMatch(/decide|confirme/);
+  expect(line).toContain("Pedírselo a otra persona");
+});
