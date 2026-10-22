@@ -10,6 +10,7 @@ import { RequestContextSchema } from "./context";
 import { ConversationPageSchema, ConversationsResponseSchema, SendFromAppMeta } from "./conversations";
 import { PendingSchema } from "./pending";
 import { KnowledgeResultSchema } from "./knowledge";
+import { WeekSchema } from "./week";
 
 // Quién puede llamar una ruta además del permiso (lo comprueba el módulo, no el núcleo):
 // any = cualquier miembro; admin = team.admin; author = autor del borrador;
@@ -160,6 +161,8 @@ export const API = {
   // Base de conocimiento del equipo (query: KnowledgeQuery). Retirar una entrada: quien respondió o un admin.
   searchKnowledge: route({ method: "GET", path: "/api/v1/knowledge", perm: null, actor: "any", body: Empty /* query: KnowledgeQuery */, response: KnowledgeResultSchema }),
   withdrawKnowledge: route({ human: true, method: "DELETE", path: "/api/v1/knowledge/:id", perm: null, actor: "answerer", body: Empty, response: Ok }),
+  // «Tu semana» en la app: resumen de los últimos 7 días de quien llama (solo sus datos).
+  myWeek: route({ method: "GET", path: "/api/v1/me/week", perm: null, actor: "any", body: Empty, response: WeekSchema }),
 
   downloadFile: route({ method: "GET", path: "/api/v1/files/:id", perm: null, actor: "party", body: Empty, response: z.any() /* text/plain */ }),
 
