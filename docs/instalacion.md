@@ -157,6 +157,14 @@ Limitaciones:
 
 `devi doctor` comprueba si la política lo permite y muestra este fragmento si falta. `channelsEnabled` solo es necesario para la entrega en tiempo real: sin el canal, la app sigue mostrando las tarjetas y lo que envíes a una sesión le llega cuando escribas en ella.
 
+### Escribir a un compañero desde la app
+
+No hace falta pasar por Claude Code para pedir algo: en la app, abre la conversación con esa persona, escribe el mensaje y, si quieres, adjunta hasta 5 archivos de texto (botón de adjuntar o arrastrándolos sobre la ventana). La solicitud sale al momento, sin borrador que autorizar, porque la has escrito tú. A tu compañero le llega igual que una solicitud de un agente (puede aceptarla, rechazarla o enviarla a una de sus sesiones) y su respuesta te llega a ti: la aceptas o la envías a una de tus sesiones.
+
+- Hace falta el permiso «Enviar solicitudes» (y «Enviar archivos» si adjuntas algo). Los límites son los mismos que para los borradores: archivos de texto UTF-8 de hasta 1 MB, como máximo 5.
+- Los archivos los lee y valida la parte nativa de la app; los que no valen (binarios, demasiado grandes, carpetas) aparecen como rechazados con el motivo.
+- **Conversaciones**: la app muestra una conversación por compañero, con todo lo que os habéis pedido en los dos sentidos (también lo cerrado, con su respuesta y archivos). Arriba salen las personas con algo que espera tu acción: solicitudes suyas pendientes, respuestas a las tuyas, plazos vencidos y borradores tuyos dirigidos a ellas.
+
 ## 5. Actualizaciones
 
 **Las actualizaciones automáticas todavía no están activas.** Requieren generar la clave de firma del updater, y aún no se ha hecho. Hasta entonces, para actualizar descarga el instalador de la versión nueva desde Releases e instálalo encima de la actual: se conservan tus datos y tu configuración.
@@ -167,7 +175,7 @@ Si el servidor exige una versión más nueva, la app muestra **Actualiza Devi**:
 
 ## 6. Seguridad
 
-Las acciones que debe decidir una persona (autorizar o descartar un borrador, responder una solicitud, administrar el equipo, roles y ajustes, exportar la base de datos) **solo se aceptan desde la app de Devi**: el servidor exige la cabecera `Origin` de la app. Si un agente intenta hacerlas llamando a la API directamente, recibe «Esta acción solo se puede hacer desde la app de Devi».
+Las acciones que debe decidir una persona (autorizar o descartar un borrador, enviar una solicitud escrita en la app, responder una solicitud, administrar el equipo, roles y ajustes, exportar la base de datos) **solo se aceptan desde la app de Devi**: el servidor exige la cabecera `Origin` de la app. Si un agente intenta hacerlas llamando a la API directamente, recibe «Esta acción solo se puede hacer desde la app de Devi».
 
 Es una barrera, no una garantía: un proceso que corra con tu mismo usuario del sistema podría falsificar esa cabecera. La protección real es que Claude Code te pide permiso antes de ejecutar comandos de red, y que todo borrador aparece en la app para que lo revises antes de autorizarlo.
 

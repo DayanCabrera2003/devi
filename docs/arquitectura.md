@@ -61,7 +61,8 @@ La configuración del cliente (URL del servidor) vive en `devi/config.json` del 
 - **Tray** con menú y una **ventana mascota** pequeña siempre disponible (en GNOME el tray no se ve sin extensión). Notificaciones nativas y arranque al iniciar sesión.
 - **Asistente de primer arranque**: comprueba Tailscale, pide la URL del servidor o activa «Este equipo es el servidor», prueba la conexión, instala la integración con Claude Code y ejecuta `devi doctor`.
 - **Modo servidor**: lanza `devi server` como sidecar y muestra el comando `tailscale serve` si falta.
-- **Vistas**: Bandeja (borradores por autorizar, solicitudes, respuestas, plazos vencidos), selector de sesiones, Ajustes y Admin (Personas · Roles · Servidor · Auditoría; solo con `team.admin`).
+- **Vistas**: Bandeja (borradores por autorizar, solicitudes, respuestas, plazos vencidos), conversaciones por compañero (con envío directo desde la app), selector de sesiones, Ajustes y Admin (Personas · Roles · Servidor · Auditoría; solo con `team.admin`).
+- **Adjuntar archivos** al enviar desde la app: el webview nunca elige rutas. `pick_files` abre el diálogo nativo en Rust; al soltar archivos sobre la ventana principal, Rust recibe `WindowEvent::DragDrop` y emite `devi://drag-hover` (`{ active }`) y `devi://files-dropped`. En los dos casos Rust lee y valida cada archivo (texto UTF-8 sin NUL, ≤ 1 MB, ≤ 5 por vez), guarda los aceptados en memoria con un token aleatorio (como máximo 20; se olvidan los más antiguos) y devuelve `PickResult` (`files`: token, nombre, tamaño y los primeros 4 KB; `rejected`: nombre y motivo). Al enviar, `take_files(tokens)` entrega el contenido y lo borra; `discard_files` lo descarta. Tauri también emite sus propios `tauri://drag-*` con rutas y no se pueden desactivar sin perder `DragDrop`: la UI no los escucha y el webview no tiene plugin `fs` ni protocolo `asset`, así que una ruta no le sirve para leer nada.
 - La UI habla con el servidor directamente por HTTP/SSE desde el webview con `@devi/client`. Rust solo hace lo nativo: tray, ventanas, sidecar, rutas, Tailscale local y guardar archivos recibidos (`save_received_files`, con nombres saneados y confinado a la carpeta de recibidos; el webview no tiene permiso general de escritura en disco).
 
 ## Protocolo y módulos
@@ -83,6 +84,9 @@ Todas las rutas están declaradas en `API` (`packages/protocol/src/api.ts`) con 
 | `POST /presence/heartbeat` | miembro | Latido de presencia (app y MCP). |
 | `POST /drafts` | `requests.send` (+ `files.send` con archivos) | Borrador de solicitud o respuesta (multipart: `meta` JSON + archivos). |
 | `POST /drafts/:id/authorize` · `/discard` | autor, humana | Autorizar o descartar un borrador. |
+| `POST /requests` | `requests.send` (+ `files.send` con archivos), humana | Solicitud escrita en la app (multipart: `meta` = `{ to, message }` + archivos). Sale ya en `pending`, sin borrador; mismos límites de ritmo que los borradores. |
+| `GET /conversations` | miembro | Una fila por compañero activo: última actividad (fecha, 120 caracteres, si fue mía) y cuántas cosas esperan mi acción. |
+| `GET /conversations/:memberId?before=&limit=` | miembro (solo las suyas) | Solicitudes entre quien llama y esa persona, en los dos sentidos, de la más nueva a la más vieja (30 por defecto, hasta 100). |
 | `POST /requests/:id/forward` · `/accept` · `/reject` | destinatario, humana | Decisiones de quien recibe. |
 | `POST /requests/:id/response/accept` · `/response/forward` | remitente, humana | Decisiones sobre la respuesta. |
 | `POST /requests/:id/resend` · `/ignore` | remitente, humana | Tras un plazo vencido. |
@@ -92,7 +96,7 @@ Todas las rutas están declaradas en `API` (`packages/protocol/src/api.ts`) con 
 
 ### Eventos
 
-**SSE de usuario** (app): `draft.awaiting`, `draft.discarded`, `request.incoming`, `request.updated`, `response.incoming`, `request.timed_out`, `team.updated`, `sessions.updated` y, solo a admins, `audit.alert`. Al conectar, el servidor reenvía las tarjetas abiertas.
+**SSE de usuario** (app): `draft.awaiting`, `draft.discarded`, `request.incoming`, `request.updated`, `response.incoming`, `request.timed_out`, `conversation.updated` (`{ memberId }`: cambió una solicitud o borrador con esa persona; llega a las dos partes), `team.updated`, `sessions.updated` y, solo a admins, `audit.alert`. Al conectar, el servidor reenvía las tarjetas abiertas.
 
 **SSE de sesión** (MCP → canal): un único evento `deliver` con `kind` = `request`, `response`, `draft_authorized`, `draft_discarded` o `debug`, el texto para el agente y los atributos del canal (`request_id`, `draft_id`, rutas de archivos…).
 
@@ -141,14 +145,15 @@ session_inbox  id, session_id, kind, content, meta, created_at, acked_at
 drafts         id, kind (request|response), author_member, author_session, author_session_name,
                to_member (request), request_id (response), message,
                status (awaiting|authorized|discarded), created_at, expires_at
-requests       id, from_member, from_session, from_session_name, to_member, message,
-               status, forwarded_session, outcome, outcome_text, created_at, sent_at, deadline
+requests       id, origin (session|app), from_member, from_session, from_session_name, to_member, message,
+               status, forwarded_session, outcome, outcome_text, created_at, sent_at, deadline,
+               responded_at
 files          id, draft_id, request_id, direction (request|response), name, size, sha256, path,
                author_member, peer_member, created_at, released_at, deleted_at
 audit_log      id, at, actor_member_id, actor_login, action, target_type, target_id, details
 ```
 
-- Los **borradores** son una tabla aparte: una solicitud solo existe en `requests` cuando su borrador se autoriza.
+- Los **borradores** son una tabla aparte: una solicitud de un agente solo existe en `requests` cuando su borrador se autoriza. Las escritas en la app (`origin = app`) se crean directamente, con `from_session` y `from_session_name` vacíos y sus archivos ya unidos a la solicitud (`draft_id` vacío).
 - **Permisos** (`packages/protocol/src/perms.ts`): `requests.send`, `files.send` y `team.admin`. Los de una persona son la unión de los de sus roles. Siempre debe quedar al menos un admin.
 - **Ajustes por defecto**: plazo de una solicitud 1 h, 15 min para autorizar un borrador, archivos 7 días tras cerrarse la solicitud y 30 días como máximo, dominios permitidos vacíos.
 - **Auditoría**: solo se añade (un trigger impide modificar filas) y se borra a los 365 días. De los mensajes guarda su SHA-256, nunca el texto.
@@ -180,6 +185,8 @@ accepted|rejected|answered ──el remitente acepta o la envía a una sesión�
 - Mientras haya un borrador de respuesta pendiente, el plazo de la solicitud se pausa. Si se descarta o caduca, la solicitud sigue en `forwarded` con un plazo nuevo completo.
 - Aceptar y Rechazar desde la tarjeta son acciones humanas directas.
 - Plazos y caducidades se guardan en SQLite y se reprograman al arrancar (`onStart`), así que sobreviven a reinicios.
+
+Una solicitud escrita en la app entra directamente en `pending` (auditoría `request.sent_from_app`) y sigue el mismo ciclo; nada supone que el remitente tenga una sesión: su respuesta se acepta o se envía a cualquiera de sus sesiones.
 
 ### Recorrido completo
 
