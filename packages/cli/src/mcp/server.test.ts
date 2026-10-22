@@ -26,9 +26,14 @@ test("devi mcp por stdio: instrucciones, herramientas y error legible sin config
   expect(client.getInstructions()).toContain('Esta sesión se llama "prueba"');
   expect(client.getInstructions()).toContain("aviso de permisos de Claude Code");
   const tools = (await client.listTools()).tools;
-  expect(tools.map((t) => t.name)).toEqual(["list_teammates", "send_request", "respond_to_request"]);
-  // El SDK deja pasar _meta hasta el cliente: Claude Code lo lee para pedir aprobación en cada llamada.
-  for (const t of tools.slice(1)) expect(t._meta).toEqual({ "anthropic/requiresUserInteraction": true });
+  expect(tools.map((t) => t.name)).toEqual([
+    "whoami", "list_teammates", "get_conversation", "list_pending", "get_request", "send_request", "respond_to_request",
+  ]);
+  // El SDK deja pasar _meta y las anotaciones hasta el cliente: Claude Code lee _meta para pedir aprobación en cada llamada.
+  for (const t of tools.filter((x) => x.name.endsWith("request") && !x.name.startsWith("get"))) {
+    expect(t._meta).toEqual({ "anthropic/requiresUserInteraction": true });
+  }
+  expect(tools.find((t) => t.name === "list_pending")?.annotations?.readOnlyHint).toBe(true);
   const r = await call("list_teammates");
   expect(r.isError).toBe(true);
   expect(r.content[0]!.text).toContain("Devi no está configurado");

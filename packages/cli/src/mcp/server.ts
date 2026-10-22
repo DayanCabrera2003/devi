@@ -51,7 +51,7 @@ export async function runMcp(sys: Sys): Promise<void> {
     log(`cliente MCP: ${c ? `${c.name} ${c.version}` : "desconocido"}; los envíos se aprueban en ${approval() === "chat" ? "el chat" : "la app de Devi"}`);
   };
   mcp.setRequestHandler(CallToolRequestSchema, async (req) =>
-    callTool(req.params.name, req.params.arguments ?? {}, { client, configError, cwd, session: () => session, approval }),
+    callTool(req.params.name, req.params.arguments ?? {}, { client, configError, cwd, session: () => session, approval, receivedDir }),
   );
 
   // Fin del proceso: Claude Code cierra stdin al terminar la sesión (o manda una señal). Se cierra la sesión

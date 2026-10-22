@@ -2,72 +2,11 @@ import type { DeviClient } from "@devi/client";
 import { type Approval, type CreateDraftResult, SECRETS_FLAG, type Session, scanForInjection, scanForSecrets } from "@devi/protocol";
 import { readLocalFiles } from "../files";
 import { readableError } from "./errors";
+import { ToolInputError, getConversation, getRequest, listPending, listTeammates, whoami } from "./read-tools";
 
 export type ToolResult = { content: { type: "text"; text: string }[]; isError: boolean };
 
-// Claude Code muestra el aviso de permisos de estas herramientas en CADA llamada, en cualquier modo de
-// permisos y sin "no volver a preguntar": ese aviso es la aprobación del humano (ver approval.ts).
-const ASK_EVERY_TIME = { "anthropic/requiresUserInteraction": true } as const;
-
-const FILES_ARG = {
-  type: "array",
-  items: { type: "string" },
-  description: "Opcional: rutas de los archivos de texto que se adjuntan (relativas a la carpeta de la sesión), máx. 5 de 1 MB",
-};
-const ALLOW_SECRETS_ARG = {
-  type: "boolean",
-  description:
-    "Solo si el usuario confirmó expresamente enviar algo que parece un secreto (tras el aviso de Devi). Saldrá marcado con un aviso.",
-};
-
-export const TOOLS = [
-  {
-    name: "list_teammates",
-    description:
-      "Lista los compañeros conectados a Devi (excluyéndote), con sus roles, capacidades y descripción. Úsalo para decidir a quién pedir algo.",
-    inputSchema: { type: "object" as const, properties: {} },
-  },
-  {
-    name: "send_request",
-    description:
-      "Envía una solicitud a un compañero de Devi. Claude Code te pide aprobarla antes: revisa a quién va (to_name), el mensaje y los archivos; " +
-      "al aprobar, se envía. Si la aprobación en el chat no está disponible, queda como borrador para autorizar en la app de Devi. " +
-      "Úsalo solo después de que el usuario confirme el destinatario. La respuesta llegará más tarde como evento kind=\"response\".",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        to: { type: "string", description: "id del compañero (de list_teammates)" },
-        to_name: { type: "string", description: "Nombre del compañero tal como sale en list_teammates; Devi comprueba que es el de 'to'" },
-        message: {
-          type: "string",
-          description: "Lo que se le envía: qué necesita el usuario, con el contexto suficiente para entenderlo sin ver esta sesión",
-        },
-        files: FILES_ARG,
-        allow_secrets: ALLOW_SECRETS_ARG,
-      },
-      required: ["to", "message"],
-    },
-    _meta: ASK_EVERY_TIME,
-  },
-  {
-    name: "respond_to_request",
-    description:
-      "Envía la respuesta a una solicitud de un compañero (evento kind=\"request\") con lo que el usuario decidió. Claude Code te pide " +
-      "aprobarla antes: revisa el mensaje y los archivos; al aprobar, se envía. Si la aprobación en el chat no está disponible, queda como " +
-      "borrador para autorizar en la app de Devi. Úsalo solo después de que el usuario lo diga.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        request_id: { type: "string", description: "request_id del evento de Devi" },
-        message: { type: "string", description: "Lo que se le responde: lo que el usuario va a hacer o su respuesta, en sus palabras" },
-        files: FILES_ARG,
-        allow_secrets: ALLOW_SECRETS_ARG,
-      },
-      required: ["request_id", "message"],
-    },
-    _meta: ASK_EVERY_TIME,
-  },
-];
+export { TOOLS } from "./tool-defs";
 
 export type ToolDeps = {
   client: DeviClient | null; // null si la configuración no es válida
@@ -75,6 +14,8 @@ export type ToolDeps = {
   cwd: string;
   session: () => Session | null; // la sesión de Devi de esta conexión (null hasta registrarse)
   approval: () => Approval; // dónde aprueba el humano (según el cliente MCP; ver approval.ts)
+  receivedDir?: string; // carpeta de archivos recibidos (para mostrar sus rutas locales)
+  now?: () => number;
 };
 
 const ok = (text: string): ToolResult => ({ content: [{ type: "text", text }], isError: false });
@@ -89,24 +30,16 @@ export async function callTool(name: string, args: Record<string, unknown>, deps
   const client = deps.client;
   try {
     switch (name) {
-      case "list_teammates": {
-        const [me, team] = await Promise.all([client.call("me"), client.call("team")]);
-        const roles = new Map(team.roles.map((r) => [r.id, r]));
-        const people = team.members
-          .filter((m) => m.connected && !m.disabled && m.id !== me.member.id)
-          .map((m) => {
-            const rs = m.roleIds.map((id) => roles.get(id)).filter((r) => r !== undefined);
-            return {
-              id: m.id,
-              name: m.name,
-              roles: rs.map((r) => r.name),
-              capabilities: [...new Set(rs.flatMap((r) => r.capabilities))],
-              description: m.description,
-            };
-          });
-        if (people.length === 0) return ok("No hay compañeros conectados a Devi ahora mismo.");
-        return ok(JSON.stringify(people, null, 2));
-      }
+      case "whoami":
+        return ok(await whoami(readDeps(client, deps)));
+      case "list_teammates":
+        return ok(await listTeammates(readDeps(client, deps)));
+      case "get_conversation":
+        return ok(await getConversation(readDeps(client, deps), args));
+      case "list_pending":
+        return ok(await listPending(readDeps(client, deps)));
+      case "get_request":
+        return ok(await getRequest(readDeps(client, deps), args));
       case "send_request":
       case "respond_to_request": {
         const message = str(args.message);
@@ -159,9 +92,13 @@ export async function callTool(name: string, args: Record<string, unknown>, deps
         return fail(`Herramienta desconocida: ${name}`);
     }
   } catch (e) {
-    return fail(readableError(e));
+    return fail(e instanceof ToolInputError ? e.message : readableError(e));
   }
 }
+
+const readDeps = (client: DeviClient, deps: ToolDeps) => ({
+  client, session: deps.session, receivedDir: deps.receivedDir ?? "", now: deps.now ?? Date.now,
+});
 
 // Todas las sesiones de una persona son el mismo miembro de Devi: no hay solicitudes a uno mismo.
 const SELF_SEND =

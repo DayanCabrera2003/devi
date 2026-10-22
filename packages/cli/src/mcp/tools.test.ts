@@ -13,7 +13,6 @@ writeFileSync(join(cwd, "log.txt"), "error en línea 3");
 const member = (id: string, name: string, roleIds: string[], connected: boolean, disabled = false) => ({
   id, login: `${id}@dev`, name, description: `desc ${name}`, roleIds, disabled, connected,
 });
-const ME = { login: "dayan@dev", member: member("m1", "Dayan", [], true), roles: [], perms: ["requests.send"] };
 const TEAM = {
   members: [
     member("m1", "Dayan", ["r1"], true),
@@ -27,7 +26,7 @@ const TEAM = {
   ],
 };
 const DRAFT = { id: "d1" };
-// La sesión de esta conexión: es de Dayan (m1), como ME.
+// La sesión de esta conexión: es de Dayan (m1).
 const SESSION = (id: string) => ({ id, memberId: "m1", name: "api (2)", cwd, status: "idle" as const, lastSeen: 1, channel: true });
 const deps = (client: ReturnType<typeof fakeClient>["client"] | null, sessionId: string | null = "s1", approval: "app" | "chat" = "app") => ({
   client, configError: client ? null : "Devi no está configurado: falta la URL del servidor.", cwd,
@@ -35,26 +34,39 @@ const deps = (client: ReturnType<typeof fakeClient>["client"] | null, sessionId:
   approval: () => approval,
 });
 
-test("las tres herramientas, con files opcional", () => {
-  expect(TOOLS.map((t) => t.name)).toEqual(["list_teammates", "send_request", "respond_to_request"]);
-  expect(TOOLS[1]!.inputSchema.required).toEqual(["to", "message"]);
-  expect(TOOLS[2]!.inputSchema.required).toEqual(["request_id", "message"]);
+test("herramientas: cinco de lectura y dos de envío, con files opcional", () => {
+  expect(TOOLS.map((t) => t.name)).toEqual([
+    "whoami", "list_teammates", "get_conversation", "list_pending", "get_request", "send_request", "respond_to_request",
+  ]);
+  const byName = Object.fromEntries(TOOLS.map((t) => [t.name, t]));
+  expect(byName.send_request!.inputSchema.required).toEqual(["to", "message"]);
+  expect(byName.respond_to_request!.inputSchema.required).toEqual(["request_id", "message"]);
+  expect(byName.get_conversation!.inputSchema.required).toEqual(["member"]);
+  expect(byName.get_request!.inputSchema.required).toEqual(["request_id"]);
 });
 
-describe("list_teammates", () => {
-  test("solo conectados y activos, sin mí, con roles y capacidades", async () => {
-    const f = fakeClient({ me: ME, team: TEAM });
-    const r = await callTool("list_teammates", {}, deps(f.client));
-    expect(r.isError).toBe(false);
-    expect(JSON.parse(r.content[0]!.text)).toEqual([
-      { id: "m2", name: "María", roles: ["Backend", "Cloud"], capabilities: ["Aprobar PRs backend", "Permisos de GCP"], description: "desc María" },
-    ]);
-  });
+test("las de lectura van marcadas como solo lectura y sin aviso; las de envío, al revés", () => {
+  for (const t of TOOLS) {
+    const send = t.name === "send_request" || t.name === "respond_to_request";
+    expect(t.annotations.readOnlyHint).toBe(!send);
+    expect("_meta" in t).toBe(send);
+    if (!send) expect(t.description).toContain("Solo lectura");
+  }
+});
 
-  test("nadie conectado", async () => {
-    const f = fakeClient({ me: ME, team: { members: [TEAM.members[0]], roles: [] } });
-    expect((await callTool("list_teammates", {}, deps(f.client))).content[0]!.text).toBe("No hay compañeros conectados a Devi ahora mismo.");
-  });
+test("descripciones ricas pero por debajo del corte de Claude Code (4.096 caracteres)", () => {
+  for (const t of TOOLS) {
+    expect(t.description.length).toBeGreaterThan(200);
+    expect(t.description.length).toBeLessThan(4096);
+  }
+  const send = TOOLS.find((t) => t.name === "send_request")!;
+  const props = send.inputSchema.properties as Record<string, { description: string }>;
+  expect(props.to!.description).toContain("list_teammates");
+  expect(props.to_name!.description).toMatch(/aviso/);
+  expect(props.message!.description).toMatch(/autocontenido/);
+  expect(props.files!.description).toMatch(/relativas a la carpeta de esta sesión/);
+  expect(props.files!.description).toMatch(/5 de 1 MB/);
+  expect(send.description).toMatch(/a ti mismo/);
 });
 
 describe("send_request", () => {
@@ -179,7 +191,9 @@ describe("guardia de salida: secretos e inyección", () => {
   });
 
   test("allow_secrets aparece en el esquema de las dos herramientas", () => {
-    for (const t of TOOLS.slice(1)) expect(Object.keys(t.inputSchema.properties)).toContain("allow_secrets");
+    for (const n of ["send_request", "respond_to_request"]) {
+      expect(Object.keys(TOOLS.find((t) => t.name === n)!.inputSchema.properties)).toContain("allow_secrets");
+    }
   });
 });
 
@@ -189,7 +203,7 @@ describe("aprobación en el chat de Claude Code", () => {
     sent: { requestId: "q9", toName: "María", sentAt: 1_000, deadline: 1_000 + 60 * 60_000 }, ...over,
   });
 
-  test("send_request y respond_to_request piden el aviso en cada llamada; list_teammates no", () => {
+  test("send_request y respond_to_request piden el aviso en cada llamada; las de lectura no", () => {
     const byName = Object.fromEntries(TOOLS.map((t) => [t.name, t]));
     for (const n of ["send_request", "respond_to_request"]) {
       expect(byName[n]!._meta).toEqual({ "anthropic/requiresUserInteraction": true });
@@ -198,7 +212,8 @@ describe("aprobación en el chat de Claude Code", () => {
   });
 
   test("las descripciones explican al humano qué aprueba; mensaje, archivos y nombre son argumentos visibles", () => {
-    const [, send, respond] = TOOLS;
+    const send = TOOLS.find((t) => t.name === "send_request");
+    const respond = TOOLS.find((t) => t.name === "respond_to_request");
     for (const t of [send!, respond!]) {
       expect(t.description).toMatch(/Claude Code/);
       expect(t.description).toMatch(/app de Devi/);
