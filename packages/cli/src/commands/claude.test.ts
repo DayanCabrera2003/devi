@@ -45,3 +45,9 @@ test("args de claude: -c y --resume se pasan tal cual", () => {
     "--channels", "plugin:devi@devi-local", "--name", "web", "--resume", "abc",
   ]);
 });
+
+test("args de claude: el prompt inicial (traspaso) va al final, como argumento posicional", () => {
+  expect(buildClaudeArgs({ session: "api", mode: "plugin", passthrough: ["--model", "opus"], prompt: "Hola" })).toEqual([
+    "--channels", "plugin:devi@devi-local", "--name", "api", "--model", "opus", "Hola",
+  ]);
+});

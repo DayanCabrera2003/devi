@@ -68,3 +68,13 @@ describe("parseCliArgs", () => {
     expect(() => parseCliArgs(["volar"])).toThrow(/comando desconocido: volar/);
   });
 });
+
+test("claude --handoff ID: empieza la sesión con un traspaso (id validado)", () => {
+  expect(parseCliArgs(["claude", "--handoff", "3f9a1c2e"])).toEqual({
+    cmd: "claude", session: undefined, channel: "auto", passthrough: [], handoff: "3f9a1c2e",
+  });
+  expect(parseCliArgs(["claude", "--handoff", "q1", "--", "--model", "opus"])).toMatchObject({ handoff: "q1", passthrough: ["--model", "opus"] });
+  expect("handoff" in parseCliArgs(["claude"])).toBe(false);
+  expect(() => parseCliArgs(["claude", "--handoff"])).toThrow(/necesita un valor/);
+  expect(() => parseCliArgs(["claude", "--handoff", "../x"])).toThrow(CliArgError);
+});

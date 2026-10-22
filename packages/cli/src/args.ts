@@ -9,7 +9,7 @@ export type CliCommand =
   | { cmd: "server"; argv: string[] }
   | { cmd: "mcp" }
   | { cmd: "hook"; event: HookEvent | null }
-  | { cmd: "claude"; session: string | undefined; channel: ChannelMode; passthrough: string[] }
+  | { cmd: "claude"; session: string | undefined; channel: ChannelMode; passthrough: string[]; handoff?: string }
   | { cmd: "doctor" }
   | { cmd: "shell-alias"; action: "install" | "remove" | "status"; json: boolean }
   | {
@@ -23,6 +23,9 @@ export type CliCommand =
 
 export class CliArgError extends Error {}
 
+// Id de un traspaso (`devi claude --handoff ID`): mismo patrón que los request_id de las entregas.
+export const HANDOFF_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
 export const USAGE = `Uso: devi <comando>
 
   server [--port N | --socket RUTA] [--data-dir DIR] [--admin LOGIN] [--allowed-domain DOMINIO]...
@@ -31,8 +34,9 @@ export const USAGE = `Uso: devi <comando>
   mcp                    Servidor MCP + canal (lo lanza Claude Code, no a mano)
   hook <working|idle|start>
                          Hook de Claude Code (lee el JSON del hook por stdin)
-  claude [--session NOMBRE] [--channel auto|plugin|dev] [-- args de claude]
+  claude [--session NOMBRE] [--channel auto|plugin|dev] [--handoff ID] [-- args de claude]
                          Lanza Claude Code con el canal de Devi cargado
+                         (con --handoff, empieza con el traspaso ID de un compañero)
   doctor                 Diagnostica Tailscale, servidor, login, plugin y canal
   install-integration [--from BINARIO] [--bin-dir DIR] [--marketplace-dir DIR] [--no-claude] [--json]
                          Instala el binario en una ruta estable y el plugin de Claude Code
@@ -93,6 +97,7 @@ function parseClaude(argv: string[], env: Record<string, string | undefined>): C
   // DEVI_CHANNEL=1 no es un modo: lo pone `devi claude` en su Claude Code para avisar de que hay canal.
   let channel = env.DEVI_CHANNEL === "1" ? "auto" : parseChannel(env.DEVI_CHANNEL);
   let passthrough: string[] = [];
+  let handoff: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === "--") {
@@ -100,10 +105,14 @@ function parseClaude(argv: string[], env: Record<string, string | undefined>): C
       break;
     } else if (a === "--session") session = takeValue(argv, i++, a);
     else if (a === "--channel") channel = parseChannel(takeValue(argv, i++, a));
+    else if (a === "--handoff") handoff = takeValue(argv, i++, a);
     else throw new CliArgError(`argumento desconocido para devi claude: ${a} (los de claude van después de --)`);
   }
   if (session !== undefined && session.trim() === "") throw new CliArgError("--session no puede estar vacío");
-  return { cmd: "claude", session, channel, passthrough };
+  if (handoff !== undefined && !HANDOFF_ID.test(handoff)) {
+    throw new CliArgError(`--handoff necesita el id del traspaso (letras, números, _ y -): ${handoff}`);
+  }
+  return { cmd: "claude", session, channel, passthrough, ...(handoff !== undefined ? { handoff } : {}) };
 }
 
 function parseShellAlias(argv: string[]): CliCommand {
