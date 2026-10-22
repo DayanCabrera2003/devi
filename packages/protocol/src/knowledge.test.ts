@@ -48,7 +48,7 @@ describe("base de conocimiento del equipo", () => {
 
   test("eventos de la app: guardada o rechazada (con los motivos)", () => {
     expect(UserEventSchema.parse({ type: "knowledge.saved", entry }).type).toBe("knowledge.saved");
-    const refused = { type: "knowledge.refused", requestId: "q1", reasons: ["Token de GitHub (ghp_…)"] };
+    const refused = { type: "knowledge.refused" as const, requestId: "q1", reasons: ["Token de GitHub (ghp_…)"] };
     expect(UserEventSchema.parse(refused)).toEqual(refused);
   });
 
