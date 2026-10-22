@@ -104,7 +104,8 @@ export function createApp(opts: AppOptions) {
       throw new HttpError(403, `Te falta el permiso "${match.route.perm}"`, { code: "missing_perm", perm: match.route.perm });
     }
     // Límites de ritmo por persona: borradores aparte; el latido de presencia no cuenta; las lecturas tampoco.
-    if (match.route === API.createDraft) ctx.rateLimit.take("draft", access.memberId);
+    // Enviar desde la app cuenta como un borrador: es la otra forma de crear una solicitud.
+    if (match.route === API.createDraft || match.route === API.sendFromApp) ctx.rateLimit.take("draft", access.memberId);
     else if (req.method !== "GET" && match.route !== API.heartbeat) ctx.rateLimit.take("mutation", access.memberId);
     return match.handler({ request: req, url, params: match.params, principal, access });
   }

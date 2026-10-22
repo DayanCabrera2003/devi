@@ -56,6 +56,24 @@ export class FileManager implements FilesService {
     });
   }
 
+  // Sin borrador (enviada desde la app): draft_id queda vacío y request_id ya apunta a la solicitud.
+  recordForRequest(input: {
+    requestId: string;
+    direction: "request" | "response";
+    authorMemberId: string;
+    peerMemberId: string;
+    written: WrittenFile[];
+  }): FileMeta[] {
+    return input.written.map(({ id, path, file: f }) => {
+      this.repo.insert({
+        id, draftId: "", requestId: input.requestId, direction: input.direction, name: f.name, size: f.size,
+        sha256: f.sha256, path, authorMemberId: input.authorMemberId, peerMemberId: input.peerMemberId,
+        createdAt: this.now(), releasedAt: null, deletedAt: null,
+      });
+      return { id, name: f.name, size: f.size, direction: input.direction };
+    });
+  }
+
   // Atajo: write + record (sin atomicidad con otras tablas).
   store(input: { draftId: string; direction: "request" | "response"; authorMemberId: string; peerMemberId: string; files: ValidFile[] }): FileMeta[] {
     const written = this.write(input.files);
