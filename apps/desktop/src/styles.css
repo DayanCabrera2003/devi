@@ -36,7 +36,7 @@
   --avatar: linear-gradient(180deg, #8e8e93 0%, #5d5d62 100%);
 
   /* materiales */
-  --glass: rgba(28, 28, 30, 0.62);
+  --glass: rgba(28, 28, 30, 0.7);
   --glass-strong: rgba(36, 36, 38, 0.74);
   --glass-solid: #242426;
   --glass-edge: rgba(255, 255, 255, 0.1);
@@ -92,7 +92,7 @@
   --bubble-them: #e9e9eb;
   --bubble-me: #0071e3;
   --avatar: linear-gradient(180deg, #a5a5ab 0%, #7c7c82 100%);
-  --glass: rgba(255, 255, 255, 0.66);
+  --glass: rgba(255, 255, 255, 0.78);
   --glass-strong: rgba(250, 250, 252, 0.8);
   --glass-solid: #f7f7f9;
   --glass-edge: rgba(0, 0, 0, 0.08);
@@ -138,7 +138,7 @@
     --bubble-them: #e9e9eb;
     --bubble-me: #0071e3;
     --avatar: linear-gradient(180deg, #a5a5ab 0%, #7c7c82 100%);
-    --glass: rgba(255, 255, 255, 0.66);
+    --glass: rgba(255, 255, 255, 0.78);
     --glass-strong: rgba(250, 250, 252, 0.8);
     --glass-solid: #f7f7f9;
     --glass-edge: rgba(0, 0, 0, 0.08);
@@ -623,7 +623,7 @@ table.people tbody tr:hover td { background: var(--hover); }
 .cap-add { display: flex; gap: 8px; align-items: center; }
 .cap-add > button { flex: none; }
 .perm-list { background: var(--fill); border-radius: 10px; overflow: hidden; }
-.perm-list .check { padding: 6px 12px; min-height: 40px; justify-content: space-between; }
+.perm-list .check { padding: 6px 12px; min-height: 40px; justify-content: space-between; color: var(--label); font-size: 13.5px; font-weight: 400; }
 .perm-list .check + .check { box-shadow: inset 0 0.5px 0 var(--separator); }
 .perm-list .check input.switch { order: 2; }
 .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 8px 0 10px; }
@@ -631,7 +631,7 @@ table.people tbody tr:hover td { background: var(--hover); }
 .stat b { display: block; font-size: 20px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .audit-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
 .audit-head select { max-width: 280px; width: auto; flex: 1; }
-table.audit td { overflow-wrap: anywhere; }
+table.audit td { overflow-wrap: break-word; }
 table.audit td:first-child { white-space: nowrap; color: var(--label2); font-variant-numeric: tabular-nums; font-size: 12px; }
 .tab-count, .count { display: inline-grid; place-items: center; min-width: 17px; height: 17px; padding: 0 5px; border-radius: 999px; background: var(--red); color: #fff; font-size: 10.5px; font-weight: 700; line-height: 1; }
 
@@ -713,10 +713,21 @@ body.mascota .ambient { display: none; }
   .wizard .card { padding: 16px; }
   table.people th, table.people td { padding: 8px; }
   .hide-compact { display: none; }
+  .page-head:has(.segmented) h1 { display: none; }
+  .page-head .segmented { flex: 1 1 auto; min-width: 0; }
+  .composer textarea { max-height: 96px; }
+  /* Tablas de Admin como lista: una tarjeta por fila, nada fuera de la vista. */
+  table.people thead { display: none; }
+  table.people tr { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 10px 12px; }
+  table.people tbody tr + tr { border-top: 0.5px solid var(--separator); }
+  table.people td, table.people tbody tr:first-child td { display: block; padding: 0; border: none; }
+  table.people td:first-child { flex: 1 1 100%; }
+  table.people td.row-actions { margin-left: auto; white-space: normal; }
+  table.people tbody tr:hover td { background: transparent; }
+  .table-wrap { overflow-x: visible; }
 }
 
 @media (max-width: 340px) {
-  .page-head h1 { display: none; }
   .actions button { flex: 1 1 auto; }
   .cell { padding: 8px 10px; }
 }

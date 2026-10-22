@@ -30,8 +30,8 @@ describe("DeviApp: conversaciones", () => {
     vi.useFakeTimers();
     const { app, conversations, push } = await connected();
     await app.openConversation("m2");
-    conversations.conversations.mockClear();
-    conversations.conversation.mockClear();
+    (conversations.conversations as ReturnType<typeof vi.fn>).mockClear();
+    (conversations.conversation as ReturnType<typeof vi.fn>).mockClear();
     push({ type: "conversation.updated", memberId: "m2" });
     push({ type: "conversation.updated", memberId: "m3" });
     await vi.advanceTimersByTimeAsync(300);

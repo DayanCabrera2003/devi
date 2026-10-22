@@ -18,11 +18,27 @@
   let pickError = $state<string | null>(null);
 
   // El campo crece con el texto hasta un máximo (luego hace scroll).
-  $effect(() => {
-    void c.text;
+  function grow() {
     if (!field) return;
     field.style.height = "auto";
     field.style.height = `${Math.min(field.scrollHeight, 160)}px`;
+  }
+  $effect(() => {
+    void c.text;
+    grow();
+  });
+  // Con la fuente cargada o con otro ancho, las líneas miden otra cosa.
+  $effect(() => {
+    void document.fonts?.ready.then(grow);
+    if (!field || typeof ResizeObserver === "undefined") return;
+    let width = field.clientWidth;
+    const ro = new ResizeObserver(() => {
+      if (field.clientWidth === width) return;
+      width = field.clientWidth;
+      grow();
+    });
+    ro.observe(field);
+    return () => ro.disconnect();
   });
 
   function removeFile(token: string) {

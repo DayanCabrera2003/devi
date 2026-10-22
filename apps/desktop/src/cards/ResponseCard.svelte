@@ -81,7 +81,6 @@
   {#if request.responseFiles.length > 0}
     <SaveFilesButton save={() => app.saveFiles(request.id, "response", request.responseFiles)} />
   {/if}
-  <div class="caption"><span class="badge {outcome.cls}">{outcome.label}</span></div>
   {#if scan.level === "high"}<SendConfirm bind:checked={reviewed} />{/if}
   <div class="actions">
     <button class="primary" disabled={busy} onclick={acceptIt}>Aceptar</button>

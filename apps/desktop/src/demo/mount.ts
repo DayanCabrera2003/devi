@@ -132,17 +132,3 @@ export async function mountDemo(target: HTMLElement, screen: string): Promise<vo
   mount(DemoRoot, { target, props: { app, screen } });
 }
 
-// Depuración visual del modo demo: ?debug=<selector> vuelca los estilos calculados en el DOM.
-if (new URLSearchParams(location.search).get("debug")) {
-  setTimeout(() => {
-    const sel = new URLSearchParams(location.search).get("debug")!;
-    const out = [...document.querySelectorAll(sel)].slice(0, 4).map((el) => {
-      const cs = getComputedStyle(el);
-      return `${el.className} color=${cs.color} opacity=${cs.opacity} bg=${cs.backgroundColor} filter=${cs.filter}`;
-    });
-    const pre = document.createElement("pre");
-    pre.id = "debug-out";
-    pre.textContent = out.join("\n");
-    document.body.append(pre);
-  }, 1500);
-}
