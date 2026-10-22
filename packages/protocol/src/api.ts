@@ -105,6 +105,9 @@ export const CreateDraftResult = z.intersection(
 );
 export type CreateDraftResult = z.infer<typeof CreateDraftResult>;
 
+export const ReassignResult = z.object({ request: DeviRequestSchema, original: DeviRequestSchema });
+export type ReassignResult = z.infer<typeof ReassignResult>;
+
 export const API = {
   health: route({ method: "GET", path: "/api/v1/health", perm: null, actor: "any", body: Empty,
     response: z.object({ ok: z.literal(true), version: z.string() }) }),
@@ -146,6 +149,10 @@ export const API = {
   forwardResponse: route({ human: true, method: "POST", path: "/api/v1/requests/:id/response/forward", perm: null, actor: "sender", body: z.object({ sessionId: z.string() }), response: DeviRequestSchema }),
   resendRequest: route({ human: true, method: "POST", path: "/api/v1/requests/:id/resend", perm: null, actor: "sender", body: Empty, response: DeviRequestSchema }),
   ignoreRequest: route({ human: true, method: "POST", path: "/api/v1/requests/:id/ignore", perm: null, actor: "sender", body: Empty, response: DeviRequestSchema }),
+  // Pedírselo a otra persona (pending o timed_out): solicitud nueva para `to` con el mismo mensaje y archivos;
+  // la original queda closed con la nota "Reenviada a <nombre>".
+  reassignRequest: route({ human: true, method: "POST", path: "/api/v1/requests/:id/reassign", perm: "requests.send", actor: "sender",
+    body: z.object({ to: NonEmpty }), response: ReassignResult }),
 
   // Enviar desde la app (multipart: "meta" = SendFromAppMeta + 0..5 "files"; con archivos pide además files.send).
   // La escribe una persona: sale directamente como pending, sin borrador.

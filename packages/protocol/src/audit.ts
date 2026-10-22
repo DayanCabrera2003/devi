@@ -16,6 +16,8 @@ export const AUDIT_ACTIONS = [
   "request.resent",
   "request.ignored",
   "request.timed_out",
+  "request.escalated",
+  "request.reassigned", // el remitente se la pidió a otra persona: solicitud nueva y la original cerrada
   "response.accepted",
   "response.forwarded",
   "file.downloaded",

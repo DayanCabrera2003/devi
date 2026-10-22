@@ -11,6 +11,8 @@ export const UserEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("request.updated"), request: DeviRequestSchema }),
   z.object({ type: z.literal("response.incoming"), request: DeviRequestSchema }),
   z.object({ type: z.literal("request.timed_out"), request: DeviRequestSchema }),
+  // Una solicitud mía sigue sin respuesta al cumplirse escalateAfterMs: la app propone pedírsela a otra persona.
+  z.object({ type: z.literal("request.escalated"), request: DeviRequestSchema }),
   z.object({ type: z.literal("team.updated") }),
   // Cambió alguna solicitud (o borrador) entre esta persona y memberId: la app recarga esa conversación.
   z.object({ type: z.literal("conversation.updated"), memberId: z.string() }),
@@ -27,7 +29,7 @@ export type UserEventType = UserEvent["type"];
 // SSE de sesión (MCP → canal de Claude Code). En el cable: `event: deliver` + `data: <JSON>`.
 export const SESSION_EVENT = "deliver";
 export const SessionDeliverySchema = z.object({
-  kind: z.enum(["request", "response", "draft_authorized", "draft_discarded", "debug"]),
+  kind: z.enum(["request", "response", "draft_authorized", "draft_discarded", "escalation", "debug"]),
   content: z.string(), // texto que verá el agente
   meta: z.record(z.string(), z.string()), // atributos del <channel>: request_id, draft_id, files…
 });

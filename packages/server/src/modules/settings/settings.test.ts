@@ -76,6 +76,38 @@ describe("settings", () => {
     expect((await patch({ chatApproval: true })).data.chatApproval).toBe(true);
   });
 
+  test("escalateAfterMs: 30 min por defecto, null lo desactiva, 5 min–24 h y menor que el timeout", async () => {
+    t = createTestApp({ modules: [team, settingsModule] });
+    const patch = (b: object) => t.call("admin@dev", "PATCH", "/api/v1/settings", b);
+    const MIN = 60_000;
+    expect((await t.call("admin@dev", "GET", "/api/v1/settings")).data.escalateAfterMs).toBe(30 * MIN);
+    for (const bad of [{ escalateAfterMs: 5 * MIN - 1 }, { escalateAfterMs: 24 * 60 * MIN + 1 }, { escalateAfterMs: "pronto" }, { escalateAfterMs: 1.5 * MIN }]) {
+      expect((await patch(bad)).status).toBe(400);
+    }
+    // Con el timeout por defecto (1 h), el plazo de escalado tiene que ser menor.
+    const tooLate = await patch({ escalateAfterMs: 60 * MIN });
+    expect(tooLate.status).toBe(400);
+    expect(tooLate.data.error).toContain("escalateAfterMs");
+    expect((await patch({ escalateAfterMs: 5 * MIN })).status).toBe(200);
+    expect((await patch({ requestTimeoutMs: 24 * 60 * MIN + MIN, escalateAfterMs: 24 * 60 * MIN })).status).toBe(200);
+    // Bajar solo el timeout no se rechaza (el escalado deja de avisar, ver requests); con los dos, sí.
+    expect((await patch({ requestTimeoutMs: 10 * MIN, escalateAfterMs: 10 * MIN })).status).toBe(400);
+    expect((await patch({ requestTimeoutMs: 10 * MIN })).status).toBe(200);
+    const off = await patch({ escalateAfterMs: null });
+    expect(off.data.escalateAfterMs).toBeNull();
+    expect(t.app.ctx.services.get("settings").get().escalateAfterMs).toBeNull();
+    expect((await patch({ requestTimeoutMs: MIN })).status).toBe(200); // desactivado, no limita el timeout
+  });
+
+  test("un equipo con un timeout menor que el escalado por defecto puede seguir cambiando otros ajustes", async () => {
+    t = createTestApp({ modules: [team, settingsModule] });
+    const patch = (b: object) => t.call("admin@dev", "PATCH", "/api/v1/settings", b);
+    // Guardado antes de existir el escalado: 10 min de timeout (el escalado por defecto es 30 min).
+    t.app.ctx.db.query("INSERT INTO settings (key, value) VALUES ('requestTimeoutMs', '600000')").run();
+    expect((await patch({ chatApproval: false })).status).toBe(200);
+    expect((await patch({ escalateAfterMs: 5 * 60_000 })).status).toBe(200);
+  });
+
   test("solo team.admin", async () => {
     t = createTestApp({ modules: [team, settingsModule] });
     const res = await t.call("maria@dev", "GET", "/api/v1/settings");

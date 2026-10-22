@@ -8,6 +8,7 @@ export const DEFAULT_SETTINGS = {
   fileMaxAgeDays: 30, // tope absoluto desde la subida
   allowedDomains: [] as string[], // vacío = cualquier login de la tailnet (luego se mira el equipo)
   chatApproval: true, // los envíos aprobados en el aviso de Claude Code salen sin pasar por la app
+  escalateAfterMs: 1_800_000 as number | null, // 30 min sin respuesta → aviso al autor (null = desactivado)
 } as const;
 
 // Presencia. Un SSE abierto no basta: si el cliente se cae sin cerrar la conexión, Bun.serve puede

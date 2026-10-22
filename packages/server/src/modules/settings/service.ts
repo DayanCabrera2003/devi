@@ -28,6 +28,11 @@ export class SettingsManager implements SettingsService {
     if (next.fileMaxAgeDays < next.fileRetentionDays) {
       throw new HttpError(400, "fileMaxAgeDays (tope de archivos) no puede ser menor que fileRetentionDays (retención)", { code: "invalid" });
     }
+    // Solo cuando se cambia el escalado: bajar el timeout (o un equipo con un timeout guardado menor que el
+    // escalado por defecto) no se rechaza; en ese caso el plazo de escalado cae después y simplemente no avisa.
+    if (patch.escalateAfterMs != null && next.escalateAfterMs !== null && next.escalateAfterMs >= next.requestTimeoutMs) {
+      throw new HttpError(400, "escalateAfterMs (escalado) tiene que ser menor que requestTimeoutMs (timeout de la solicitud)", { code: "invalid" });
+    }
     this.db.transaction(() => {
       for (const k of KEYS) if (patch[k] !== undefined) this.store.set(k, next[k]);
     })();

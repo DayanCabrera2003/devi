@@ -38,7 +38,7 @@ export type Session = z.infer<typeof SessionSchema>;
 // Entrega guardada en la bandeja de una sesión hasta que se confirma (ack).
 export const InboxItemSchema = z.object({
   id: z.string(),
-  kind: z.enum(["request", "response", "draft_authorized", "draft_discarded"]),
+  kind: z.enum(["request", "response", "draft_authorized", "draft_discarded", "escalation"]),
   content: z.string(),
   meta: z.record(z.string(), z.string()),
   createdAt: z.number(),
@@ -101,6 +101,11 @@ export const DeviRequestSchema = z.object({
   sentAt: z.number(),
   deadline: z.number(),
   context: RequestContextSchema.optional(), // contexto que añadió el agente (y git de su sesión), si lo hay
+  // Escalado: cuándo se avisó al autor de que seguía sin respuesta (como mucho una vez por solicitud).
+  escalatedAt: z.number().optional(),
+  // Al pedírselo a otra persona: la original queda closed con una nota y el id de la solicitud nueva.
+  closedNote: z.string().optional(),
+  replacedBy: z.string().optional(),
 });
 export type DeviRequest = z.infer<typeof DeviRequestSchema>;
 
@@ -137,6 +142,9 @@ export const SettingsSchema = z.object({
   // Aprobar envíos en el chat: si está activo, lo que el usuario aprueba en el aviso de permisos de
   // Claude Code se envía sin pasar por la app. Desactivado, todo queda en borrador para la app.
   chatApproval: z.boolean(),
+  // Escalado: si una solicitud sigue pending este tiempo, se avisa al autor (sesión y app) para que la pida a
+  // otra persona. null = desactivado. Que sea menor que requestTimeoutMs lo valida el servicio de settings.
+  escalateAfterMs: z.number().int().min(5 * MINUTE).max(24 * HOUR).nullable(),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 

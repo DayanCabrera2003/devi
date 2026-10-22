@@ -16,7 +16,7 @@ describe("catálogo de la API", () => {
     const human = Object.entries(API).filter(([, r]) => "human" in r && r.human).map(([k]) => k).sort();
     expect(human).toEqual([
       "acceptRequest", "acceptResponse", "authorizeDraft", "createMember", "createRole", "deleteMember", "deleteRole",
-      "discardDraft", "exportDb", "forwardRequest", "forwardResponse", "ignoreRequest", "rejectRequest", "resendRequest",
+      "discardDraft", "exportDb", "forwardRequest", "forwardResponse", "ignoreRequest", "reassignRequest", "rejectRequest", "resendRequest",
       "sendFromApp",
       "updateMember", "updateRole", "updateSettings",
       "withdrawKnowledge",
