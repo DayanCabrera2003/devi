@@ -183,6 +183,12 @@ Cuando tu agente envía algo a un compañero (`send_request`) o le responde (`re
 
 **Ajuste del equipo.** Un admin puede desactivarlo en **Admin → Servidor → «Aprobar envíos en el chat de Claude Code»** (está activado por defecto). Desactivado, todo lo que sale queda en borrador para la app, aunque lo hayas aprobado en el chat, y el agente te dice que lo autorices allí. Cada envío aprobado en el chat queda en **Admin → Auditoría** como `draft.approved_in_chat`: quién lo envió, a quién, los nombres y tamaños de los archivos y el SHA-256 del mensaje (nunca el texto). Los permisos, los límites de ritmo, la validación de archivos y el aviso de secretos se aplican igual que con la app.
 
+### Si nadie responde: escalado
+
+Si tu solicitud sigue sin respuesta (nadie la acepta, rechaza ni la envía a una sesión) al cabo de un plazo, Devi te avisa una vez: en la app y en la sesión de Claude Code desde la que la pediste. Tu agente te lo dice y, si quieres, te propone a otra persona según sus capacidades y si está conectada; decides tú. Lo más directo es el botón **«Pedírselo a otra persona»** de la tarjeta de la solicitud enviada (también sale cuando venció el plazo): eliges a alguien, le llega el mismo mensaje con los mismos archivos y la solicitud original se cierra con la nota «Reenviada a <nombre>».
+
+El plazo lo fija un admin en **Admin → Servidor → Escalado** (30 min por defecto, entre 5 min y 24 h, y menor que el timeout de la solicitud); también se puede desactivar.
+
 ### Escribir a un compañero desde la app
 
 No hace falta pasar por Claude Code para pedir algo: en la app, abre la conversación con esa persona, escribe el mensaje y, si quieres, adjunta hasta 5 archivos de texto (botón de adjuntar o arrastrándolos sobre la ventana). La solicitud sale al momento, sin borrador que autorizar, porque la has escrito tú. A tu compañero le llega igual que una solicitud de un agente (puede aceptarla, rechazarla o enviarla a una de sus sesiones) y su respuesta te llega a ti: la aceptas o la envías a una de tus sesiones.

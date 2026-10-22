@@ -99,15 +99,16 @@ Todas las rutas están declaradas en `API` (`packages/protocol/src/api.ts`) con 
 | `POST /requests/:id/resend` · `/ignore` | remitente, humana | Tras un plazo vencido. |
 | `GET /knowledge?q=&limit=` | miembro | Base del equipo: búsqueda de texto completo (sin `q`, las más recientes; 10 por defecto, hasta 50). Lo usa `search_knowledge`. |
 | `DELETE /knowledge/:id` | quien respondió o admin, humana | Retirar una entrada de la base del equipo. |
+| `POST /requests/:id/reassign` | remitente, `requests.send` (+ `files.send` con archivos), humana | Pedírselo a otra persona (`{ to }`), con la solicitud en `pending` o `timed_out`: crea una nueva con el mismo mensaje, origen y archivos (copiados) y cierra la original con `closed_note` «Reenviada a …» y `replaced_by`. |
 | `GET /files/:id` | remitente o destinatario | Descargar un archivo. |
 | `GET /events/user` · `GET /events/session/:id` | miembro / dueño | SSE de la app y del MCP. |
 | `POST /debug/push` | admin | Solo en modo dev (404 en producción). |
 
 ### Eventos
 
-**SSE de usuario** (app): `draft.awaiting`, `draft.discarded`, `request.incoming`, `request.updated`, `response.incoming`, `request.timed_out`, `conversation.updated` (`{ memberId }`: cambió una solicitud o borrador con esa persona; llega a las dos partes), `team.updated`, `sessions.updated`, `knowledge.saved` / `knowledge.refused` (a quien respondió: su respuesta entró en la base del equipo o no se publicó por posibles secretos) y, solo a admins, `audit.alert`. Al conectar, el servidor reenvía las tarjetas abiertas.
+**SSE de usuario** (app): `draft.awaiting`, `draft.discarded`, `request.incoming`, `request.updated`, `response.incoming`, `request.timed_out`, `request.escalated` (solo al autor: sigue sin respuesta al cumplirse el plazo de escalado), `conversation.updated` (`{ memberId }`: cambió una solicitud o borrador con esa persona; llega a las dos partes), `team.updated`, `sessions.updated`, `knowledge.saved` / `knowledge.refused` (a quien respondió: su respuesta entró en la base del equipo o no se publicó por posibles secretos) y, solo a admins, `audit.alert`. Al conectar, el servidor reenvía las tarjetas abiertas.
 
-**SSE de sesión** (MCP → canal): un único evento `deliver` con `kind` = `request`, `response`, `draft_authorized`, `draft_discarded` o `debug`, el texto para el agente y los atributos del canal (`request_id`, `draft_id`, rutas de archivos…).
+**SSE de sesión** (MCP → canal): un único evento `deliver` con `kind` = `request`, `response`, `draft_authorized`, `draft_discarded`, `escalation` (una solicitud tuya sigue sin respuesta) o `debug`, el texto para el agente y los atributos del canal (`request_id`, `draft_id`, rutas de archivos…).
 
 ### Núcleo y módulos del servidor
 
@@ -158,7 +159,7 @@ drafts         id, kind (request|response), author_member, author_session, autho
                request_kind (request|handoff)
 requests       id, origin (session|app), from_member, from_session, from_session_name, to_member, message,
                status, forwarded_session, outcome, outcome_text, created_at, sent_at, deadline,
-               responded_at, context, kind (request|handoff)
+               responded_at, context, kind (request|handoff), escalated_at, closed_note, replaced_by
 files          id, draft_id, request_id, direction (request|response), name, size, sha256, path,
                author_member, peer_member, created_at, released_at, deleted_at
 audit_log      id, at, actor_member_id, actor_login, action, target_type, target_id, details
@@ -169,7 +170,7 @@ knowledge_fts      entry_id, question, answer   -- FTS5, sin acentos ni mayúscu
 - Los **borradores** son una tabla aparte: una solicitud de un agente solo existe en `requests` cuando su borrador se autoriza. Las escritas en la app (`origin = app`) se crean directamente, con `from_session` y `from_session_name` vacíos y sus archivos ya unidos a la solicitud (`draft_id` vacío).
 - **Traspasos de sesión** (`kind = handoff`): una solicitud con el contexto de un trabajo (estado, decisiones, próximos pasos, archivos clave, riesgos y dudas) para que otra persona lo continúe. Sigue el mismo ciclo (borrador, autorización, aceptar, rechazar, reenviar). Al entregarse a una sesión va encuadrado como contexto a verificar, nunca órdenes, con `meta.request_kind = handoff`. `devi claude --handoff <id>` lo descarga con `GET /requests/:id` (solo el destinatario) y abre Claude Code con él como prompt inicial, también encuadrado.
 - **Permisos** (`packages/protocol/src/perms.ts`): `requests.send`, `files.send` y `team.admin`. Los de una persona son la unión de los de sus roles. Siempre debe quedar al menos un admin.
-- **Ajustes por defecto**: plazo de una solicitud 1 h, 15 min para autorizar un borrador, archivos 7 días tras cerrarse la solicitud y 30 días como máximo, dominios permitidos vacíos.
+- **Ajustes por defecto**: plazo de una solicitud 1 h, aviso de escalado a los 30 min (`escalateAfterMs`; null lo desactiva), 15 min para autorizar un borrador, archivos 7 días tras cerrarse la solicitud y 30 días como máximo, dominios permitidos vacíos.
 - **Base del equipo**: quien responde decide si guarda la respuesta («Guardar en la base del equipo» en la app al aceptar con nota, o `share_with_team` en `respond_to_request`; queda en el borrador como `share_with_team`). Al enviarse, `requests` emite `request.shared` y `knowledge` lo indexa: pregunta (el mensaje original), respuesta, quién preguntó, quién respondió y cuándo, nunca los archivos. Si el detector de secretos salta en la pregunta o en la respuesta, no se publica y se avisa a quien respondió. Al agente le llega encuadrada como cualquier texto de compañeros (`DEVI-UNTRUSTED`).
 - **Auditoría**: solo se añade (un trigger impide modificar filas) y se borra a los 365 días. De los mensajes guarda su SHA-256, nunca el texto.
 
@@ -193,6 +194,7 @@ pending ──forward──▶ forwarded ──(borrador de respuesta autorizado
    └─reject─▶ rejected
 pending|forwarded ──plazo──▶ timed_out ─resend─▶ pending
                                         └─ignore─▶ closed
+pending|timed_out ──reassign──▶ closed   (y una solicitud nueva en pending para otra persona)
 accepted|rejected|answered ──el remitente acepta o la envía a una sesión──▶ closed
 ```
 
@@ -200,6 +202,7 @@ accepted|rejected|answered ──el remitente acepta o la envía a una sesión�
 - Mientras haya un borrador de respuesta pendiente, el plazo de la solicitud se pausa. Si se descarta o caduca, la solicitud sigue en `forwarded` con un plazo nuevo completo.
 - Aceptar y Rechazar desde la tarjeta son acciones humanas directas.
 - Plazos y caducidades se guardan en SQLite y se reprograman al arrancar (`onStart`), así que sobreviven a reinicios.
+- **Escalado.** Si la solicitud sigue en `pending` a los `escalateAfterMs` de `sent_at` (y eso cae antes del plazo), el servidor avisa al autor: `kind="escalation"` a su sesión de origen (a su bandeja, como el resto de entregas; las escritas en la app no tienen sesión) y `request.escalated` a su app. `escalated_at` hace que sea una sola vez por solicitud, también tras un reenvío o un reinicio (si venció con el servidor apagado, avisa al arrancar). Bajar el timeout por debajo del escalado no se rechaza: entonces no avisa. El servidor no elige a nadie: el agente propone (con `list_teammates`) y la persona decide, normalmente con «Pedírselo a otra persona» (`reassign`, auditoría `request.reassigned`).
 
 Una solicitud escrita en la app entra directamente en `pending` (auditoría `request.sent_from_app`) y sigue el mismo ciclo; nada supone que el remitente tenga una sesión: su respuesta se acepta o se envía a cualquiera de sus sesiones.
 
