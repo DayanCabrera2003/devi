@@ -75,6 +75,9 @@ export type RequestStatus = z.infer<typeof RequestStatusSchema>;
 
 export const DeviRequestSchema = z.object({
   id: z.string(),
+  // session = la pidió un agente y su humano autorizó el borrador; app = la escribió una persona en la app
+  // (entonces fromSessionId y fromSessionName son cadenas vacías). Sin campo (servidor anterior) = session.
+  origin: z.enum(["session", "app"]).default("session"),
   fromMemberId: z.string(),
   fromSessionId: z.string(),
   fromSessionName: z.string(),
@@ -122,6 +125,9 @@ export const SettingsSchema = z.object({
   fileMaxAgeDays: z.number().int().min(1).max(30),
   // Si no está vacío, solo entran logins @<uno de estos dominios> (403 "domain" antes de mirar el equipo).
   allowedDomains: z.array(DomainSchema).max(20),
+  // Aprobar envíos en el chat: si está activo, lo que el usuario aprueba en el aviso de permisos de
+  // Claude Code se envía sin pasar por la app. Desactivado, todo queda en borrador para la app.
+  chatApproval: z.boolean(),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 

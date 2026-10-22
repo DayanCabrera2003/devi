@@ -35,6 +35,9 @@ describe("DeviApi", () => {
     const client: ClientLike = {
       call,
       downloadFile: vi.fn(async () => "contenido"),
+      sendFromApp: vi.fn(async () => ({}) as never),
+      conversations: vi.fn(async () => ({ items: [] })),
+      conversation: vi.fn(async () => ({ requests: [] })),
       subscribeUser: vi.fn(() => () => {}),
     };
     return { client, call };

@@ -2,7 +2,7 @@ import type { DeviRequest, Draft, FileMeta, UserEvent } from "@devi/protocol";
 import { type DeviApi, errorMessage } from "./api";
 import { type AuditEntry, auditNotice } from "./audit";
 import { Clock } from "./clock.svelte";
-import { type ConversationsHttp, type NativeFiles, conversationsHttp, isConversationUpdated, nativeFiles } from "./conversations-api";
+import { type ConversationsHttp, type NativeFiles, conversationsHttp, nativeFiles } from "./conversations-api";
 import type { MascotState } from "./mascot";
 import { type AppPrefs, type ClientConfig, type Native, type ServerStatus, prefsOf } from "./native";
 import { type Notice, noticeFor, noticeKey, shouldNotify, summaryNotice } from "./notify";
@@ -196,11 +196,9 @@ export class DeviApp {
       this.onAuditAlert(ev.entry);
       return;
     }
-    // conversation.updated puede no estar aún en UserEvent: se reconoce por su forma.
-    const raw: unknown = ev;
-    if (isConversationUpdated(raw)) {
+    if (ev.type === "conversation.updated") {
       this.scheduleConversations();
-      if (this.selected === raw.memberId) void this.reloadThread();
+      if (this.selected === ev.memberId) void this.reloadThread();
       return;
     }
     if (ev.type === "team.updated") {

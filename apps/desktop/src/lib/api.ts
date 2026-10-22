@@ -9,6 +9,8 @@ import {
   VERSION_HEADER,
   type ApiRoute,
   type AuditPage,
+  type ConversationPage,
+  type ConversationsResponse,
   type CreateMemberBody,
   type CreateRoleBody,
   type DeviRequest,
@@ -114,6 +116,9 @@ type CallOpts = { params?: Record<string, string>; body?: unknown; query?: Recor
 export interface ClientLike {
   call(name: ApiRoute, opts: CallOpts): Promise<unknown>;
   downloadFile(id: string): Promise<string>;
+  sendFromApp(meta: { to: string; message: string }, files: { name: string; content: string }[]): Promise<DeviRequest>;
+  conversations(): Promise<ConversationsResponse>;
+  conversation(memberId: string, opts?: { before?: number; limit?: number }): Promise<ConversationPage>;
   subscribeUser(onEvent: (e: UserEvent) => void, opts?: { onStatus?: StatusListener }): () => void;
 }
 
@@ -166,6 +171,15 @@ export class DeviApi {
 
   downloadFile(id: string) { return this.client.downloadFile(id); }
 
+  // Conversaciones por persona y envío desde la app (multipart: meta + archivos).
+  sendFromApp(meta: { to: string; message: string }, files: { name: string; content: string }[]) {
+    return this.client.sendFromApp(meta, files);
+  }
+  conversations() { return this.client.conversations(); }
+  conversation(memberId: string, opts: { before?: number; limit?: number } = {}) {
+    return this.client.conversation(memberId, opts);
+  }
+
   subscribe(onEvent: (e: UserEvent) => void, onStatus: StatusListener): () => void {
     return this.client.subscribeUser(onEvent, { onStatus });
   }
@@ -184,19 +198,6 @@ export class DeviApi {
     const query: Record<string, string> = { limit: String(q.limit) };
     if (q.before !== undefined) query.before = String(q.before);
     return this.call<AuditPage>("audit", { query });
-  }
-
-  // Petición directa con las cabeceras de @devi/client (el navegador pone Origin). Devuelve el JSON sin
-  // validar: quien llama lo comprueba. Los errores del servidor salen como HttpFailure.
-  async fetchJson(path: string, init: { method?: string; query?: Record<string, string>; body?: BodyInit } = {}): Promise<unknown> {
-    const url = new URL(path, this.baseUrl);
-    for (const [k, v] of Object.entries(init.query ?? {})) url.searchParams.set(k, v);
-    const res = await fetch(url, { method: init.method ?? "GET", headers: this.headers(), body: init.body });
-    if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as ErrorBody | null;
-      throw new HttpFailure(res.status, body ?? { error: `Error ${res.status} del servidor de Devi` });
-    }
-    return res.json();
   }
 
   // Binario (application/octet-stream): se pide con fetch directo y las mismas cabeceras.

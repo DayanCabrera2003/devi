@@ -3,6 +3,7 @@
 
 mod config;
 mod files;
+mod picked;
 mod sidecar;
 mod tailscale;
 mod tray;
@@ -23,6 +24,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(sidecar::ServerState::default())
+        .manage(picked::PickedFiles::default())
         .setup(|app| {
             // Sin tray (p. ej. falta libayatana-appindicator) Devi sigue funcionando con la mascota.
             if let Err(e) = tray::create(app.handle()) {
@@ -37,6 +39,10 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            // Archivos soltados sobre la ventana principal: los lee y valida Rust (ver picked.rs).
+            if let WindowEvent::DragDrop(drag) = event {
+                picked::on_drag_drop(window, drag);
+            }
             // Cerrar una ventana (también la mascota) la oculta: Devi sigue vivo. "Abrir" del tray
             // o una segunda instancia vuelven a mostrar las dos; se sale con "Salir de Devi".
             if let WindowEvent::CloseRequested { api, .. } = event {
@@ -51,6 +57,9 @@ pub fn run() {
             config::reset_received_dir,
             files::save_received_files,
             files::save_db_export,
+            picked::pick_files,
+            picked::take_files,
+            picked::discard_files,
             tailscale::tailscale_self_login,
             tailscale::tailscale_serve_configured,
             sidecar::run_devi,

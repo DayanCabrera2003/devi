@@ -1,4 +1,6 @@
 import type { DeviModule, ModuleContext } from "../../core/module";
+import { registerAppRoutes } from "./app-routes";
+import { Conversations } from "./conversations";
 import { registerRequestRoutes } from "./routes";
 import { RequestsManager } from "./service";
 import { RequestsStore, requestsMigrations } from "./store";
@@ -21,10 +23,12 @@ export const requestsModule: DeviModule = {
   migrations: requestsMigrations,
 
   routes(r, ctx) {
-    const requests = new RequestsManager(new RequestsStore(ctx.db), ctx);
+    const store = new RequestsStore(ctx.db, ctx.now);
+    const requests = new RequestsManager(store, ctx);
     managers.set(ctx, requests);
     ctx.bus.on("session.closed", ({ sessionId }) => requests.onSessionClosed(sessionId));
     registerRequestRoutes(r, ctx, requests);
+    registerAppRoutes(r, ctx, requests, new Conversations(store, ctx, (x) => requests.viewOf(x)));
   },
 
   onStart(ctx) {

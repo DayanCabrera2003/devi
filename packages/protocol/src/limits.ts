@@ -7,6 +7,7 @@ export const DEFAULT_SETTINGS = {
   fileRetentionDays: 7, // tras cerrar la solicitud o descartar el borrador
   fileMaxAgeDays: 30, // tope absoluto desde la subida
   allowedDomains: [] as string[], // vacío = cualquier login de la tailnet (luego se mira el equipo)
+  chatApproval: true, // los envíos aprobados en el aviso de Claude Code salen sin pasar por la app
 } as const;
 
 // Presencia. Un SSE abierto no basta: si el cliente se cae sin cerrar la conexión, Bun.serve puede

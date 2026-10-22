@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
-import type { API, AuditAction, AuditTarget, Perm, CreateDraftMeta, DeviRequest, Draft, SessionDelivery, UserEvent } from "@devi/protocol";
+import type {
+  API, AuditAction, AuditTarget, CreateDraftMeta, CreateDraftResult, DeviRequest, Draft, Perm, SendFromAppMeta, SessionDelivery, UserEvent,
+} from "@devi/protocol";
 import type { z } from "zod";
 import type { Access } from "../../core/auth";
 import { HttpError } from "../../core/http";
@@ -51,7 +53,9 @@ export class RequestsManager {
   // ---- borradores -----------------------------------------------------------
 
   // Lo que el agente quiere enviar (solicitud o respuesta) queda en borrador hasta que su humano lo autoriza.
-  async createDraft(access: Access, meta: DraftMeta, rawFiles: File[]): Promise<Draft> {
+  // Con approval "chat" (el humano ya lo aprobó en el aviso de permisos de Claude Code) y el ajuste
+  // chatApproval activo, se crea y se envía en la misma transacción: mismos efectos que autorizarlo en la app.
+  async createDraft(access: Access, meta: DraftMeta, rawFiles: File[]): Promise<CreateDraftResult> {
     const session = this.sessions.get(meta.sessionId);
     if (!session || session.memberId !== access.memberId) {
       throw new HttpError(400, "la sesión de origen no existe o no es tuya", { code: "invalid" });
@@ -63,17 +67,29 @@ export class RequestsManager {
     const valid = await this.files.validate(rawFiles);
     // Tras el await, la solicitud pudo cambiar: se vuelve a comprobar.
     const request = meta.kind === "response" ? this.forwardedTo(access, meta.requestId) : null;
+    const chat = meta.approval === "chat" && this.settings.chatApproval;
 
     const previous = request ? this.store.awaitingResponseDraft(request.id) : null;
     const now = this.ctx.now();
     const d: DraftRecord = {
       id: crypto.randomUUID(), kind: meta.kind, authorMemberId: access.memberId, authorSessionId: session.id,
       authorSessionName: session.name, toMemberId: meta.kind === "request" ? peer : null, requestId: request?.id ?? null,
-      message: meta.message.trim(), status: "awaiting", createdAt: now, expiresAt: now + this.settings.draftTtlMs,
+      message: meta.message.trim(), status: chat ? "authorized" : "awaiting", createdAt: now, expiresAt: now + this.settings.draftTtlMs,
     };
+    // Aprobado en el chat: la solicitud nueva o la respuesta aplicada, preparadas para la misma transacción.
+    const sentRequest: RequestRecord | null = !chat
+      ? null
+      : request
+        ? { ...request, status: "answered", outcome: "answered", outcomeText: d.message }
+        : {
+            id: this.newRequestId(), fromMemberId: d.authorMemberId, fromSessionId: d.authorSessionId,
+            fromSessionName: d.authorSessionName, toMemberId: peer, message: d.message, status: "pending",
+            forwardedSessionId: null, outcome: null, outcomeText: null, createdAt: now, sentAt: now,
+            deadline: now + this.settings.requestTimeoutMs,
+          };
     // Atómico: primero los bytes a disco; luego, en una sola transacción, se descarta el borrador anterior y se
-    // insertan el borrador y sus archivos; solo tras el commit hay temporizadores y eventos. Si algo falla,
-    // se borra lo escrito y no cambia nada más.
+    // insertan el borrador y sus archivos (y, aprobado en el chat, la solicitud o la respuesta); solo tras el
+    // commit hay temporizadores y eventos. Si algo falla, se borra lo escrito y no cambia nada más.
     const written = this.files.write(valid);
     let previousStaged: SessionDelivery | null = null;
     try {
@@ -84,6 +100,11 @@ export class RequestsManager {
         }
         this.store.insertDraft(d);
         this.files.record({ draftId: d.id, direction: d.kind, authorMemberId: access.memberId, peerMemberId: peer, written });
+        if (sentRequest) {
+          if (request) this.store.saveRequest(sentRequest);
+          else this.store.insertRequest(sentRequest);
+          this.files.attachToRequest(d.id, sentRequest.id);
+        }
       });
     } catch (e) {
       this.files.removeWritten(written);
@@ -93,16 +114,41 @@ export class RequestsManager {
       this.audit("draft.discarded", access.memberId, "draft", previous.id, { reason: "replaced" });
       this.afterDiscard(previous, "replaced", previousStaged);
     }
-    this.audit("draft.created", access.memberId, "draft", d.id, {
-      kind: d.kind, to: peer, toName: this.team.nameOf(peer), requestId: d.requestId, sessionId: session.id,
+    const details = {
+      kind: d.kind, to: peer, toName: this.team.nameOf(peer), requestId: sentRequest?.id ?? d.requestId, sessionId: session.id,
       sessionName: session.name, messageSha256: sha256(d.message),
       files: JSON.stringify(valid.map((f) => ({ name: f.name, size: f.size }))),
-    });
+    };
+    if (sentRequest) {
+      this.audit("draft.approved_in_chat", access.memberId, "draft", d.id, {
+        ...details, from: access.memberId, fromName: this.team.nameOf(access.memberId),
+      });
+      return { ...this.draftView(d), approval: "chat", sent: this.afterSent(access, sentRequest, d.id) };
+    }
+    this.audit("draft.created", access.memberId, "draft", d.id, details);
     if (request) this.timers.cancel(requestKey(request.id)); // el plazo se pausa mientras haya borrador de respuesta
     this.timers.at(draftKey(d.id), d.expiresAt, () => this.expire(d.id));
     const view = this.draftView(d);
     this.push(access.memberId, { type: "draft.awaiting", draft: view });
-    return view;
+    return { ...view, approval: "app" };
+  }
+
+  // Efectos tras el commit de algo aprobado en el chat (los mismos que authorize): plazos y avisos a las apps.
+  // A la sesión autora no se le manda draft_authorized: el resultado de la herramienta ya se lo dice.
+  private afterSent(access: Access, r: RequestRecord, draftId: string): NonNullable<CreateDraftResult["sent"]> {
+    const view = this.requestView(r);
+    if (r.status === "pending") {
+      this.schedule(r);
+      this.push(r.toMemberId, { type: "request.incoming", request: view });
+      this.push(r.fromMemberId, { type: "request.updated", request: view });
+      return { requestId: r.id, toName: this.team.nameOf(r.toMemberId), sentAt: r.sentAt, deadline: r.deadline };
+    }
+    this.timers.cancel(requestKey(r.id));
+    this.audit("request.answered", access.memberId, "request", r.id, { draftId, to: r.fromMemberId });
+    this.push(r.fromMemberId, { type: "response.incoming", request: view });
+    this.push(r.fromMemberId, { type: "request.updated", request: view });
+    this.push(r.toMemberId, { type: "request.updated", request: view });
+    return { requestId: r.id, toName: this.team.nameOf(r.fromMemberId), sentAt: this.ctx.now() };
   }
 
   authorize(access: Access, id: string): Draft {
@@ -228,6 +274,51 @@ export class RequestsManager {
     }
   }
 
+  // ---- enviar desde la app --------------------------------------------------
+
+  // La persona escribe la solicitud en la app: no hay agente ni borrador que autorizar, sale ya pending.
+  // Al destinatario le llega igual que una solicitud autorizada (request.incoming, plazo, timeout).
+  async sendFromApp(access: Access, meta: z.output<typeof SendFromAppMeta>, rawFiles: File[]): Promise<DeviRequest> {
+    if (rawFiles.length > 0 && !access.perms.has("files.send")) {
+      throw new HttpError(403, 'Te falta el permiso "files.send"', { code: "missing_perm", perm: "files.send" });
+    }
+    const to = this.recipientFor(access, meta.to);
+    const valid = await this.files.validate(rawFiles);
+    // Tras el await, el destinatario pudo desactivarse: se vuelve a comprobar.
+    this.recipientFor(access, to);
+    const now = this.ctx.now();
+    const r: RequestRecord = {
+      id: this.newRequestId(), origin: "app", fromMemberId: access.memberId, fromSessionId: "", fromSessionName: "",
+      toMemberId: to, message: meta.message.trim(), status: "pending", forwardedSessionId: null, outcome: null,
+      outcomeText: null, createdAt: now, sentAt: now, deadline: now + this.settings.requestTimeoutMs,
+    };
+    // Igual que al crear un borrador: bytes a disco y después filas en una transacción; si falla, se borra lo escrito.
+    const written = this.files.write(valid);
+    try {
+      this.store.transaction(() => {
+        this.store.insertRequest(r);
+        this.files.recordForRequest({ requestId: r.id, direction: "request", authorMemberId: access.memberId, peerMemberId: to, written });
+      });
+    } catch (e) {
+      this.files.removeWritten(written);
+      throw e;
+    }
+    this.audit("request.sent_from_app", access.memberId, "request", r.id, {
+      to, toName: this.team.nameOf(to), messageSha256: sha256(r.message),
+      files: JSON.stringify(valid.map((f) => ({ name: f.name, size: f.size }))),
+    });
+    this.schedule(r);
+    const view = this.requestView(r);
+    this.push(r.toMemberId, { type: "request.incoming", request: view });
+    this.push(r.fromMemberId, { type: "request.updated", request: view });
+    return view;
+  }
+
+  // Para las conversaciones: misma vista que viaja por SSE.
+  viewOf(r: RequestRecord): DeviRequest {
+    return this.requestView(r);
+  }
+
   // ---- acciones de B (destinatario) -----------------------------------------
 
   forward(access: Access, id: string, sessionId: string): DeviRequest {
@@ -238,7 +329,7 @@ export class RequestsManager {
     const files = this.files.forRequest(r.id).files;
     const delivery: SessionDelivery = {
       kind: "request",
-      content: requestContent({ id: r.id, fromName: this.team.nameOf(r.fromMemberId), fromSessionName: r.fromSessionName, message: r.message, files }),
+      content: requestContent({ id: r.id, fromName: this.team.nameOf(r.fromMemberId), fromSessionName: r.fromSessionName, message: r.message, files, origin: r.origin }),
       meta: {
         request_id: r.id, from: r.fromMemberId, from_name: this.team.nameOf(r.fromMemberId),
         from_session: r.fromSessionName, files: filesMeta(files),
@@ -431,6 +522,30 @@ export class RequestsManager {
 
   private push(memberId: string, event: UserEvent): void {
     pushUser(this.ctx.sse, memberId, event);
+    // Cada cambio de una solicitud (o de un borrador) entre dos personas avisa también de su conversación.
+    const peer = this.conversationPeer(memberId, event);
+    if (peer) pushUser(this.ctx.sse, memberId, { type: "conversation.updated", memberId: peer });
+  }
+
+  private conversationPeer(memberId: string, event: UserEvent): string | null {
+    switch (event.type) {
+      case "request.incoming":
+      case "request.updated":
+      case "response.incoming":
+      case "request.timed_out": {
+        const r = event.request;
+        return r.fromMemberId === memberId ? r.toMemberId : r.fromMemberId;
+      }
+      case "draft.awaiting":
+        return event.draft.kind === "request" ? event.draft.toMemberId : (this.store.getRequest(event.draft.requestId)?.fromMemberId ?? null);
+      case "draft.discarded": {
+        const d = this.store.getDraft(event.draftId);
+        if (!d) return null;
+        return d.kind === "request" ? d.toMemberId : (this.store.getRequest(d.requestId!)?.fromMemberId ?? null);
+      }
+      default:
+        return null;
+    }
   }
 
   // Aviso a la sesión del autor, solo si sigue existiendo (pudo cerrarse o ser sustituida). En dos pasos:
@@ -506,7 +621,7 @@ export class RequestsManager {
   private requestView(r: RequestRecord): DeviRequest {
     const { files, responseFiles } = this.files.forRequest(r.id);
     return {
-      id: r.id, fromMemberId: r.fromMemberId, fromSessionId: r.fromSessionId, fromSessionName: r.fromSessionName,
+      id: r.id, origin: r.origin ?? "session", fromMemberId: r.fromMemberId, fromSessionId: r.fromSessionId, fromSessionName: r.fromSessionName,
       toMemberId: r.toMemberId, message: r.message, status: r.status, forwardedSessionId: r.forwardedSessionId ?? undefined,
       outcome: r.outcome ?? undefined, outcomeText: r.outcomeText ?? undefined, files, responseFiles,
       createdAt: r.createdAt, sentAt: r.sentAt, deadline: r.deadline,

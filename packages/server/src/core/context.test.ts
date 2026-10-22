@@ -20,7 +20,7 @@ test("ModuleContext trae timers, presence y services; start programa la revisió
         routes(_r, ctx) {
           seen = ctx;
           ctx.services.provide("settings", {
-            get: () => ({ requestTimeoutMs: 1, draftTtlMs: 1, fileRetentionDays: 1, fileMaxAgeDays: 1, allowedDomains: [] }),
+            get: () => ({ requestTimeoutMs: 1, draftTtlMs: 1, fileRetentionDays: 1, fileMaxAgeDays: 1, allowedDomains: [], chatApproval: true }),
           });
         },
       },

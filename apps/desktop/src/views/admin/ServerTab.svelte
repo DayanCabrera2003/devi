@@ -29,6 +29,9 @@
   let saveError = $state<string | null>(null);
   let exportError = $state<string | null>(null);
   let exportPath = $state<string | null>(null);
+  let chatSaving = $state(false);
+  let chatMsg = $state<string | null>(null);
+  let chatError = $state<string | null>(null);
 
   const fields: { key: keyof SettingsForm; label: string; ms?: (s: Settings) => number }[] = [
     { key: "timeoutMin", label: "Timeout de una solicitud sin respuesta (minutos)", ms: (s) => s.requestTimeoutMs },
@@ -90,21 +93,22 @@
     }
   }
 
-  // Aprobar envíos en el chat de Claude Code: solo si el servidor ya tiene ese ajuste.
-  const hasChatApproval = $derived(!!loaded && "chatApproval" in loaded);
-  let approvalBusy = $state(false);
-  let approvalError = $state<string | null>(null);
-
-  async function setChatApproval(box: HTMLInputElement) {
-    approvalBusy = true;
-    approvalError = null;
+  // Se guarda al cambiarlo (no va con el formulario de tiempos). Si falla, la casilla vuelve a lo del servidor.
+  async function setChatApproval(e: Event) {
+    const input = e.currentTarget as HTMLInputElement;
+    const value = input.checked;
+    chatMsg = null;
+    chatError = null;
+    chatSaving = true;
     try {
-      setForm(await app.call((a) => a.updateSettings({ chatApproval: box.checked } as Partial<Settings>)));
-    } catch (e) {
-      approvalError = errorMessage(e);
+      const s = await app.call((a) => a.updateSettings({ chatApproval: value }));
+      loaded = s;
+      chatMsg = s.chatApproval ? "Activado." : "Desactivado: todo lo que se envía queda en borrador para la app.";
+    } catch (err) {
+      chatError = errorMessage(err);
+      input.checked = !value;
     } finally {
-      approvalBusy = false;
-      box.checked = !!(loaded as (Settings & { chatApproval?: boolean }) | null)?.chatApproval;
+      chatSaving = false;
     }
   }
 
@@ -143,27 +147,6 @@
   {#if loadError}<div class="error">{loadError}</div>{/if}
 </section>
 
-{#if hasChatApproval}
-  <section class="card">
-    <div class="card-kicker">Envíos</div>
-    <label class="check" style="justify-content: space-between">
-      Aprobar envíos en el chat de Claude Code
-      <input
-        class="switch"
-        type="checkbox"
-        style="order: 2"
-        checked={!!(loaded as Settings & { chatApproval?: boolean }).chatApproval}
-        disabled={approvalBusy}
-        onchange={(e) => setChatApproval(e.currentTarget)}
-      />
-    </label>
-    <p class="muted small" style="margin: 4px 0 0">
-      Si está activo, cada persona aprueba en su sesión lo que su agente envía, sin pasar por la app.
-    </p>
-    {#if approvalError}<div class="error">{approvalError}</div>{/if}
-  </section>
-{/if}
-
 {#if form}
   <form class="card" onsubmit={save} novalidate>
     <div class="card-kicker">Tiempos y retención</div>
@@ -198,6 +181,21 @@
     {#if msg}<div class="ok-text">{msg}</div>{/if}
     {#if saveError}<div class="error">{saveError}</div>{/if}
   </form>
+{/if}
+
+{#if loaded}
+  <section class="card">
+    <div class="card-kicker">Aprobación de envíos</div>
+    <label class="check">
+      <input class="switch" style="order: 2; margin-left: auto" type="checkbox" checked={loaded.chatApproval} disabled={chatSaving} onchange={setChatApproval} />
+      Aprobar envíos en el chat de Claude Code
+    </label>
+    <p class="muted small">
+      Lo que el usuario aprueba en el aviso de permisos de Claude Code se envía sin pasar por la app. Desactivado, todo queda en borrador para autorizarlo en la app.
+    </p>
+    {#if chatMsg}<div class="ok-text">{chatMsg}</div>{/if}
+    {#if chatError}<div class="error">{chatError}</div>{/if}
+  </section>
 {/if}
 
 <section class="card">

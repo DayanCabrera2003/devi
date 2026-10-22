@@ -4,7 +4,7 @@ import { fakeApp } from "../../lib/test-app";
 import { SESSIONS, TEAM } from "../../lib/test-fixtures";
 import ServerTab from "./ServerTab.svelte";
 
-const SETTINGS = { requestTimeoutMs: 3_600_000, draftTtlMs: 900_000, fileRetentionDays: 7, fileMaxAgeDays: 30 };
+const SETTINGS = { requestTimeoutMs: 3_600_000, draftTtlMs: 900_000, fileRetentionDays: 7, fileMaxAgeDays: 30, allowedDomains: [], chatApproval: true };
 
 async function setup(over: Record<string, unknown> = {}) {
   const updateSettings = vi.fn(async (b: object) => ({ ...SETTINGS, ...b }));
@@ -84,5 +84,26 @@ describe("ServerTab", () => {
     expect(await findByText(/sin datos de 1 persona/)).toBeTruthy();
     expect(getByText("Sesiones abiertas").parentElement?.querySelector("b")?.textContent).toBe("2");
     expect(queryByText("caído")).toBeNull();
+  });
+
+  test("aprobar envíos en el chat: muestra el ajuste y lo guarda al cambiarlo, sin tocar el resto", async () => {
+    const { updateSettings, getByLabelText, findByText } = await setup();
+    const box = getByLabelText("Aprobar envíos en el chat de Claude Code") as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    await fireEvent.click(box);
+    expect(updateSettings).toHaveBeenCalledWith({ chatApproval: false });
+    expect(await findByText(/^Desactivado:/)).toBeTruthy();
+    expect(box.checked).toBe(false);
+  });
+
+  test("aprobar envíos en el chat: si el servidor falla, vuelve al valor anterior y lo explica", async () => {
+    const updateSettings = vi.fn(async () => {
+      throw { status: 500, body: { error: "fallo del servidor", code: "internal" } };
+    });
+    const { getByLabelText, findByText } = await setup({ updateSettings });
+    const box = getByLabelText("Aprobar envíos en el chat de Claude Code") as HTMLInputElement;
+    await fireEvent.click(box);
+    expect(await findByText("fallo del servidor")).toBeTruthy();
+    expect(box.checked).toBe(true);
   });
 });

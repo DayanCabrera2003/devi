@@ -11,8 +11,10 @@ export type { AuditEntry, AuditPage } from "@devi/protocol";
 const ACTION_LABELS: Record<AuditAction, string> = {
   "draft.created": "Borrador creado",
   "draft.authorized": "Borrador autorizado",
+  "draft.approved_in_chat": "Envío aprobado en el chat",
   "draft.discarded": "Borrador descartado",
   "draft.expired": "Borrador caducado",
+  "request.sent_from_app": "Solicitud enviada desde la app",
   "request.forwarded": "Solicitud enviada a una sesión",
   "request.accepted": "Solicitud aceptada",
   "request.rejected": "Solicitud rechazada",

@@ -22,6 +22,7 @@ export const TEAM: TeamView = {
 export function req(over: Partial<DeviRequest> = {}): DeviRequest {
   return {
     id: "q1",
+    origin: "session",
     fromMemberId: "m2",
     fromSessionId: "s9",
     fromSessionName: "backend",

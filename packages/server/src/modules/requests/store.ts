@@ -2,6 +2,9 @@ import type { Database } from "bun:sqlite";
 import type { DeviRequest, Draft } from "@devi/protocol";
 import type { Migration } from "../../core/db";
 
+// Texto de la última actividad cuando la respuesta no trae texto (aceptada sin nota).
+const ACCEPTED_PREVIEW = "Aceptada";
+
 export const requestsMigrations: Migration[] = [
   {
     version: 1,
@@ -44,6 +47,16 @@ export const requestsMigrations: Migration[] = [
       CREATE INDEX requests_from ON requests(from_member, status);
     `,
   },
+  {
+    // origin: quién la escribió (session = borrador autorizado; app = la persona desde la app).
+    // responded_at: cuándo llegó la respuesta (para la última actividad de cada conversación).
+    version: 2,
+    sql: `
+      ALTER TABLE requests ADD COLUMN origin TEXT NOT NULL DEFAULT 'session' CHECK (origin IN ('session', 'app'));
+      ALTER TABLE requests ADD COLUMN responded_at INTEGER;
+      CREATE INDEX requests_pair ON requests(from_member, to_member, created_at);
+    `,
+  },
 ];
 
 export type DraftRecord = {
@@ -62,6 +75,7 @@ export type DraftRecord = {
 
 export type RequestRecord = {
   id: string;
+  origin?: DeviRequest["origin"]; // al insertar, session si falta; al leer, siempre está
   fromMemberId: string;
   fromSessionId: string;
   fromSessionName: string;
@@ -82,10 +96,18 @@ const DRAFT_COLS = `id, kind, author_member AS authorMemberId, author_session AS
 
 const REQUEST_COLS = `id, from_member AS fromMemberId, from_session AS fromSessionId, from_session_name AS fromSessionName,
   to_member AS toMemberId, message, status, forwarded_session AS forwardedSessionId, outcome, outcome_text AS outcomeText,
-  created_at AS createdAt, sent_at AS sentAt, deadline`;
+  created_at AS createdAt, sent_at AS sentAt, deadline, origin`;
+
+// Solicitudes entre $a y $b, en cualquier sentido.
+const PAIR = `((from_member = $a AND to_member = $b) OR (from_member = $b AND to_member = $a))`;
+
+export type LastActivity = { at: number; text: string; byMemberId: string };
 
 export class RequestsStore {
-  constructor(private db: Database) {}
+  constructor(
+    private db: Database,
+    private now: () => number = Date.now, // para responded_at
+  ) {}
 
   transaction(fn: () => void): void {
     this.db.transaction(fn)();
@@ -136,11 +158,11 @@ export class RequestsStore {
     this.db
       .query(
         `INSERT INTO requests (id, from_member, from_session, from_session_name, to_member, message, status,
-                               forwarded_session, outcome, outcome_text, created_at, sent_at, deadline)
+                               forwarded_session, outcome, outcome_text, created_at, sent_at, deadline, origin)
          VALUES ($id, $fromMemberId, $fromSessionId, $fromSessionName, $toMemberId, $message, $status,
-                 $forwardedSessionId, $outcome, $outcomeText, $createdAt, $sentAt, $deadline)`,
+                 $forwardedSessionId, $outcome, $outcomeText, $createdAt, $sentAt, $deadline, $origin)`,
       )
-      .run(r);
+      .run({ ...r, origin: r.origin ?? "session" });
   }
 
   getRequest(id: string): RequestRecord | null {
@@ -152,12 +174,13 @@ export class RequestsStore {
     this.db
       .query(
         `UPDATE requests SET status = $status, forwarded_session = $forwardedSessionId, outcome = $outcome,
-                             outcome_text = $outcomeText, sent_at = $sentAt, deadline = $deadline
+                             outcome_text = $outcomeText, sent_at = $sentAt, deadline = $deadline,
+                             responded_at = CASE WHEN responded_at IS NULL AND $outcome IS NOT NULL THEN $at ELSE responded_at END
          WHERE id = $id`,
       )
       .run({
         id: r.id, status: r.status, forwardedSessionId: r.forwardedSessionId, outcome: r.outcome,
-        outcomeText: r.outcomeText, sentAt: r.sentAt, deadline: r.deadline,
+        outcomeText: r.outcomeText, sentAt: r.sentAt, deadline: r.deadline, at: this.now(),
       });
   }
 
@@ -184,5 +207,59 @@ export class RequestsStore {
          ORDER BY created_at`,
       )
       .all({ memberId }) as RequestRecord[];
+  }
+
+  // ---- conversaciones -------------------------------------------------------
+
+  // Página de la conversación entre $a y $b (de la más nueva a la más vieja). Si el corte de la página cae en
+  // medio de varias solicitudes con el mismo createdAt, se dejan todas para la siguiente (o, si la página
+  // entera es ese empate, se devuelven todas juntas): con before = createdAt no se pierde ninguna.
+  conversationPage(a: string, b: string, before: number | undefined, limit: number): { requests: RequestRecord[]; nextBefore?: number } {
+    const rows = this.db
+      .query(
+        `SELECT ${REQUEST_COLS} FROM requests WHERE ${PAIR} AND ($before IS NULL OR created_at < $before)
+         ORDER BY created_at DESC, id DESC LIMIT $n`,
+      )
+      .all({ a, b, before: before ?? null, n: limit + 1 }) as RequestRecord[];
+    if (rows.length <= limit) return { requests: rows };
+    const cut = rows[limit]!.createdAt;
+    let page = rows.slice(0, limit).filter((r) => r.createdAt > cut);
+    if (page.length > 0) return { requests: page, nextBefore: page.at(-1)!.createdAt };
+    page = this.db
+      .query(`SELECT ${REQUEST_COLS} FROM requests WHERE ${PAIR} AND created_at = $cut ORDER BY id DESC`)
+      .all({ a, b, cut }) as RequestRecord[];
+    const older = this.db.query(`SELECT 1 FROM requests WHERE ${PAIR} AND created_at < $cut LIMIT 1`).get({ a, b, cut });
+    return older ? { requests: page, nextBefore: cut } : { requests: page };
+  }
+
+  // Lo último que pasó entre $a y $b: un mensaje (al enviarse) o una respuesta (al llegar).
+  lastActivity(a: string, b: string): LastActivity | null {
+    return this.db
+      .query(
+        `SELECT at, text, byMemberId FROM (
+           SELECT sent_at AS at, message AS text, from_member AS byMemberId, 0 AS k, created_at FROM requests WHERE ${PAIR}
+           UNION ALL
+           SELECT responded_at, COALESCE(outcome_text, $accepted), to_member, 1, created_at FROM requests
+           WHERE ${PAIR} AND responded_at IS NOT NULL
+         ) ORDER BY at DESC, k DESC, created_at DESC LIMIT 1`,
+      )
+      .get({ a, b, accepted: ACCEPTED_PREVIEW }) as LastActivity | null;
+  }
+
+  // Cuántas cosas con $peer esperan una acción de $me: solicitudes suyas pendientes, respuestas o plazos
+  // vencidos de las mías, y borradores míos esperando autorización dirigidos a $peer.
+  waitingOn(me: string, peer: string): number {
+    const row = this.db
+      .query(
+        `SELECT
+           (SELECT COUNT(*) FROM requests WHERE to_member = $me AND from_member = $peer AND status = 'pending')
+         + (SELECT COUNT(*) FROM requests WHERE from_member = $me AND to_member = $peer
+              AND status IN ('accepted', 'rejected', 'answered', 'timed_out'))
+         + (SELECT COUNT(*) FROM drafts WHERE author_member = $me AND status = 'awaiting' AND kind = 'request' AND to_member = $peer)
+         + (SELECT COUNT(*) FROM drafts d JOIN requests r ON r.id = d.request_id
+              WHERE d.author_member = $me AND d.status = 'awaiting' AND d.kind = 'response' AND r.from_member = $peer) AS n`,
+      )
+      .get({ me, peer }) as { n: number };
+    return row.n;
   }
 }

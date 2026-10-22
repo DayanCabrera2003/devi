@@ -22,6 +22,8 @@
   const outcome = $derived(OUTCOME[request.outcome ?? "answered"]);
   const to = $derived(app.team.nameOf(request.toMemberId));
   const caption = $derived(requestCaption(request, app.team.myId));
+  // Las solicitudes enviadas desde la app no tienen sesión de origen que resaltar.
+  const fromApp = $derived(request.origin === "app" || !request.fromSessionId);
 
   // Las sesiones se piden al abrir el selector, no al montar cada tarjeta.
   let loadingSessions = $state(false);
@@ -96,8 +98,10 @@
     loading={app.sessions.loading}
     error={app.sessions.error}
     title="¿A qué sesión se la pasas?"
-    hint="Resaltada: la sesión que hizo la solicitud, si sigue abierta."
-    preferredId={request.fromSessionId}
+    hint={fromApp
+      ? "La pediste desde la app: elige la sesión que debe recibir la respuesta."
+      : "Resaltada: la sesión que hizo la solicitud, si sigue abierta."}
+    preferredId={fromApp ? undefined : request.fromSessionId}
     onPick={pick}
     onBack={() => (mode = "view")}
   />

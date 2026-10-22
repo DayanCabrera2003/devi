@@ -43,6 +43,15 @@ export interface FilesService {
     peerMemberId: string; // puede descargarlo cuando el borrador se autoriza
     written: WrittenFile[];
   }): FileMeta[];
+  // Como record, pero para una solicitud enviada desde la app (sin borrador): quedan ya unidos a la
+  // solicitud y la otra parte puede descargarlos desde el principio.
+  recordForRequest(input: {
+    requestId: string;
+    direction: "request" | "response";
+    authorMemberId: string;
+    peerMemberId: string;
+    written: WrittenFile[];
+  }): FileMeta[];
   removeWritten(written: WrittenFile[]): void;
   forDraft(draftId: string): FileMeta[];
   forRequest(requestId: string): { files: FileMeta[]; responseFiles: FileMeta[] };
