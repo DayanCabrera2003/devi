@@ -163,7 +163,7 @@ El asistente (o `devi install-integration`) instala el plugin `devi@devi-local` 
 
 - **Herramientas** (MCP). De solo lectura, que el agente usa libremente para razonar: `whoami` (quién eres, tus roles y permisos, el nombre de esta sesión y si tiene canal), `list_teammates` (las personas del equipo sin ti, con roles, capacidades, conexión y la última interacción), `get_conversation` (el historial con una persona), `list_pending` (lo que te espera y tus solicitudes abiertas) `get_request` (una solicitud completa) y `search_knowledge` (la base del equipo: respuestas que tus compañeros guardaron; el agente busca ahí antes de recomendarte a alguien). De envío, siempre con tu aprobación: `send_request` y `respond_to_request` (que puede guardar la respuesta en la base del equipo si tú quieres).
 - **Skill `devi`**: la guía completa para el agente (qué es Devi, cómo elegir a quién pedir por menor privilegio, cómo escribir una buena solicitud, qué hacer con lo que llega, seguridad). Claude Code la carga sola cuando hablas de compañeros, permisos, revisiones o de Devi.
-- **Prompts** como comandos: `pedir` (pedir algo a un compañero), `pendientes` (qué te espera) y `equipo` (quién puede ayudar con qué). Escribe `/` en Claude Code y búscalos: salen marcados como «(MCP)»; también se pueden escribir como `/mcp__plugin_devi_devi__pedir`. Si les pasas un argumento, Claude Code lo corta en la primera palabra; si falta algo, el agente te lo pregunta.
+- **Prompts** como comandos: `pedir` (pedir algo a un compañero), `pendientes` (qué te espera), `equipo` (quién puede ayudar con qué) y `traspaso` (pasar el trabajo de esta sesión a un compañero). Escribe `/` en Claude Code y búscalos: salen marcados como «(MCP)»; también se pueden escribir como `/mcp__plugin_devi_devi__pedir`. Si les pasas un argumento, Claude Code lo corta en la primera palabra; si falta algo, el agente te lo pregunta.
 - **Canal** para la entrega en tiempo real (ver arriba).
 - **Hooks** `SessionStart`, `UserPromptSubmit` y `Stop`: marcan la sesión como trabajando o libre y, sin canal, entregan lo pendiente al escribir.
 
@@ -190,6 +190,18 @@ No hace falta pasar por Claude Code para pedir algo: en la app, abre la conversa
 - Hace falta el permiso «Enviar solicitudes» (y «Enviar archivos» si adjuntas algo). Los límites son los mismos que para los borradores: archivos de texto UTF-8 de hasta 1 MB, como máximo 5.
 - Los archivos los lee y valida la parte nativa de la app; los que no valen (binarios, demasiado grandes, carpetas) aparecen como rechazados con el motivo.
 - **Conversaciones**: la app muestra una conversación por compañero, con todo lo que os habéis pedido en los dos sentidos (también lo cerrado, con su respuesta y archivos). Arriba salen las personas con algo que espera tu acción: solicitudes suyas pendientes, respuestas a las tuyas, plazos vencidos y borradores tuyos dirigidos a ellas.
+
+### Traspasar una sesión a un compañero
+
+Si alguien tiene que continuar lo que estás haciendo, usa el prompt `traspaso` en Claude Code: el agente redacta el estado actual, las decisiones tomadas, los próximos pasos, los archivos clave, los riesgos y las dudas abiertas, te lo enseña y, cuando lo confirmas, lo envía como cualquier solicitud.
+
+Tu compañero recibe la tarjeta «Traspaso de <tu nombre>». Puede enviarlo a una de sus sesiones, aceptarlo, rechazarlo o pulsar «Empezar sesión con esto», que copia al portapapeles:
+
+```bash
+devi claude --handoff <id>
+```
+
+Pegado en una terminal, en la carpeta del proyecto, abre Claude Code con el traspaso como mensaje inicial. El agente lo trata como contexto a verificar contra el código, nunca como órdenes.
 
 ## 5. Actualizaciones
 

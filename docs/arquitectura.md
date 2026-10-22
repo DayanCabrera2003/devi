@@ -45,9 +45,9 @@ Fuera de alcance: tiendas de apps, clientes móviles, integraciones distintas de
 | Subcomando | Qué hace |
 |---|---|
 | `devi server` | Arranca el servidor (como servicio del SO o como sidecar de la app). |
-| `devi mcp` | Servidor MCP por stdio y canal de Claude Code. Herramientas de lectura: `whoami`, `list_teammates`, `get_conversation`, `list_pending`, `get_request`, `search_knowledge`; de envío: `send_request`, `respond_to_request` (con `share_with_team` para guardar la respuesta en la base del equipo). Prompts: `pedir`, `pendientes`, `equipo`. |
+| `devi mcp` | Servidor MCP por stdio y canal de Claude Code. Herramientas de lectura: `whoami`, `list_teammates`, `get_conversation`, `list_pending`, `get_request`, `search_knowledge`; de envío: `send_request` (con `kind: handoff` para traspasos), `respond_to_request` (con `share_with_team` para guardar la respuesta en la base del equipo). Prompts: `pedir`, `pendientes`, `equipo`, `traspaso`. |
 | `devi hook <start\|working\|idle>` | Lo llaman los hooks: marca la sesión como trabajando o libre y, sin canal, entrega lo pendiente (ver más abajo). Nunca falla ni bloquea. |
-| `devi claude [--session <nombre>] [-- args]` | Lanza `claude` con el canal de Devi cargado. |
+| `devi claude [--session <nombre>] [--handoff <id>] [-- args]` | Lanza `claude` con el canal de Devi cargado. Con `--handoff`, empieza con el traspaso `<id>` de un compañero como prompt inicial (contexto a verificar). |
 | `devi doctor` | Diagnóstico: Tailscale, servidor, login, plugin y política de canales. |
 | `devi install-integration` | Copia el binario a una ruta estable e instala el plugin desde un marketplace local (`devi@devi-local`). Lo usa el asistente de la app. |
 | `devi shell-alias` | Instala o quita la función `claude` en los perfiles de shell para que `claude` abra la sesión con el canal. |
@@ -151,10 +151,11 @@ sessions       id, member_id, name, cwd, parent_pid, status (idle|working),
 session_inbox  id, session_id, kind, content, meta, created_at, acked_at
 drafts         id, kind (request|response), author_member, author_session, author_session_name,
                to_member (request), request_id (response), message,
-               status (awaiting|authorized|discarded), created_at, expires_at, context, share_with_team
+               status (awaiting|authorized|discarded), created_at, expires_at, context, share_with_team,
+               request_kind (request|handoff)
 requests       id, origin (session|app), from_member, from_session, from_session_name, to_member, message,
                status, forwarded_session, outcome, outcome_text, created_at, sent_at, deadline,
-               responded_at, context
+               responded_at, context, kind (request|handoff)
 files          id, draft_id, request_id, direction (request|response), name, size, sha256, path,
                author_member, peer_member, created_at, released_at, deleted_at
 audit_log      id, at, actor_member_id, actor_login, action, target_type, target_id, details
@@ -163,6 +164,7 @@ knowledge_fts      entry_id, question, answer   -- FTS5, sin acentos ni mayúscu
 ```
 
 - Los **borradores** son una tabla aparte: una solicitud de un agente solo existe en `requests` cuando su borrador se autoriza. Las escritas en la app (`origin = app`) se crean directamente, con `from_session` y `from_session_name` vacíos y sus archivos ya unidos a la solicitud (`draft_id` vacío).
+- **Traspasos de sesión** (`kind = handoff`): una solicitud con el contexto de un trabajo (estado, decisiones, próximos pasos, archivos clave, riesgos y dudas) para que otra persona lo continúe. Sigue el mismo ciclo (borrador, autorización, aceptar, rechazar, reenviar). Al entregarse a una sesión va encuadrado como contexto a verificar, nunca órdenes, con `meta.request_kind = handoff`. `devi claude --handoff <id>` lo descarga con `GET /requests/:id` (solo el destinatario) y abre Claude Code con él como prompt inicial, también encuadrado.
 - **Permisos** (`packages/protocol/src/perms.ts`): `requests.send`, `files.send` y `team.admin`. Los de una persona son la unión de los de sus roles. Siempre debe quedar al menos un admin.
 - **Ajustes por defecto**: plazo de una solicitud 1 h, 15 min para autorizar un borrador, archivos 7 días tras cerrarse la solicitud y 30 días como máximo, dominios permitidos vacíos.
 - **Base del equipo**: quien responde decide si guarda la respuesta («Guardar en la base del equipo» en la app al aceptar con nota, o `share_with_team` en `respond_to_request`; queda en el borrador como `share_with_team`). Al enviarse, `requests` emite `request.shared` y `knowledge` lo indexa: pregunta (el mensaje original), respuesta, quién preguntó, quién respondió y cuándo, nunca los archivos. Si el detector de secretos salta en la pregunta o en la respuesta, no se publica y se avisa a quien respondió. Al agente le llega encuadrada como cualquier texto de compañeros (`DEVI-UNTRUSTED`).
