@@ -8,6 +8,7 @@ export * from "./entities";
 export * from "./audit";
 export * from "./conversations";
 export * from "./pending";
+export * from "./knowledge";
 export * from "./api";
 export * from "./events";
 export * from "./safety";

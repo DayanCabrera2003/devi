@@ -19,6 +19,7 @@ describe("catálogo de la API", () => {
       "discardDraft", "exportDb", "forwardRequest", "forwardResponse", "ignoreRequest", "rejectRequest", "resendRequest",
       "sendFromApp",
       "updateMember", "updateRole", "updateSettings",
+      "withdrawKnowledge",
     ]);
   });
 

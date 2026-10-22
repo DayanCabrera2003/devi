@@ -8,12 +8,13 @@ import { AuditPageSchema } from "./audit";
 import { RequestContextSchema } from "./context";
 import { ConversationPageSchema, ConversationsResponseSchema, SendFromAppMeta } from "./conversations";
 import { PendingSchema } from "./pending";
+import { KnowledgeResultSchema } from "./knowledge";
 
 // Quién puede llamar una ruta además del permiso (lo comprueba el módulo, no el núcleo):
 // any = cualquier miembro; admin = team.admin; author = autor del borrador;
 // recipient = destinatario de la solicitud; sender = remitente; owner = dueño de la sesión;
-// party = remitente o destinatario.
-export type Actor = "any" | "admin" | "author" | "recipient" | "sender" | "owner" | "party";
+// party = remitente o destinatario; answerer = quien respondió (entradas de la base del equipo; o un admin).
+export type Actor = "any" | "admin" | "author" | "recipient" | "sender" | "owner" | "party" | "answerer";
 
 type Route = {
   method: "GET" | "POST" | "PATCH" | "DELETE";
@@ -78,7 +79,9 @@ export const CreateDraftMeta = z.discriminatedUnion("kind", [
     kind: z.literal("request"), sessionId: z.string(), to: z.string(), message: NonEmpty, approval: ApprovalSchema.default("app"),
     context: RequestContextSchema.optional(),
   }),
-  z.object({ kind: z.literal("response"), sessionId: z.string(), requestId: z.string(), message: NonEmpty, approval: ApprovalSchema.default("app") }),
+  z.object({ kind: z.literal("response"), sessionId: z.string(), requestId: z.string(), message: NonEmpty, approval: ApprovalSchema.default("app"),
+    // Guardar la respuesta en la base del equipo al enviarse (lo decide quien responde).
+    shareWithTeam: z.boolean().default(false) }),
 ]);
 
 // Respuesta de POST /drafts. approval = cómo se aprobó de verdad: "app" si quedó esperando en la app
@@ -134,7 +137,7 @@ export const API = {
   discardDraft: route({ human: true, method: "POST", path: "/api/v1/drafts/:id/discard", perm: null, actor: "author", body: Empty, response: DraftSchema }),
 
   forwardRequest: route({ human: true, method: "POST", path: "/api/v1/requests/:id/forward", perm: null, actor: "recipient", body: z.object({ sessionId: z.string() }), response: DeviRequestSchema }),
-  acceptRequest: route({ human: true, method: "POST", path: "/api/v1/requests/:id/accept", perm: null, actor: "recipient", body: z.object({ note: z.string().optional() }), response: DeviRequestSchema }),
+  acceptRequest: route({ human: true, method: "POST", path: "/api/v1/requests/:id/accept", perm: null, actor: "recipient", body: z.object({ note: z.string().optional(), shareWithTeam: z.boolean().optional() }), response: DeviRequestSchema }),
   rejectRequest: route({ human: true, method: "POST", path: "/api/v1/requests/:id/reject", perm: null, actor: "recipient", body: z.object({ reason: NonEmpty }), response: DeviRequestSchema }),
   acceptResponse: route({ human: true, method: "POST", path: "/api/v1/requests/:id/response/accept", perm: null, actor: "sender", body: Empty, response: DeviRequestSchema }),
   forwardResponse: route({ human: true, method: "POST", path: "/api/v1/requests/:id/response/forward", perm: null, actor: "sender", body: z.object({ sessionId: z.string() }), response: DeviRequestSchema }),
@@ -151,6 +154,10 @@ export const API = {
   // Lecturas para el agente (herramientas del MCP): lo que me espera y una solicitud en la que soy parte.
   pending: route({ method: "GET", path: "/api/v1/pending", perm: null, actor: "any", body: Empty, response: PendingSchema }),
   getRequest: route({ method: "GET", path: "/api/v1/requests/:id", perm: null, actor: "party", body: Empty, response: DeviRequestSchema }),
+
+  // Base de conocimiento del equipo (query: KnowledgeQuery). Retirar una entrada: quien respondió o un admin.
+  searchKnowledge: route({ method: "GET", path: "/api/v1/knowledge", perm: null, actor: "any", body: Empty /* query: KnowledgeQuery */, response: KnowledgeResultSchema }),
+  withdrawKnowledge: route({ human: true, method: "DELETE", path: "/api/v1/knowledge/:id", perm: null, actor: "answerer", body: Empty, response: Ok }),
 
   downloadFile: route({ method: "GET", path: "/api/v1/files/:id", perm: null, actor: "party", body: Empty, response: z.any() /* text/plain */ }),
 

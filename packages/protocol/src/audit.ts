@@ -29,11 +29,13 @@ export const AUDIT_ACTIONS = [
   "settings.updated",
   "db.exported",
   "login.rejected",
+  "knowledge.shared",
+  "knowledge.withdrawn",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 export const AuditActionSchema = z.enum(AUDIT_ACTIONS);
 
-export const AUDIT_TARGETS = ["draft", "request", "file", "member", "role", "settings", "db", "login"] as const;
+export const AUDIT_TARGETS = ["draft", "request", "file", "member", "role", "settings", "db", "login", "knowledge"] as const;
 export type AuditTarget = (typeof AUDIT_TARGETS)[number];
 
 // actorLogin "system" = lo hizo el propio servidor (caducidades, plazos).

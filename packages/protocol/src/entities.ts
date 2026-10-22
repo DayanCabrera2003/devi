@@ -66,7 +66,7 @@ const DraftBase = z.object({
 });
 export const DraftSchema = z.discriminatedUnion("kind", [
   DraftBase.extend({ kind: z.literal("request"), toMemberId: z.string() }),
-  DraftBase.extend({ kind: z.literal("response"), requestId: z.string() }),
+  DraftBase.extend({ kind: z.literal("response"), requestId: z.string(), shareWithTeam: z.boolean().optional() }),
 ]);
 export type Draft = z.infer<typeof DraftSchema>;
 
