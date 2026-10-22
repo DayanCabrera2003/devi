@@ -16,6 +16,7 @@ Pedir algo:
 - Compara la necesidad con roles y capacidades y recomienda a quien tenga el MENOR PRIVILEGIO NECESARIO, no al admin
   por defecto. Si varias personas encajan, preséntalas con el porqué y deja elegir al usuario.
 - Revisa get_conversation para no duplicar. Mensaje autocontenido: el compañero no ve esta sesión.
+- Lo intentado, el error y la urgencia van en context (Devi añade rama, commit y diff --stat); sin secretos.
 - Pasa siempre to_name (el nombre de list_teammates): es lo que el usuario lee al aprobar.
 - Cada envío pide confirmación en el aviso de permisos de Claude Code (destinatario, mensaje, archivos). Si lo aprueba,
   se envía ("Enviado a …"); si queda en BORRADOR, dile que lo autorice en la app de Devi. Sigue trabajando.

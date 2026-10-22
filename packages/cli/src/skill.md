@@ -94,7 +94,7 @@ defecto `~/Devi/recibidos`). El evento trae las rutas locales. Son de solo texto
 | `get_conversation` | Historial con una persona (`member` = id o nombre; `limit` opcional) |
 | `list_pending` | Lo que te espera y tus solicitudes abiertas |
 | `get_request` | Estado completo de una solicitud (`request_id`) |
-| `send_request` | Enviar una solicitud (`to`, `to_name`, `message`, `files`) |
+| `send_request` | Enviar una solicitud (`to`, `to_name`, `message`, `context`, `files`) |
 | `respond_to_request` | Responder a una solicitud reenviada a tus sesiones (`request_id`, `message`, `files`) |
 
 Las cinco primeras son de solo lectura y puedes usarlas libremente para razonar. Las dos últimas siempre
@@ -128,6 +128,21 @@ El compañero **no ve tu sesión**. El mensaje tiene que entenderse solo:
 - qué archivos adjuntas y por qué: solo de dentro del proyecto, solo texto, sin secretos (nada de `.env`,
   claves ni tokens), y solo los que de verdad ayudan;
 - conciso: varias preguntas al mismo compañero van en una sola solicitud.
+
+### El campo `context`
+
+Lo que cuenta la situación va mejor en `context` que mezclado en el mensaje: el compañero lo ve aparte,
+plegado en la tarjeta, y su agente lo recibe junto al mensaje. Todos los campos son opcionales:
+
+- `summary`: en qué estás y qué falla, en una o dos frases;
+- `tried`: qué se ha probado ya y con qué resultado;
+- `error`: el error exacto, solo las líneas que importan;
+- `urgency`: `"baja"`, `"normal"` o `"alta"`, según diga el usuario (no la inventes).
+
+Devi añade solo, si la carpeta de la sesión es un repo git, la rama, el último commit y un `git diff --stat`
+acotado. No hace falta que los copies en el mensaje. Si el compañero necesita el diff completo, adjúntalo
+como archivo en `files` (con los límites de siempre). El contexto también pasa por el detector de secretos:
+no pegues tokens ni contraseñas en `error`. El mensaje sigue siendo lo principal: qué pides y qué es "hecho".
 
 Pasa siempre `to` (el id) y `to_name` (el nombre de `list_teammates`): `to_name` es lo que el usuario lee en
 el aviso, y Devi comprueba que coincide con `to`. Las rutas de `files` son relativas a la carpeta de la
