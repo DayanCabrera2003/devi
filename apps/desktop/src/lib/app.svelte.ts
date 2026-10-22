@@ -4,6 +4,7 @@ import { type AuditEntry, auditNotice } from "./audit";
 import { Clock } from "./clock.svelte";
 import { type ConversationsHttp, type NativeFiles, conversationsHttp, nativeFiles } from "./conversations-api";
 import type { MascotState } from "./mascot";
+import { HAPPY_MS, deriveMood, overdueCount, quietSinceAfter } from "./mood";
 import { type AppPrefs, type ClientConfig, type Native, type ServerStatus, prefsOf } from "./native";
 import { type Notice, noticeFor, noticeKey, shouldNotify, summaryNotice } from "./notify";
 import { ConnectionStore } from "./stores/connection.svelte";
@@ -70,6 +71,19 @@ export class DeviApp {
   selected = $state<string | null>(null);
   // Lo que espera de mí cada persona según la bandeja (tarjetas abiertas y borradores).
   waiting = $derived(waitingByPeer(this.inbox.cards, (id) => this.lookupRequest(id)));
+  // Humor de Devi (ver mood.ts): contenta un momento al llegar una respuesta y dormida tras un rato en calma.
+  cheering = $state(false);
+  quietSince = $state<number | null>(Date.now());
+  mood = $derived(
+    deriveMood({
+      online: this.conn.online,
+      pending: this.inbox.pending,
+      overdue: overdueCount(this.inbox.cards, this.clock.now),
+      cheering: this.cheering,
+      quietSince: this.quietSince,
+      now: this.clock.now,
+    }),
+  );
 
   private readonly deps: AppDeps;
   private api: DeviApi | null = null;
@@ -84,6 +98,7 @@ export class DeviApp {
   private readonly alerted = new Set<number>();
   private replay: Replay | null = null;
   private trayPending = -1;
+  private cheerTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(deps: AppDeps) {
     this.deps = deps;
@@ -236,6 +251,8 @@ export class DeviApp {
       if (this.replay) this.collectReplayed(added);
       else this.announce(added);
     }
+    // Cualquier novedad despierta a Devi.
+    this.quietSince = quietSinceAfter(this.quietSince, this.inbox.pending, Date.now(), true);
     this.publishMascot();
   }
 
@@ -257,9 +274,21 @@ export class DeviApp {
     if (this.notified.has(key)) return;
     this.notified.add(key);
     this.pokeKey++;
+    if (card.kind === "response") this.cheer();
     if (shouldNotify(this.prefs, this.paused)) {
       void this.deps.notify(noticeFor(card, (id) => this.team.nameOf(id)));
     }
+  }
+
+  // Contenta durante HAPPY_MS; otra respuesta entretanto alarga el momento.
+  private cheer(): void {
+    this.cheering = true;
+    if (this.cheerTimer) clearTimeout(this.cheerTimer);
+    this.cheerTimer = setTimeout(() => {
+      this.cheerTimer = null;
+      this.cheering = false;
+      this.publishMascot();
+    }, HAPPY_MS);
   }
 
   // ---- reenvío inicial: un solo aviso resumen en vez de uno por tarjeta ----------------
@@ -305,11 +334,13 @@ export class DeviApp {
   }
 
   publishMascot(): void {
+    this.quietSince = quietSinceAfter(this.quietSince, this.inbox.pending, Date.now(), false);
     this.deps.emitMascot({
       online: this.conn.online,
       pending: this.inbox.pending,
       label: this.conn.label,
       pokeKey: this.pokeKey,
+      mood: this.mood,
     });
     // Al icono de la bandeja solo cuando cambia el número.
     if (this.deps.trayAttention && this.inbox.pending !== this.trayPending) {

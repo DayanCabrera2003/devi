@@ -2,7 +2,7 @@
   // Ventana principal: crea DeviApp, la conecta con Tauri (eventos del tray y del panel de avisos, mascota, archivos
   // arrastrados) y pinta ShellView.
   import { listen } from "@tauri-apps/api/event";
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { createApp } from "../lib/boot";
   import { provideApp } from "../lib/context";
   import { MASCOT_READY } from "../lib/mascot";
@@ -11,6 +11,12 @@
 
   const app = createApp();
   provideApp(app);
+
+  // El humor también cambia con el tiempo (se duerme, se le pasa la alegría): la mascota flotante lo sigue.
+  $effect(() => {
+    void app.mood;
+    untrack(() => app.publishMascot());
+  });
 
   onMount(() => {
     const offs = [

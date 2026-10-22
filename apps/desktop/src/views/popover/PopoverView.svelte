@@ -36,7 +36,7 @@
 
 <div class="popover glass">
   <header class="pop-head">
-    <Devi size={34} offline={!app.conn.online} looking={pending > 0} pokeKey={app.pokeKey} />
+    <Devi size={34} offline={!app.conn.online} mood={app.mood} pokeKey={app.pokeKey} />
     <div class="pop-heading">
       <strong>{popoverTitle(pending)}</strong>
       <span class="pop-status">{app.conn.label}</span>
@@ -48,7 +48,7 @@
   <div class="pop-list">
     {#if pending === 0}
       <div class="pop-empty">
-        <Devi size={56} offline={!app.conn.online} />
+        <Devi size={56} offline={!app.conn.online} mood={app.mood} />
         <p class="pop-empty-title">Nada pendiente</p>
         <p class="muted small">Te aviso aquí en cuanto alguien te pida algo.</p>
       </div>

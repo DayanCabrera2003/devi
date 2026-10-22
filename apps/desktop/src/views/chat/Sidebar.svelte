@@ -89,7 +89,7 @@
     </div>
 
     <div class="me-card">
-      <div class="me-devi"><Devi size={60} offline={!app.conn.online} looking={totalWaiting > 0} pokeKey={app.pokeKey} /></div>
+      <div class="me-devi"><Devi size={60} offline={!app.conn.online} mood={app.mood} pokeKey={app.pokeKey} /></div>
       <div class="me-text">
         <div class="me-name">{hello}</div>
         <div class="me-status" class:waiting={app.conn.online && totalWaiting > 0}>{status}</div>

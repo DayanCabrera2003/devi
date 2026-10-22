@@ -40,7 +40,7 @@
 </script>
 
 {#if screen === "mascot"}
-  <MascotWindow initial={{ online: true, pending: 3, label: "conectado", pokeKey: 0 }} />
+  <MascotWindow initial={{ online: true, pending: 3, label: "conectado", pokeKey: 0, mood: "attentive" }} />
 {:else if screen === "avisos"}
   <!-- Mismo tamaño que la ventana `avisos`, sobre el fondo ambiente para ver el cristal. -->
   <div class="ambient" aria-hidden="true"><span></span></div>

@@ -11,7 +11,7 @@
   type Props = { initial?: MascotState };
   let { initial }: Props = $props();
   // svelte-ignore state_referenced_locally
-  let s = $state<MascotState>(initial ?? { online: false, pending: 0, label: "conectando…", pokeKey: 0 });
+  let s = $state<MascotState>(initial ?? { online: false, pending: 0, label: "conectando…", pokeKey: 0, mood: "offline" });
 
   onMount(() => {
     markMascotDocument(document);
@@ -32,7 +32,7 @@
 <div class="mascot" data-tauri-drag-region>
   <div class="mascot-disc glass" data-tauri-drag-region>
     <div class="mascot-devi" data-tauri-drag-region>
-      <Devi size={64} offline={!s.online} looking={s.pending > 0} pokeKey={s.pokeKey} />
+      <Devi size={64} offline={!s.online} mood={s.mood} pokeKey={s.pokeKey} />
     </div>
     {#if s.online && s.pending > 0}<span class="mascot-badge" aria-hidden="true">{s.pending}</span>{/if}
     <button class="mascot-pill" class:offline={!s.online} title={s.label} onclick={() => native.showMainWindow()}>

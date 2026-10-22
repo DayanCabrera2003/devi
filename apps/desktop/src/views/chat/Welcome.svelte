@@ -8,7 +8,7 @@
 </script>
 
 <div class="welcome">
-  <Devi size={88} offline={!app.conn.online} looking={waiting > 0} pokeKey={app.pokeKey} />
+  <Devi size={88} offline={!app.conn.online} mood={app.mood} pokeKey={app.pokeKey} />
   {#if waiting > 0}
     <h2>{waiting === 1 ? "Una cosa te espera" : `${waiting} cosas te esperan`}</h2>
     <p>Elige una conversación de la lista. Las que tienen un punto azul esperan algo de ti.</p>
