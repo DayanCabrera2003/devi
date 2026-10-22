@@ -1,6 +1,9 @@
 import {
   API,
   API_VERSION,
+  ConversationPageSchema,
+  ConversationsResponseSchema,
+  DeviRequestSchema,
   DraftSchema,
   ErrorBodySchema,
   PRESENCE,
@@ -11,7 +14,10 @@ import {
   VERSION_QUERY,
   buildPath,
   type ApiRoute,
+  type ConversationPage,
+  type ConversationsResponse,
   type CreateDraftMeta,
+  type DeviRequest,
   type Draft,
   type ErrorBody,
   type SessionDelivery,
@@ -42,6 +48,11 @@ export interface DeviClient {
     opts?: { params?: Record<string, string>; body?: unknown; query?: Record<string, string> },
   ): Promise<z.infer<(typeof API)[R]["response"]>>;
   createDraft(meta: z.infer<typeof CreateDraftMeta>, files: { name: string; content: string }[]): Promise<Draft>;
+  // Solicitud escrita por la persona en la app (POST /requests, multipart). En el webview el navegador
+  // pone el Origin de la app, que la ruta exige.
+  sendFromApp(meta: { to: string; message: string }, files: { name: string; content: string }[]): Promise<DeviRequest>;
+  conversations(): Promise<ConversationsResponse>;
+  conversation(memberId: string, opts?: { before?: number; limit?: number }): Promise<ConversationPage>;
   downloadFile(id: string): Promise<string>;
   subscribeUser(onEvent: (e: UserEvent) => void, opts?: SubscribeOpts): () => void;
   subscribeSession(sessionId: string, onDelivery: (d: SessionDelivery) => void, opts?: SubscribeOpts): () => void;
@@ -141,6 +152,26 @@ export function createClient(opts: ClientOptions): DeviClient {
       for (const f of files) form.append("files", new File([f.content], f.name, { type: "text/plain;charset=utf-8" }));
       const res = await send(API.createDraft.method, API.createDraft.path, { body: form });
       return parsed(res, DraftSchema);
+    },
+
+    async sendFromApp(meta, files) {
+      const form = new FormData();
+      form.append("meta", JSON.stringify(meta));
+      for (const f of files) form.append("files", new File([f.content], f.name, { type: "text/plain;charset=utf-8" }));
+      const res = await send(API.sendFromApp.method, API.sendFromApp.path, { body: form });
+      return parsed(res, DeviRequestSchema);
+    },
+
+    async conversations() {
+      return parsed(await send(API.conversations.method, API.conversations.path), ConversationsResponseSchema);
+    },
+
+    async conversation(memberId, pageOpts = {}) {
+      const q = new URLSearchParams();
+      if (pageOpts.before !== undefined) q.set("before", String(pageOpts.before));
+      if (pageOpts.limit !== undefined) q.set("limit", String(pageOpts.limit));
+      const path = buildPath(API.conversation.path, { memberId }) + (q.size > 0 ? `?${q}` : "");
+      return parsed(await send(API.conversation.method, path), ConversationPageSchema);
     },
 
     async downloadFile(id) {
