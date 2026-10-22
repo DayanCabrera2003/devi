@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type {
-  API, AuditAction, AuditTarget, CreateDraftMeta, CreateDraftResult, DeviRequest, Draft, Perm, SessionDelivery, UserEvent,
+  API, AuditAction, AuditTarget, CreateDraftMeta, CreateDraftResult, DeviRequest, Draft, Perm, SendFromAppMeta, SessionDelivery, UserEvent,
 } from "@devi/protocol";
 import type { z } from "zod";
 import type { Access } from "../../core/auth";
@@ -274,6 +274,51 @@ export class RequestsManager {
     }
   }
 
+  // ---- enviar desde la app --------------------------------------------------
+
+  // La persona escribe la solicitud en la app: no hay agente ni borrador que autorizar, sale ya pending.
+  // Al destinatario le llega igual que una solicitud autorizada (request.incoming, plazo, timeout).
+  async sendFromApp(access: Access, meta: z.output<typeof SendFromAppMeta>, rawFiles: File[]): Promise<DeviRequest> {
+    if (rawFiles.length > 0 && !access.perms.has("files.send")) {
+      throw new HttpError(403, 'Te falta el permiso "files.send"', { code: "missing_perm", perm: "files.send" });
+    }
+    const to = this.recipientFor(access, meta.to);
+    const valid = await this.files.validate(rawFiles);
+    // Tras el await, el destinatario pudo desactivarse: se vuelve a comprobar.
+    this.recipientFor(access, to);
+    const now = this.ctx.now();
+    const r: RequestRecord = {
+      id: this.newRequestId(), origin: "app", fromMemberId: access.memberId, fromSessionId: "", fromSessionName: "",
+      toMemberId: to, message: meta.message.trim(), status: "pending", forwardedSessionId: null, outcome: null,
+      outcomeText: null, createdAt: now, sentAt: now, deadline: now + this.settings.requestTimeoutMs,
+    };
+    // Igual que al crear un borrador: bytes a disco y después filas en una transacción; si falla, se borra lo escrito.
+    const written = this.files.write(valid);
+    try {
+      this.store.transaction(() => {
+        this.store.insertRequest(r);
+        this.files.recordForRequest({ requestId: r.id, direction: "request", authorMemberId: access.memberId, peerMemberId: to, written });
+      });
+    } catch (e) {
+      this.files.removeWritten(written);
+      throw e;
+    }
+    this.audit("request.sent_from_app", access.memberId, "request", r.id, {
+      to, toName: this.team.nameOf(to), messageSha256: sha256(r.message),
+      files: JSON.stringify(valid.map((f) => ({ name: f.name, size: f.size }))),
+    });
+    this.schedule(r);
+    const view = this.requestView(r);
+    this.push(r.toMemberId, { type: "request.incoming", request: view });
+    this.push(r.fromMemberId, { type: "request.updated", request: view });
+    return view;
+  }
+
+  // Para las conversaciones: misma vista que viaja por SSE.
+  viewOf(r: RequestRecord): DeviRequest {
+    return this.requestView(r);
+  }
+
   // ---- acciones de B (destinatario) -----------------------------------------
 
   forward(access: Access, id: string, sessionId: string): DeviRequest {
@@ -284,7 +329,7 @@ export class RequestsManager {
     const files = this.files.forRequest(r.id).files;
     const delivery: SessionDelivery = {
       kind: "request",
-      content: requestContent({ id: r.id, fromName: this.team.nameOf(r.fromMemberId), fromSessionName: r.fromSessionName, message: r.message, files }),
+      content: requestContent({ id: r.id, fromName: this.team.nameOf(r.fromMemberId), fromSessionName: r.fromSessionName, message: r.message, files, origin: r.origin }),
       meta: {
         request_id: r.id, from: r.fromMemberId, from_name: this.team.nameOf(r.fromMemberId),
         from_session: r.fromSessionName, files: filesMeta(files),
@@ -477,6 +522,30 @@ export class RequestsManager {
 
   private push(memberId: string, event: UserEvent): void {
     pushUser(this.ctx.sse, memberId, event);
+    // Cada cambio de una solicitud (o de un borrador) entre dos personas avisa también de su conversación.
+    const peer = this.conversationPeer(memberId, event);
+    if (peer) pushUser(this.ctx.sse, memberId, { type: "conversation.updated", memberId: peer });
+  }
+
+  private conversationPeer(memberId: string, event: UserEvent): string | null {
+    switch (event.type) {
+      case "request.incoming":
+      case "request.updated":
+      case "response.incoming":
+      case "request.timed_out": {
+        const r = event.request;
+        return r.fromMemberId === memberId ? r.toMemberId : r.fromMemberId;
+      }
+      case "draft.awaiting":
+        return event.draft.kind === "request" ? event.draft.toMemberId : (this.store.getRequest(event.draft.requestId)?.fromMemberId ?? null);
+      case "draft.discarded": {
+        const d = this.store.getDraft(event.draftId);
+        if (!d) return null;
+        return d.kind === "request" ? d.toMemberId : (this.store.getRequest(d.requestId!)?.fromMemberId ?? null);
+      }
+      default:
+        return null;
+    }
   }
 
   // Aviso a la sesión del autor, solo si sigue existiendo (pudo cerrarse o ser sustituida). En dos pasos:
@@ -552,7 +621,7 @@ export class RequestsManager {
   private requestView(r: RequestRecord): DeviRequest {
     const { files, responseFiles } = this.files.forRequest(r.id);
     return {
-      id: r.id, fromMemberId: r.fromMemberId, fromSessionId: r.fromSessionId, fromSessionName: r.fromSessionName,
+      id: r.id, origin: r.origin ?? "session", fromMemberId: r.fromMemberId, fromSessionId: r.fromSessionId, fromSessionName: r.fromSessionName,
       toMemberId: r.toMemberId, message: r.message, status: r.status, forwardedSessionId: r.forwardedSessionId ?? undefined,
       outcome: r.outcome ?? undefined, outcomeText: r.outcomeText ?? undefined, files, responseFiles,
       createdAt: r.createdAt, sentAt: r.sentAt, deadline: r.deadline,

@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const invoke = vi.hoisted(() => vi.fn());
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
+const listen = vi.hoisted(() => vi.fn());
+vi.mock("@tauri-apps/api/event", () => ({ listen }));
 
-import { DEFAULT_PREFS, native, prefsOf } from "./native";
+import { DEFAULT_PREFS, native, prefsOf, type PickResult } from "./native";
 
 describe("native", () => {
   beforeEach(() => invoke.mockReset());
@@ -40,5 +42,46 @@ describe("native", () => {
       notifications: false,
       setupDone: true,
     });
+  });
+});
+
+describe("archivos para adjuntar", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    listen.mockReset();
+  });
+
+  const RESULT: PickResult = {
+    files: [{ token: "t1", name: "log.txt", size: 4, preview: "boom" }],
+    rejected: [{ name: "foto.png", reason: "no es un archivo de texto (tiene bytes NUL)" }],
+  };
+
+  test("pickFiles abre el diálogo en Rust, sin argumentos (el webview no elige rutas)", async () => {
+    invoke.mockResolvedValue(RESULT);
+    expect(await native.pickFiles()).toEqual(RESULT);
+    expect(invoke).toHaveBeenLastCalledWith("pick_files");
+  });
+
+  test("takeFiles y discardFiles mandan los tokens", async () => {
+    invoke.mockResolvedValue([{ name: "log.txt", content: "boom" }]);
+    expect(await native.takeFiles(["t1", "t2"])).toEqual([{ name: "log.txt", content: "boom" }]);
+    expect(invoke).toHaveBeenLastCalledWith("take_files", { tokens: ["t1", "t2"] });
+    invoke.mockResolvedValue(undefined);
+    await native.discardFiles(["t3"]);
+    expect(invoke).toHaveBeenLastCalledWith("discard_files", { tokens: ["t3"] });
+  });
+
+  test("onFilesDropped y onDragHover escuchan los eventos de Rust y pasan solo el payload", async () => {
+    const unlisten = vi.fn();
+    listen.mockResolvedValue(unlisten);
+    const dropped = vi.fn();
+    const hover = vi.fn();
+    expect(await native.onFilesDropped(dropped)).toBe(unlisten);
+    expect(await native.onDragHover(hover)).toBe(unlisten);
+    expect(listen.mock.calls.map((c) => c[0])).toEqual(["devi://files-dropped", "devi://drag-hover"]);
+    listen.mock.calls[0]![1]({ event: "devi://files-dropped", id: 1, payload: RESULT });
+    listen.mock.calls[1]![1]({ event: "devi://drag-hover", id: 2, payload: { active: true } });
+    expect(dropped).toHaveBeenCalledWith(RESULT);
+    expect(hover).toHaveBeenCalledWith({ active: true });
   });
 });

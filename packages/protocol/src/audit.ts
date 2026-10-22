@@ -8,6 +8,7 @@ export const AUDIT_ACTIONS = [
   "draft.approved_in_chat", // creado y enviado a la vez: el humano lo aprobó en el aviso de Claude Code
   "draft.discarded",
   "draft.expired",
+  "request.sent_from_app",
   "request.forwarded",
   "request.accepted",
   "request.rejected",

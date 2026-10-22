@@ -75,6 +75,9 @@ export type RequestStatus = z.infer<typeof RequestStatusSchema>;
 
 export const DeviRequestSchema = z.object({
   id: z.string(),
+  // session = la pidió un agente y su humano autorizó el borrador; app = la escribió una persona en la app
+  // (entonces fromSessionId y fromSessionName son cadenas vacías). Sin campo (servidor anterior) = session.
+  origin: z.enum(["session", "app"]).default("session"),
   fromMemberId: z.string(),
   fromSessionId: z.string(),
   fromSessionName: z.string(),

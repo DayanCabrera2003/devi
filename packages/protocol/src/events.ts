@@ -11,6 +11,8 @@ export const UserEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("response.incoming"), request: DeviRequestSchema }),
   z.object({ type: z.literal("request.timed_out"), request: DeviRequestSchema }),
   z.object({ type: z.literal("team.updated") }),
+  // Cambió alguna solicitud (o borrador) entre esta persona y memberId: la app recarga esa conversación.
+  z.object({ type: z.literal("conversation.updated"), memberId: z.string() }),
   z.object({ type: z.literal("sessions.updated"), memberId: z.string() }),
   // Solo a admins: cambios sensibles (roles y permisos, personas añadidas o desactivadas, ajustes, logins rechazados).
   z.object({ type: z.literal("audit.alert"), entry: AuditEntrySchema }),

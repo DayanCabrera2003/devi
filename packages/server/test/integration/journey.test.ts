@@ -225,3 +225,32 @@ describe("presencia", () => {
     await env.dayanApp.waitFor((e) => e.event === "team.updated", "team.updated en la app de Dayan");
   });
 });
+
+describe("enviar desde la app y conversaciones", () => {
+  test("Dayan escribe a María desde la app → María acepta → Dayan ve la respuesta y la conversación", async () => {
+    env = await boot();
+    const { dayan, maria, dayanApp, mariaApp, mariaM, leoM } = env;
+    const form = new FormData();
+    form.set("meta", JSON.stringify({ to: mariaM.id, message: "¿Puedes revisar el despliegue?" }));
+    form.append("files", txt("deploy.log", "ok\n"));
+    const sent = await dayan.call("POST", "/api/v1/requests", form);
+    expect(sent.status).toBe(200);
+    expect(sent.data).toMatchObject({ origin: "app", fromSessionId: "", status: "pending" });
+
+    const incoming = (await mariaApp.waitFor((e) => e.event === "request.incoming", "solicitud en la app de María")).data.request;
+    expect(incoming.id).toBe(sent.data.id);
+    await mariaApp.waitFor((e) => e.event === "conversation.updated" && e.data.memberId === env.me.data.member.id, "conversación en la app de María");
+    expect((await maria.call("GET", `/api/v1/files/${incoming.files[0].id}`)).data).toBe("ok\n");
+
+    await maria.call("POST", `/api/v1/requests/${incoming.id}/accept`, { note: "Lo miro ahora" });
+    const resp = (await dayanApp.waitFor((e) => e.event === "response.incoming", "respuesta en la app de Dayan")).data.request;
+    expect(resp).toMatchObject({ outcome: "accepted", outcomeText: "Lo miro ahora", origin: "app" });
+
+    const items = (await dayan.call("GET", "/api/v1/conversations")).data.items;
+    expect(items[0]).toMatchObject({ memberId: mariaM.id, lastPreview: "Lo miro ahora", lastFromMe: false, waitingOnMe: 1 });
+    expect(items.map((i: { memberId: string }) => i.memberId)).toContain(leoM.id);
+    expect(items).toHaveLength(3); // María, Leo y Ana
+    const page = (await dayan.call("GET", `/api/v1/conversations/${mariaM.id}`)).data;
+    expect(page.requests.map((r: { id: string }) => r.id)).toEqual([incoming.id]);
+  });
+});

@@ -171,6 +171,14 @@ Cuando tu agente envía algo a un compañero (`send_request`) o le responde (`re
 
 **Ajuste del equipo.** Un admin puede desactivarlo en **Admin → Servidor → «Aprobar envíos en el chat de Claude Code»** (está activado por defecto). Desactivado, todo lo que sale queda en borrador para la app, aunque lo hayas aprobado en el chat, y el agente te dice que lo autorices allí. Cada envío aprobado en el chat queda en **Admin → Auditoría** como `draft.approved_in_chat`: quién lo envió, a quién, los nombres y tamaños de los archivos y el SHA-256 del mensaje (nunca el texto). Los permisos, los límites de ritmo, la validación de archivos y el aviso de secretos se aplican igual que con la app.
 
+### Escribir a un compañero desde la app
+
+No hace falta pasar por Claude Code para pedir algo: en la app, abre la conversación con esa persona, escribe el mensaje y, si quieres, adjunta hasta 5 archivos de texto (botón de adjuntar o arrastrándolos sobre la ventana). La solicitud sale al momento, sin borrador que autorizar, porque la has escrito tú. A tu compañero le llega igual que una solicitud de un agente (puede aceptarla, rechazarla o enviarla a una de sus sesiones) y su respuesta te llega a ti: la aceptas o la envías a una de tus sesiones.
+
+- Hace falta el permiso «Enviar solicitudes» (y «Enviar archivos» si adjuntas algo). Los límites son los mismos que para los borradores: archivos de texto UTF-8 de hasta 1 MB, como máximo 5.
+- Los archivos los lee y valida la parte nativa de la app; los que no valen (binarios, demasiado grandes, carpetas) aparecen como rechazados con el motivo.
+- **Conversaciones**: la app muestra una conversación por compañero, con todo lo que os habéis pedido en los dos sentidos (también lo cerrado, con su respuesta y archivos). Arriba salen las personas con algo que espera tu acción: solicitudes suyas pendientes, respuestas a las tuyas, plazos vencidos y borradores tuyos dirigidos a ellas.
+
 ## 5. Actualizaciones
 
 **Las actualizaciones automáticas todavía no están activas.** Requieren generar la clave de firma del updater, y aún no se ha hecho. Hasta entonces, para actualizar descarga el instalador de la versión nueva desde Releases e instálalo encima de la actual: se conservan tus datos y tu configuración.
@@ -181,7 +189,7 @@ Si el servidor exige una versión más nueva, la app muestra **Actualiza Devi**:
 
 ## 6. Seguridad
 
-Las acciones que debe decidir una persona (autorizar o descartar un borrador, responder una solicitud, administrar el equipo, roles y ajustes, exportar la base de datos) **solo se aceptan desde la app de Devi**: el servidor exige la cabecera `Origin` de la app. Si un agente intenta hacerlas llamando a la API directamente, recibe «Esta acción solo se puede hacer desde la app de Devi».
+Las acciones que debe decidir una persona (autorizar o descartar un borrador, enviar una solicitud escrita en la app, responder una solicitud, administrar el equipo, roles y ajustes, exportar la base de datos) **solo se aceptan desde la app de Devi**: el servidor exige la cabecera `Origin` de la app. Si un agente intenta hacerlas llamando a la API directamente, recibe «Esta acción solo se puede hacer desde la app de Devi».
 
 La excepción son los envíos aprobados en el chat (ver [Aprobar envíos en el chat](#aprobar-envíos-en-el-chat)): ahí la aprobación es el aviso de permisos de Claude Code, que sale en cada llamada a `send_request` o `respond_to_request` y no se puede desactivar con reglas, hooks ni modos de permisos. Si el equipo prefiere que todo pase por la app, el admin desactiva «Aprobar envíos en el chat de Claude Code» en Admin → Servidor.
 
