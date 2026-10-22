@@ -1,6 +1,7 @@
 <script lang="ts">
   // Solicitud entrante pendiente: burbuja del compañero y, debajo, lo que puedo hacer con ella.
-  import { type DeviRequest, type InjectionScan, type Session, scanForInjection } from "@devi/protocol";
+  import { type DeviRequest, type InjectionScan, type Session, contextText, hasContext, scanForInjection } from "@devi/protocol";
+  import ContextBlock from "../components/ContextBlock.svelte";
   import DecisionForm from "../components/DecisionForm.svelte";
   import FileList from "../components/FileList.svelte";
   import InjectionWarning from "../components/InjectionWarning.svelte";
@@ -28,8 +29,9 @@
 
   // Posible prompt injection: en el mensaje y en los archivos que se hayan previsualizado.
   const messageScan = $derived(scanForInjection(request.message));
+  const contextScan = $derived(scanForInjection(hasContext(request.context) ? contextText(request.context) : ""));
   let fileScans = $state<Record<string, InjectionScan>>({});
-  const scan = $derived(combineScans([messageScan, ...Object.values(fileScans)]));
+  const scan = $derived(combineScans([messageScan, contextScan, ...Object.values(fileScans)]));
   let reviewed = $state(false);
   const blocked = $derived(scan.level === "high" && !reviewed);
 
@@ -56,6 +58,8 @@
     <p class="card-msg">{request.message}</p>
   </div>
   <InjectionWarning scan={messageScan} />
+  <ContextBlock context={request.context} />
+  <InjectionWarning scan={contextScan} where="el contexto" />
   <FileList files={request.files} load={(id) => app.downloadFile(id)} onScan={(id, s) => (fileScans[id] = s)} />
   {#if !compact && request.files.length > 0}
     <SaveFilesButton save={() => app.saveFiles(request.id, "request", request.files)} />

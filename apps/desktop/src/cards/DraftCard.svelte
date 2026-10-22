@@ -1,6 +1,7 @@
 <script lang="ts">
   // "Tu agente quiere enviar esto a María": nada sale de este equipo hasta que se autoriza.
-  import { type Draft, type InjectionScan, SECRETS_FLAG, hasSecretsFlag, scanForInjection } from "@devi/protocol";
+  import { type Draft, type InjectionScan, SECRETS_FLAG, contextText, hasContext, hasSecretsFlag, scanForInjection } from "@devi/protocol";
+  import ContextBlock from "../components/ContextBlock.svelte";
   import FileList from "../components/FileList.svelte";
   import InjectionWarning from "../components/InjectionWarning.svelte";
   import { errorMessage } from "../lib/api";
@@ -27,7 +28,9 @@
   const secrets = $derived(hasSecretsFlag(draft.message));
   const body = $derived(secrets ? draft.message.slice(SECRETS_FLAG.length).replace(/^\s+/, "") : draft.message);
   let fileScans = $state<Record<string, InjectionScan>>({});
-  const scan = $derived(combineScans([scanForInjection(body), ...Object.values(fileScans)]));
+  const scan = $derived(combineScans([
+    scanForInjection(body), scanForInjection(hasContext(draft.context) ? contextText(draft.context) : ""), ...Object.values(fileScans),
+  ]));
 
   async function run(fn: () => Promise<void>) {
     busy = true;
@@ -49,6 +52,7 @@
     {/if}
     <p class="card-msg">{body}</p>
   </div>
+  <ContextBlock context={draft.context} />
   {#if secrets}
     <div class="secrets" role="alert">
       <strong>{SECRETS_FLAG}.</strong> Devi detectó algo que parece un secreto (clave, token o contraseña) en el
