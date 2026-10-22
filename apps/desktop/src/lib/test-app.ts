@@ -26,6 +26,8 @@ export async function fakeApp(
     memberSessions: vi.fn(async () => []),
     downloadFile: vi.fn(async () => ""),
     subscribe: vi.fn(() => () => {}),
+    // Ajustes lee la preferencia de avisos en las sesiones al montarse.
+    myPrefs: vi.fn(async () => ({ sessionNotices: true })),
     ...api,
   };
   const conversations = {

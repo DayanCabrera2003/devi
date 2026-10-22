@@ -24,6 +24,8 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   "request.timed_out": "Solicitud sin respuesta a tiempo",
   "request.escalated": "Aviso de solicitud sin respuesta (escalado)",
   "request.reassigned": "Solicitud pedida a otra persona",
+  "request.taken_in_chat": "Solicitud traída a una sesión desde Claude Code",
+  "request.declined_in_chat": "Solicitud rechazada desde Claude Code",
   "response.accepted": "Respuesta aceptada",
   "response.forwarded": "Respuesta enviada a una sesión",
   "file.downloaded": "Archivo descargado",

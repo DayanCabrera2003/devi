@@ -11,6 +11,7 @@
   import Page from "./Page.svelte";
   import FolderSetting from "./settings/FolderSetting.svelte";
   import LocalServerPanel from "./settings/LocalServerPanel.svelte";
+  import SessionNoticesSetting from "./settings/SessionNoticesSetting.svelte";
   import ShellAliasSetting from "./settings/ShellAliasSetting.svelte";
 
   const app = useApp();
@@ -186,6 +187,8 @@
   {#if app.prefs.serverAdminLogin}
     <LocalServerPanel />
   {/if}
+
+  <SessionNoticesSetting />
 
   <section class="group-box">
     <h2 class="group-title">Claude Code</h2>

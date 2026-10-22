@@ -39,6 +39,8 @@ function fakeApi(screen: string): DeviApi {
     memberSessions: async (id: string) => (id === fx.ME.member.id ? fx.SESSIONS : id === "m-maria" ? fx.SESSIONS.slice(0, 2) : fx.SESSIONS.slice(0, 1)),
     downloadFile: async (id: string) => fx.FILE_TEXT[id] ?? "",
     getSettings: async () => fx.SETTINGS,
+    myPrefs: async () => ({ sessionNotices: true }),
+    updateMyPrefs: async (b: object) => ({ sessionNotices: true, ...b }),
     updateSettings: async (b: object) => ({ ...fx.SETTINGS, ...b }),
     audit: async () => ({ entries: fx.AUDIT, nextBefore: 3 }),
     forwardRequest: async (id: string) => touch(find(id), "forwarded"),

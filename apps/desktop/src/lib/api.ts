@@ -20,6 +20,7 @@ import {
   type KnowledgeResult,
   type Me,
   type Member,
+  type MemberPrefs,
   type Role,
   type Session,
   type Settings,
@@ -146,6 +147,9 @@ export class DeviApi {
   memberSessions(memberId: string) { return this.call<Session[]>("memberSessions", { params: { id: memberId } }); }
   // «Tu semana»: resumen de los últimos 7 días (solo mis datos).
   myWeek() { return this.call<Week>("myWeek"); }
+  // Mis preferencias del servidor (avisos en mis sesiones de Claude Code). Cambiarlas es acción humana.
+  myPrefs() { return this.call<MemberPrefs>("myPrefs"); }
+  updateMyPrefs(body: Partial<MemberPrefs>) { return this.call<MemberPrefs>("updateMyPrefs", { body }); }
 
   authorizeDraft(id: string) { return this.call<Draft>("authorizeDraft", { params: { id }, body: {} }); }
   discardDraft(id: string) { return this.call<Draft>("discardDraft", { params: { id }, body: {} }); }
