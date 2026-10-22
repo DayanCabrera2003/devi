@@ -22,6 +22,15 @@ export function fakeClient(responses: Record<string, unknown | ((opts: unknown) 
       drafts.push({ meta, files });
       return answer("createDraft", meta) as never;
     },
+    async sendFromApp(meta, files) {
+      return answer("sendFromApp", { meta, files }) as never;
+    },
+    async conversations() {
+      return answer("conversations") as never;
+    },
+    async conversation(memberId, opts) {
+      return answer("conversation", { memberId, ...opts }) as never;
+    },
     async downloadFile(id) {
       return answer("downloadFile", id) as string;
     },
