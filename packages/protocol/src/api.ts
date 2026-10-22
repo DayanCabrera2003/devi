@@ -3,6 +3,7 @@ import {
   DeviRequestSchema, DraftSchema, InboxItemSchema, MeSchema, MemberSchema, PermSchema, RoleSchema,
   SessionSchema, SessionStatusSchema, SettingsSchema, TeamViewSchema,
 } from "./entities";
+import { RequestKindSchema } from "./entities";
 import type { Perm } from "./perms";
 import { AuditPageSchema } from "./audit";
 import { RequestContextSchema } from "./context";
@@ -78,6 +79,7 @@ export const CreateDraftMeta = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("request"), sessionId: z.string(), to: z.string(), message: NonEmpty, approval: ApprovalSchema.default("app"),
     context: RequestContextSchema.optional(),
+    requestKind: RequestKindSchema.default("request"),
   }),
   z.object({ kind: z.literal("response"), sessionId: z.string(), requestId: z.string(), message: NonEmpty, approval: ApprovalSchema.default("app"),
     // Guardar la respuesta en la base del equipo al enviarse (lo decide quien responde).

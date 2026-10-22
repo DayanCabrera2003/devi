@@ -53,6 +53,11 @@ export const FileMetaSchema = z.object({
 });
 export type FileMeta = z.infer<typeof FileMetaSchema>;
 
+// Tipo de solicitud: request = pedir algo; handoff = traspaso de sesión (el contexto de un trabajo para que
+// otra persona lo continúe). Sin campo (servidor anterior) = request.
+export const RequestKindSchema = z.enum(["request", "handoff"]);
+export type RequestKind = z.infer<typeof RequestKindSchema>;
+
 const DraftBase = z.object({
   id: z.string(),
   authorMemberId: z.string(),
@@ -65,7 +70,7 @@ const DraftBase = z.object({
   context: RequestContextSchema.optional(), // solo borradores de solicitud que lo traigan
 });
 export const DraftSchema = z.discriminatedUnion("kind", [
-  DraftBase.extend({ kind: z.literal("request"), toMemberId: z.string() }),
+  DraftBase.extend({ kind: z.literal("request"), toMemberId: z.string(), requestKind: RequestKindSchema.default("request") }),
   DraftBase.extend({ kind: z.literal("response"), requestId: z.string(), shareWithTeam: z.boolean().optional() }),
 ]);
 export type Draft = z.infer<typeof DraftSchema>;
@@ -80,6 +85,7 @@ export const DeviRequestSchema = z.object({
   // session = la pidió un agente y su humano autorizó el borrador; app = la escribió una persona en la app
   // (entonces fromSessionId y fromSessionName son cadenas vacías). Sin campo (servidor anterior) = session.
   origin: z.enum(["session", "app"]).default("session"),
+  kind: RequestKindSchema.default("request"),
   fromMemberId: z.string(),
   fromSessionId: z.string(),
   fromSessionName: z.string(),
