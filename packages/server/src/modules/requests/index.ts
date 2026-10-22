@@ -1,3 +1,5 @@
+import { API } from "@devi/protocol";
+import { json } from "../../core/http";
 import type { DeviModule, ModuleContext } from "../../core/module";
 import { registerAppRoutes } from "./app-routes";
 import { Conversations } from "./conversations";
@@ -5,6 +7,7 @@ import { PendingReads } from "./pending";
 import { registerRequestRoutes } from "./routes";
 import { RequestsManager } from "./service";
 import { RequestsStore, requestsMigrations } from "./store";
+import { WeekReads } from "./week";
 
 // Eventos internos que emite este módulo (files los escucha para la retención; knowledge, request.shared).
 declare module "../../core/bus" {
@@ -33,6 +36,8 @@ export const requestsModule: DeviModule = {
     registerRequestRoutes(r, ctx, requests);
     const view = (x: Parameters<RequestsManager["viewOf"]>[0]) => requests.viewOf(x);
     registerAppRoutes(r, ctx, requests, new Conversations(store, ctx, view), new PendingReads(store, view, (d) => requests.draftViewOf(d)));
+    const week = new WeekReads(store, ctx.now);
+    r.on(API.myWeek, ({ access }) => json(week.of(access.memberId)));
   },
 
   onStart(ctx) {

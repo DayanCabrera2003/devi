@@ -329,4 +329,33 @@ export class RequestsStore {
       .get({ me, peer }) as { n: number };
     return row.n;
   }
+
+  // ---- resumen semanal ------------------------------------------------------
+
+  // Números de «Tu semana» de $me entre $from (incluido) y $to (excluido). Enviadas y recibidas por fecha de
+  // creación; respondidas por fecha de la respuesta, con el tiempo medio desde que le llegó cada una.
+  weekCounts(me: string, from: number, to: number): { sent: number; received: number; answered: number; avgResponseMs: number | null } {
+    return this.db
+      .query(
+        `SELECT
+           (SELECT COUNT(*) FROM requests WHERE from_member = $me AND created_at >= $from AND created_at < $to) AS sent,
+           (SELECT COUNT(*) FROM requests WHERE to_member = $me AND created_at >= $from AND created_at < $to) AS received,
+           COUNT(*) AS answered,
+           AVG(responded_at - sent_at) AS avgResponseMs
+         FROM requests
+         WHERE to_member = $me AND outcome IS NOT NULL AND responded_at >= $from AND responded_at < $to`,
+      )
+      .get({ me, from, to }) as { sent: number; received: number; answered: number; avgResponseMs: number | null };
+  }
+
+  // A quién ayudó más $me en la ventana: respuestas aceptadas o con texto (los rechazos no cuentan).
+  weekHelped(me: string, from: number, to: number, limit: number): { memberId: string; count: number }[] {
+    return this.db
+      .query(
+        `SELECT from_member AS memberId, COUNT(*) AS count FROM requests
+         WHERE to_member = $me AND outcome IN ('accepted', 'answered') AND responded_at >= $from AND responded_at < $to
+         GROUP BY from_member ORDER BY count DESC, memberId LIMIT $limit`,
+      )
+      .all({ me, from, to, limit }) as { memberId: string; count: number }[];
+  }
 }

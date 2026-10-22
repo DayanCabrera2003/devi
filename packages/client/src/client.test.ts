@@ -56,6 +56,16 @@ describe("call", () => {
     expect(srv.seen[0]!.query.get("claudeSessionId")).toBe("c 1");
   });
 
+  test("tu semana: call(\"myWeek\") pide /me/week y valida el resumen", async () => {
+    const week = { from: 0, to: 1, sent: 1, received: 2, answered: 1, avgResponseMs: 60_000, topHelped: [{ memberId: "m2", count: 1 }] };
+    const srv = serve(() => Response.json(week));
+    expect(await createClient({ baseUrl: srv.url }).call("myWeek")).toEqual(week);
+    expect(srv.seen[0]).toMatchObject({ method: "GET", path: "/api/v1/me/week" });
+    const bad = serve(() => Response.json({ ...week, sent: -1 }));
+    const err = (await createClient({ baseUrl: bad.url }).call("myWeek").catch((e) => e)) as DeviApiError;
+    expect(err.body.code).toBe("bad_response");
+  });
+
   test("sin devUser no manda la cabecera de dev", async () => {
     const srv = serve(() => Response.json(ME));
     await createClient({ baseUrl: srv.url }).call("me");
