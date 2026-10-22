@@ -36,7 +36,7 @@
   }
 </script>
 
-<section class="card">
+<section class="card glass">
   <div class="card-kicker">Paso 4 de 5 · Claude Code</div>
   <div class="card-title">Conectar Devi con Claude Code</div>
   <p class="muted">

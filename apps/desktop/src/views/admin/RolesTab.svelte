@@ -37,7 +37,7 @@
   <div class="role-list">
     {#each roles as r (r.id)}
       <button class="role-item" class:active={selected === r.id} onclick={() => select(r.id)}>
-        <span class="chip" style:color={r.color} style:border-color={r.color}>{r.name}</span>
+        <span class="chip" style:--role={r.color}>{r.name}</span>
         <span class="muted small" title="Personas con este rol">{usage(r.id)}</span>
       </button>
     {/each}

@@ -22,18 +22,20 @@
   }
 </script>
 
-<section class="card">
-  <div class="card-kicker">Archivos recibidos</div>
-  <p class="mono small">{current ?? "~/Devi/recibidos (por defecto)"}</p>
-  <p class="muted small">
+<section class="group-box">
+  <h2 class="group-title">Archivos recibidos</h2>
+  <div class="inset">
+    <div class="cell">
+      <span class="grow mono small">{current ?? "~/Devi/recibidos (por defecto)"}</span>
+      {#if current}
+        <button class="ghost" disabled={busy} onclick={() => run(() => app.resetReceivedDir())}>Usar la de por defecto</button>
+      {/if}
+      <button disabled={busy} onclick={() => run(() => app.chooseReceivedDir())}>Cambiar…</button>
+    </div>
+  </div>
+  <p class="group-foot">
     Cada solicitud guarda sus archivos en una subcarpeta propia (y los de la respuesta en «respuesta/»). Tus sesiones de
     Claude Code usan esta misma carpeta.
   </p>
-  <div class="actions">
-    <button disabled={busy} onclick={() => run(() => app.chooseReceivedDir())}>Cambiar…</button>
-    {#if current}
-      <button class="ghost" disabled={busy} onclick={() => run(() => app.resetReceivedDir())}>Usar la de por defecto</button>
-    {/if}
-  </div>
   {#if error}<div class="error">{error}</div>{/if}
 </section>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Casilla obligatoria antes de "Enviar a sesión" cuando el contenido parece una inyección (nivel high).
+  // Casilla obligatoria antes de "Enviar a mi sesión" cuando el contenido parece una inyección (nivel high).
   type Props = { checked: boolean };
   let { checked = $bindable() }: Props = $props();
 </script>

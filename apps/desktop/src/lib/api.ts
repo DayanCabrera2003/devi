@@ -186,6 +186,19 @@ export class DeviApi {
     return this.call<AuditPage>("audit", { query });
   }
 
+  // Petición directa con las cabeceras de @devi/client (el navegador pone Origin). Devuelve el JSON sin
+  // validar: quien llama lo comprueba. Los errores del servidor salen como HttpFailure.
+  async fetchJson(path: string, init: { method?: string; query?: Record<string, string>; body?: BodyInit } = {}): Promise<unknown> {
+    const url = new URL(path, this.baseUrl);
+    for (const [k, v] of Object.entries(init.query ?? {})) url.searchParams.set(k, v);
+    const res = await fetch(url, { method: init.method ?? "GET", headers: this.headers(), body: init.body });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as ErrorBody | null;
+      throw new HttpFailure(res.status, body ?? { error: `Error ${res.status} del servidor de Devi` });
+    }
+    return res.json();
+  }
+
   // Binario (application/octet-stream): se pide con fetch directo y las mismas cabeceras.
   async exportDb(): Promise<Uint8Array> {
     const res = await fetch(new URL(API.exportDb.path, this.baseUrl), { headers: this.headers() });

@@ -40,7 +40,7 @@ describe("DraftCard", () => {
   test("borrador de solicitud: muestra a quién va", async () => {
     const { context } = await fakeApp();
     const { getByText } = render(DraftCard, { props: { draft: draft() }, context });
-    expect(getByText("Claude quiere enviar esto a María")).toBeTruthy();
+    expect(getByText("Tu agente quiere enviar esto a María")).toBeTruthy();
   });
 
   test("Caduca en N min se actualiza con el reloj compartido", async () => {

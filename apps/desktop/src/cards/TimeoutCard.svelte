@@ -25,11 +25,9 @@
   }
 </script>
 
-<div class="card">
-  <div class="card-kicker">Sin respuesta</div>
-  <div class="card-title">{to} no respondió a tiempo</div>
-  <div class="card-from">Pasó {waited(request)} sin que nadie actuara.</div>
-  <p class="card-msg">{request.message}</p>
+<div class="group me">
+  <div class="bubble"><p class="card-msg">{request.message}</p></div>
+  <div class="caption warn">Sin respuesta · {to} no contestó en {waited(request)}</div>
   <div class="actions">
     <button class="primary" disabled={busy} onclick={() => run(() => app.resend(request))}>Reenviar</button>
     <button disabled={busy} onclick={() => run(() => app.ignore(request))}>Ignorar</button>

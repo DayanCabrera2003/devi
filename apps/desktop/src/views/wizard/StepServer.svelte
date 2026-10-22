@@ -85,7 +85,7 @@
   }
 </script>
 
-<section class="card">
+<section class="card glass">
   <div class="card-kicker">Paso 2 de 5 · Servidor</div>
   <div class="card-title">¿Dónde está el servidor de Devi?</div>
   <div class="radio-group">

@@ -29,10 +29,10 @@ describe("RequestCard: aviso de prompt injection", () => {
     const { context } = await fakeApp();
     const { queryByText, getByRole } = render(RequestCard, { props: { request: req() }, context });
     expect(queryByText(/Posible prompt injection/)).toBeNull();
-    expect((getByRole("button", { name: "Enviar a sesión" }) as HTMLButtonElement).disabled).toBe(false);
+    expect((getByRole("button", { name: "Enviar a mi sesión" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
-  test("nivel high: aviso con los motivos y casilla obligatoria para Enviar a sesión", async () => {
+  test("nivel high: aviso con los motivos y casilla obligatoria para Enviar a mi sesión", async () => {
     const memberSessions = vi.fn(async () => SESSIONS);
     const { context } = await fakeApp({ memberSessions });
     const { getByText, getByRole, getByLabelText, findByText } = render(RequestCard, {
@@ -41,7 +41,7 @@ describe("RequestCard: aviso de prompt injection", () => {
     const banner = getByText(/Posible prompt injection/).closest(".injection")!;
     expect(banner.textContent).toContain("instrucciones anteriores");
     expect(banner.textContent).toContain("curl");
-    const send = getByRole("button", { name: "Enviar a sesión" }) as HTMLButtonElement;
+    const send = getByRole("button", { name: "Enviar a mi sesión" }) as HTMLButtonElement;
     expect(send.disabled).toBe(true);
     await fireEvent.click(getByLabelText(CONFIRM));
     expect(send.disabled).toBe(false);
@@ -57,7 +57,7 @@ describe("RequestCard: aviso de prompt injection", () => {
     });
     expect(getByText(/Posible prompt injection/)).toBeTruthy();
     expect(queryByLabelText(CONFIRM)).toBeNull();
-    expect((getByRole("button", { name: "Enviar a sesión" }) as HTMLButtonElement).disabled).toBe(false);
+    expect((getByRole("button", { name: "Enviar a mi sesión" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   test("un archivo con inyección: aviso al previsualizarlo y la tarjeta pasa a pedir confirmación", async () => {
@@ -70,7 +70,7 @@ describe("RequestCard: aviso de prompt injection", () => {
     const warnings = await findAllByText(/Posible prompt injection/);
     expect(warnings.some((w) => w.closest(".files"))).toBe(true); // aviso junto al archivo
     expect(await findByLabelText(CONFIRM)).toBeTruthy();
-    expect((getByRole("button", { name: "Enviar a sesión" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((getByRole("button", { name: "Enviar a mi sesión" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   test("los motivos y el mensaje se muestran como texto, nunca como HTML", async () => {
@@ -86,7 +86,7 @@ describe("ResponseCard: aviso de prompt injection", () => {
     const r = req({ fromMemberId: "m1", toMemberId: "m2", status: "answered", outcome: "answered", outcomeText: ATTACK });
     const { getByText, getByRole, getByLabelText } = render(ResponseCard, { props: { request: r }, context });
     expect(getByText(/Posible prompt injection/)).toBeTruthy();
-    const send = getByRole("button", { name: "Enviar a sesión" }) as HTMLButtonElement;
+    const send = getByRole("button", { name: "Enviar a mi sesión" }) as HTMLButtonElement;
     expect(send.disabled).toBe(true);
     await fireEvent.click(getByLabelText(CONFIRM));
     expect(send.disabled).toBe(false);

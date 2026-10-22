@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Aviso de posible prompt injection. Todo se pinta como texto (nunca {@html}).
+  // Aviso de posible prompt injection, pegado a la burbuja. Todo se pinta como texto (nunca {@html}).
   import type { InjectionScan } from "@devi/protocol";
 
   type Props = { scan: InjectionScan; where?: string };

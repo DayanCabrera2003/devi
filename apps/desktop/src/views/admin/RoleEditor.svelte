@@ -75,10 +75,12 @@
   />
   <fieldset class="field">
     <legend class="label">Permisos en Devi</legend>
+    <div class="perm-list">
     {#each PERMS as p (p)}
       {@const locked = p === "team.admin" && adminLocked}
       <label class="check" title={p}>
         <input
+          class="switch"
           type="checkbox"
           checked={perms.includes(p)}
           disabled={locked}
@@ -87,6 +89,7 @@
         {PERM_LABELS[p]}
       </label>
     {/each}
+    </div>
     {#if perms.includes("team.admin")}
       <span class="muted small">Administrar equipo da acceso a esta pestaña de Admin.</span>
     {/if}

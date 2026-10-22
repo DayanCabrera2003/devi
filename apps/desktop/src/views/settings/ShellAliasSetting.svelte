@@ -44,20 +44,26 @@
   }
 </script>
 
-<section class="card">
-  <div class="card-kicker">Terminal</div>
-  <label class="check">
-    <input type="checkbox" checked={status?.installed ?? false} disabled={busy} onchange={(e) => change(e.currentTarget)} />
-    Usar Devi automáticamente al escribir <span class="mono">claude</span> en la terminal
-  </label>
-  <p class="muted small">
+<section class="group-box">
+  <h2 class="group-title">Terminal</h2>
+  <div class="inset">
+    <div class="cell">
+      <label class="check">
+        <input class="switch" type="checkbox" checked={status?.installed ?? false} disabled={busy} onchange={(e) => change(e.currentTarget)} />
+        <span>Usar Devi automáticamente al escribir <span class="mono">claude</span> en la terminal</span>
+      </label>
+    </div>
+    {#if status?.installed}
+      <div class="cell stack">
+        <ul class="saved mono small" style="margin: 0">
+          {#each status.files.filter((f) => f.installed) as f (f.path)}<li>{f.path}</li>{/each}
+        </ul>
+      </div>
+    {/if}
+  </div>
+  <p class="group-foot">
     Se aplica a las terminales nuevas. Para el <span class="mono">claude</span> original: <span class="mono">command claude</span>
     (o <span class="mono">claude.exe</span> en PowerShell).
   </p>
-  {#if status?.installed}
-    <ul class="muted small mono">
-      {#each status.files.filter((f) => f.installed) as f (f.path)}<li>{f.path}</li>{/each}
-    </ul>
-  {/if}
   {#if error}<div class="error">{error}</div>{/if}
 </section>

@@ -6,14 +6,22 @@
   import Devi from "../components/Devi.svelte";
   import { MASCOT_EVENT, MASCOT_READY, type MascotState } from "../lib/mascot";
   import { native } from "../lib/native";
+  import { followStoredTheme } from "../lib/theme";
 
-  let s = $state<MascotState>({ online: false, pending: 0, label: "conectando…", pokeKey: 0 });
+  type Props = { initial?: MascotState };
+  let { initial }: Props = $props();
+  // svelte-ignore state_referenced_locally
+  let s = $state<MascotState>(initial ?? { online: false, pending: 0, label: "conectando…", pokeKey: 0 });
 
   onMount(() => {
     document.body.classList.add("mascota");
+    const stopTheme = followStoredTheme();
     const off = listen<MascotState>(MASCOT_EVENT, (e) => (s = e.payload));
-    void emitTo("main", MASCOT_READY);
-    return () => void off.then((f) => f());
+    void emitTo("main", MASCOT_READY).catch(() => {});
+    return () => {
+      stopTheme();
+      void off.then((f) => f());
+    };
   });
 
   const text = $derived(
@@ -22,10 +30,13 @@
 </script>
 
 <div class="mascot" data-tauri-drag-region>
-  <div class="mascot-devi" data-tauri-drag-region>
-    <Devi size={72} offline={!s.online} looking={s.pending > 0} pokeKey={s.pokeKey} />
+  <div class="mascot-disc glass" data-tauri-drag-region>
+    <div class="mascot-devi" data-tauri-drag-region>
+      <Devi size={64} offline={!s.online} looking={s.pending > 0} pokeKey={s.pokeKey} />
+    </div>
+    {#if s.online && s.pending > 0}<span class="mascot-badge" aria-hidden="true">{s.pending}</span>{/if}
+    <button class="mascot-pill" class:offline={!s.online} title={s.label} onclick={() => native.showMainWindow()}>
+      {text}
+    </button>
   </div>
-  <button class="mascot-pill" class:offline={!s.online} title={s.label} onclick={() => native.showMainWindow()}>
-    {text}
-  </button>
 </div>

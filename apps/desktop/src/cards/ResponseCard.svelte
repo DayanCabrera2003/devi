@@ -1,14 +1,16 @@
 <script lang="ts">
+  // Respuesta a una solicitud mía: mi burbuja, la suya justo después y qué hago con ella.
   import { type DeviRequest, type InjectionScan, type Session, scanForInjection } from "@devi/protocol";
   import FileList from "../components/FileList.svelte";
   import InjectionWarning from "../components/InjectionWarning.svelte";
-  import SendConfirm from "../components/SendConfirm.svelte";
   import SaveFilesButton from "../components/SaveFilesButton.svelte";
+  import SendConfirm from "../components/SendConfirm.svelte";
   import SessionPicker from "../components/SessionPicker.svelte";
   import { errorMessage } from "../lib/api";
   import { useApp } from "../lib/context";
   import { OUTCOME } from "../lib/format";
   import { combineScans } from "../lib/safety";
+  import { requestCaption } from "../lib/thread-items";
 
   type Props = { request: DeviRequest };
   let { request }: Props = $props();
@@ -19,6 +21,7 @@
   let error = $state<string | null>(null);
   const outcome = $derived(OUTCOME[request.outcome ?? "answered"]);
   const to = $derived(app.team.nameOf(request.toMemberId));
+  const caption = $derived(requestCaption(request, app.team.myId));
 
   // Las sesiones se piden al abrir el selector, no al montar cada tarjeta.
   let loadingSessions = $state(false);
@@ -62,6 +65,31 @@
   }
 </script>
 
+<div class="group me">
+  <div class="bubble"><p class="selectable" style="margin: 0; white-space: pre-wrap">{request.message}</p></div>
+  <div class="caption" class:good={caption.tone === "good"} class:bad={caption.tone === "bad"}>{caption.text}</div>
+</div>
+<div class="group them tight">
+  <div class="bubble" class:alert={scan.level === "high"}>
+    <span class="bubble-label">{outcome.lead} <span class="sr-only">Respuesta de {to}</span></span>
+    <p class="card-msg">{request.outcomeText ?? ""}</p>
+  </div>
+  <InjectionWarning scan={messageScan} />
+  <FileList files={request.responseFiles} load={(id) => app.downloadFile(id)} onScan={(id, s) => (fileScans[id] = s)} />
+  {#if request.responseFiles.length > 0}
+    <SaveFilesButton save={() => app.saveFiles(request.id, "response", request.responseFiles)} />
+  {/if}
+  <div class="caption"><span class="badge {outcome.cls}">{outcome.label}</span></div>
+  {#if scan.level === "high"}<SendConfirm bind:checked={reviewed} />{/if}
+  <div class="actions">
+    <button class="primary" disabled={busy} onclick={acceptIt}>Aceptar</button>
+    <button disabled={loadingSessions || blocked} onclick={openPicker}>
+      {loadingSessions ? "Buscando sesiones…" : "Enviar a mi sesión"}
+    </button>
+  </div>
+  {#if error}<div class="error">{error}</div>{/if}
+</div>
+
 {#if mode === "pick"}
   <SessionPicker
     sessions={app.sessions.list}
@@ -73,24 +101,4 @@
     onPick={pick}
     onBack={() => (mode = "view")}
   />
-{:else}
-  <div class="card">
-    <div class="card-kicker">Respuesta · <span class="badge {outcome.cls}">{outcome.label}</span></div>
-    <div class="card-title">Respuesta de {to}</div>
-    <div class="card-from">a: <span class="muted">“{request.message}”</span></div>
-    <InjectionWarning scan={messageScan} />
-    <p class="card-msg"><span class="muted">{outcome.lead}</span> {request.outcomeText ?? ""}</p>
-    <FileList files={request.responseFiles} load={(id) => app.downloadFile(id)} onScan={(id, s) => (fileScans[id] = s)} />
-    {#if request.responseFiles.length > 0}
-      <SaveFilesButton save={() => app.saveFiles(request.id, "response", request.responseFiles)} />
-    {/if}
-    {#if scan.level === "high"}<SendConfirm bind:checked={reviewed} />{/if}
-    <div class="actions">
-      <button class="primary" disabled={loadingSessions || blocked} onclick={openPicker}>
-        {loadingSessions ? "Buscando sesiones…" : "Enviar a sesión"}
-      </button>
-      <button class="ok" disabled={busy} onclick={acceptIt}>Aceptar</button>
-    </div>
-    {#if error}<div class="error">{error}</div>{/if}
-  </div>
 {/if}

@@ -89,7 +89,7 @@
           title={locked(r.id) ? LAST_ADMIN_HINT : undefined}
           onchange={(e) => toggleRole(r.id, e.currentTarget.checked)}
         />
-        <span class="chip" style:color={r.color} style:border-color={r.color}>{r.name}</span>
+        <span class="chip" style:--role={r.color}>{r.name}</span>
       </label>
     {/each}
     {#if anyLocked}<span class="muted small">{LAST_ADMIN_HINT}</span>{/if}

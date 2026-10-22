@@ -90,6 +90,24 @@
     }
   }
 
+  // Aprobar envíos en el chat de Claude Code: solo si el servidor ya tiene ese ajuste.
+  const hasChatApproval = $derived(!!loaded && "chatApproval" in loaded);
+  let approvalBusy = $state(false);
+  let approvalError = $state<string | null>(null);
+
+  async function setChatApproval(box: HTMLInputElement) {
+    approvalBusy = true;
+    approvalError = null;
+    try {
+      setForm(await app.call((a) => a.updateSettings({ chatApproval: box.checked } as Partial<Settings>)));
+    } catch (e) {
+      approvalError = errorMessage(e);
+    } finally {
+      approvalBusy = false;
+      box.checked = !!(loaded as (Settings & { chatApproval?: boolean }) | null)?.chatApproval;
+    }
+  }
+
   async function exportDb() {
     exporting = true;
     exportError = null;
@@ -124,6 +142,27 @@
   <div class="actions"><button class="ghost" disabled={loading} onclick={load}>Actualizar</button></div>
   {#if loadError}<div class="error">{loadError}</div>{/if}
 </section>
+
+{#if hasChatApproval}
+  <section class="card">
+    <div class="card-kicker">Envíos</div>
+    <label class="check" style="justify-content: space-between">
+      Aprobar envíos en el chat de Claude Code
+      <input
+        class="switch"
+        type="checkbox"
+        style="order: 2"
+        checked={!!(loaded as Settings & { chatApproval?: boolean }).chatApproval}
+        disabled={approvalBusy}
+        onchange={(e) => setChatApproval(e.currentTarget)}
+      />
+    </label>
+    <p class="muted small" style="margin: 4px 0 0">
+      Si está activo, cada persona aprueba en su sesión lo que su agente envía, sin pasar por la app.
+    </p>
+    {#if approvalError}<div class="error">{approvalError}</div>{/if}
+  </section>
+{/if}
 
 {#if form}
   <form class="card" onsubmit={save} novalidate>

@@ -31,7 +31,7 @@
   });
 </script>
 
-<section class="card">
+<section class="card glass">
   <div class="card-kicker">Paso 1 de 5 · Tailscale</div>
   <div class="card-title">Comprobando Tailscale</div>
   {#if status === "checking"}

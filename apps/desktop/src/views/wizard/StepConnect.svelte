@@ -32,7 +32,7 @@
   });
 </script>
 
-<section class="card">
+<section class="card glass">
   <div class="card-kicker">Paso 3 de 5 · Conexión</div>
   <div class="card-title">Probando la conexión</div>
   <p class="mono small">{config.serverUrl}</p>
@@ -42,7 +42,7 @@
     <p>Conectado como <strong>{me.member.name}</strong> (<span class="mono">{me.login}</span>).</p>
     <p class="muted small">Configuración guardada.</p>
     <div>
-      {#each me.roles as r (r.id)}<span class="chip" style:color={r.color} style:border-color={r.color}>{r.name}</span>{/each}
+      {#each me.roles as r (r.id)}<span class="chip" style:--role={r.color}>{r.name}</span>{/each}
     </div>
   {:else if err?.kind === "unknown_login"}
     <p>El servidor responde, pero tu login aún no está en el equipo:</p>

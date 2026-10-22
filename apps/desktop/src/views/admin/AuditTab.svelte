@@ -65,8 +65,9 @@
 </div>
 
 {#if loaded && shown.length === 0}
-  <p class="muted">Sin entradas de auditoría{filter ? " para esta acción" : ""}.</p>
+  <p class="empty">Sin entradas de auditoría{filter ? " para esta acción" : ""}.</p>
 {:else if shown.length > 0}
+  <div class="table-wrap">
   <table class="people audit">
     <thead>
       <tr><th>Fecha</th><th>Quién</th><th>Acción</th><th>Destino</th><th>Detalles</th></tr>
@@ -83,6 +84,7 @@
       {/each}
     </tbody>
   </table>
+  </div>
 {/if}
 
 {#if loading}<div class="muted small">Cargando…</div>{/if}

@@ -1,6 +1,7 @@
 <script lang="ts">
-  // Aceptar (nota opcional: lo hace la persona) o Rechazar (motivo obligatorio).
+  // Lo hago yo (nota opcional) o Rechazar (motivo obligatorio), en una hoja sobre el hilo.
   import { errorMessage } from "../lib/api";
+  import Sheet from "./Sheet.svelte";
 
   type Props = {
     kind: "accept" | "reject";
@@ -30,22 +31,21 @@
   }
 </script>
 
-<div class="card">
-  <div class="card-kicker">{accept ? "Aceptar" : "Rechazar"}</div>
-  <div class="card-title">{accept ? "Lo harás tú" : `Rechazar la solicitud de ${fromName}`}</div>
-  <div class="card-from">
+<Sheet title={accept ? "Lo hago yo" : `Rechazar la solicitud de ${fromName}`} onClose={onBack}>
+  <p class="sheet-sub">
     {accept ? "Para lo que el agente no puede hacer (GCP, GitHub…)." : "El motivo es obligatorio: le llegará con el rechazo."}
-  </div>
-  <p class="card-msg">{message}</p>
+  </p>
+  <div class="bubble" style="max-width: 100%; margin-bottom: 12px"><p class="card-msg">{message}</p></div>
   <textarea
     bind:value={text}
+    aria-label={accept ? "Nota" : "Motivo"}
     placeholder={accept ? 'Nota opcional: "lo hago en 10 min"' : `Explícale a ${fromName} por qué`}
   ></textarea>
   <div class="actions">
-    <button class={accept ? "ok" : "no"} disabled={!canConfirm} onclick={confirm}>
+    <button class={accept ? "primary" : "no"} disabled={!canConfirm} onclick={confirm}>
       {accept ? "Confirmar: lo hago yo" : "Confirmar rechazo"}
     </button>
     <button onclick={onBack}>Volver</button>
   </div>
   {#if error}<div class="error">{error}</div>{/if}
-</div>
+</Sheet>

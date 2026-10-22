@@ -125,3 +125,37 @@ export function formFromSettings(s: Settings): SettingsForm {
     maxAgeDays: s.fileMaxAgeDays,
   };
 }
+
+// ---- fechas de las conversaciones ------------------------------------------------------
+
+const sameDay = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+export const clockTime = (at: number) => new Date(at).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+
+function dayLabel(at: number, now: number): string {
+  const d = new Date(at);
+  const today = new Date(now);
+  if (sameDay(d, today)) return "Hoy";
+  const y = new Date(now);
+  y.setDate(y.getDate() - 1);
+  if (sameDay(d, y)) return "Ayer";
+  const opts: Intl.DateTimeFormatOptions = { weekday: "short", day: "numeric", month: "short" };
+  if (d.getFullYear() !== today.getFullYear()) opts.year = "numeric";
+  return d.toLocaleDateString("es-ES", opts);
+}
+
+// Separador de día del hilo: "Hoy 10:02", "Ayer 18:30", "lun, 14 oct 9:00".
+export const daySeparator = (at: number, now: number) => `${dayLabel(at, now)} ${clockTime(at)}`;
+
+export const sameDayAs = (a: number, b: number) => sameDay(new Date(a), new Date(b));
+
+// Hora corta de la lista: "10:02" hoy, "Ayer", o "14/10".
+export function listTime(at: number | null, now: number): string {
+  if (at === null) return "";
+  const d = new Date(at);
+  const label = dayLabel(at, now);
+  if (label === "Hoy") return clockTime(at);
+  if (label === "Ayer") return "Ayer";
+  return d.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit" });
+}

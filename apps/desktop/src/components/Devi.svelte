@@ -26,17 +26,17 @@
 {/key}
 
 <style>
-  .devi { flex: none; overflow: visible; }
-  .body { fill: var(--white); transition: fill 0.3s; }
+  .devi { flex: none; overflow: visible; filter: drop-shadow(0 6px 14px rgb(0 0 0 / 0.22)); }
+  .body { fill: var(--devi-body); stroke: var(--devi-stroke); stroke-width: 1.5; transition: fill 0.3s; }
   .eyes {
-    fill: var(--bg);
+    fill: var(--devi-eye);
     transform-origin: 50px 46px;
     transition: transform 0.35s ease;
     animation: blink 4.5s infinite;
   }
   .look .eyes { transform: translateY(7px); animation: none; }
   .bounce { animation: bounce 0.7s cubic-bezier(0.3, 1.6, 0.5, 1); }
-  .offline .body { fill: #5a5a62; }
+  .offline .body { fill: var(--devi-off); }
 
   @keyframes blink {
     0%, 92%, 100% { transform: scaleY(1); }

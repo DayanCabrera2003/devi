@@ -1,5 +1,5 @@
 <script lang="ts">
-  // "Claude quiere enviar esto a María": nada sale de este equipo hasta que se autoriza.
+  // "Tu agente quiere enviar esto a María": nada sale de este equipo hasta que se autoriza.
   import { type Draft, type InjectionScan, SECRETS_FLAG, hasSecretsFlag, scanForInjection } from "@devi/protocol";
   import FileList from "../components/FileList.svelte";
   import InjectionWarning from "../components/InjectionWarning.svelte";
@@ -17,7 +17,7 @@
   // Respuesta: la solicitud original sale de la bandeja; si no está, no se pide al servidor.
   const original = $derived(draft.kind === "response" ? app.inbox.requestById(draft.requestId) : undefined);
   const title = $derived.by(() => {
-    if (draft.kind === "request") return `Claude quiere enviar esto a ${app.team.nameOf(draft.toMemberId)}`;
+    if (draft.kind === "request") return `Tu agente quiere enviar esto a ${app.team.nameOf(draft.toMemberId)}`;
     if (original) return `Respuesta a ${app.team.nameOf(original.fromMemberId)}`;
     return `Respuesta a la solicitud ${draft.requestId.slice(0, 8)}`;
   });
@@ -41,13 +41,14 @@
   }
 </script>
 
-<div class="card">
-  <div class="card-kicker">Borrador · necesita tu autorización</div>
-  <div class="card-title">{title}</div>
-  <div class="card-from">Nada sale de tu equipo hasta que lo autorices. Caduca en {minutesLeft} min.</div>
-  {#if original}
-    <div class="card-from draft-context">Su solicitud: <span class="muted excerpt">“{truncate(original.message, 200)}”</span></div>
-  {/if}
+<div class="group me">
+  <div class="bubble agent">
+    <span class="bubble-label">{title}</span>
+    {#if original}
+      <div class="draft-context">Su solicitud: <span class="excerpt">“{truncate(original.message, 200)}”</span></div>
+    {/if}
+    <p class="card-msg">{body}</p>
+  </div>
   {#if secrets}
     <div class="secrets" role="alert">
       <strong>{SECRETS_FLAG}.</strong> Devi detectó algo que parece un secreto (clave, token o contraseña) en el
@@ -55,10 +56,10 @@
     </div>
   {/if}
   <InjectionWarning {scan} />
-  <p class="card-msg">{body}</p>
   <FileList files={draft.files} load={(id) => app.downloadFile(id)} onScan={(id, s) => (fileScans[id] = s)} />
+  <div class="caption">Nada sale de tu equipo hasta que lo autorices. Caduca en {minutesLeft} min.</div>
   <div class="actions">
-    <button class="primary" disabled={busy} onclick={() => run(() => app.authorizeDraft(draft))}>Autorizar</button>
+    <button class="primary" disabled={busy} onclick={() => run(() => app.authorizeDraft(draft))}>Autorizar envío</button>
     <button class="no" disabled={busy} onclick={() => run(() => app.discardDraft(draft))}>Descartar</button>
   </div>
   {#if error}<div class="error">{error}</div>{/if}

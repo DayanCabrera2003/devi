@@ -3,6 +3,7 @@
   import { LAST_ADMIN_HINT, canDisableMember } from "../../lib/admins";
   import { type MemberBody, errorMessage } from "../../lib/api";
   import { useApp } from "../../lib/context";
+  import Avatar from "../../components/Avatar.svelte";
   import MemberForm from "./MemberForm.svelte";
 
   const app = useApp();
@@ -45,32 +46,37 @@
     <span class="muted small">{members.length} personas · {app.team.connectedCount} conectadas</span>
     <button class="primary" onclick={() => (inviting = true)}>Invitar por login</button>
   </div>
+  <div class="table-wrap">
   <table class="people">
     <thead>
-      <tr><th>Estado</th><th>Persona</th><th>Roles</th><th></th></tr>
+      <tr><th>Persona</th><th>Roles</th><th class="hide-compact">Estado</th><th><span class="sr-only">Acciones</span></th></tr>
     </thead>
     <tbody>
       {#each members as m (m.id)}
         <tr class:disabled-row={m.disabled}>
           <td>
-            {#if m.disabled}
-              <span class="muted small">desactivada</span>
-            {:else}
-              <span class="dot" class:on={m.connected}></span>
-              <span class="muted small">{m.connected ? "conectada" : "desconectada"}</span>
-            {/if}
-          </td>
-          <td>
-            <div>{m.name}{#if m.id === app.team.myId} <span class="muted small">(tú)</span>{/if}</div>
-            <div class="mono small muted">{m.login}</div>
+            <div class="person">
+              <Avatar name={m.name} size={30} online={!!m.connected && !m.disabled} />
+              <div style="min-width: 0">
+                <div>{m.name}{#if m.id === app.team.myId} <span class="muted small">(tú)</span>{/if}</div>
+                <div class="mono small muted">{m.login}</div>
+              </div>
+            </div>
           </td>
           <td>
             {#each m.roleIds as rid (rid)}
               {@const r = app.team.role(rid)}
-              {#if r}<span class="chip" style:color={r.color} style:border-color={r.color}>{r.name}</span>{/if}
+              {#if r}<span class="chip" style:--role={r.color}>{r.name}</span>{/if}
             {:else}
               <span class="muted small">sin rol</span>
             {/each}
+          </td>
+          <td class="hide-compact">
+            {#if m.disabled}
+              <span class="state-cell">desactivada</span>
+            {:else}
+              <span class="state-cell"><span class="dot" class:on={m.connected}></span>{m.connected ? "conectada" : "desconectada"}</span>
+            {/if}
           </td>
           <td class="row-actions">
             <button class="ghost" onclick={() => (editing = m)}>Editar</button>
@@ -84,7 +90,7 @@
               <button class="ghost" onclick={() => (confirmDisable = null)}>No</button>
             {:else if !canDisableMember(app.team.team, m.id)}
               <button class="ghost" disabled title={LAST_ADMIN_HINT}>Desactivar</button>
-              <span class="muted small">{LAST_ADMIN_HINT}</span>
+              <span class="guard">{LAST_ADMIN_HINT}</span>
             {:else}
               <button class="ghost" onclick={() => (confirmDisable = m.id)}>Desactivar</button>
             {/if}
@@ -93,5 +99,6 @@
       {/each}
     </tbody>
   </table>
+  </div>
   {#if error}<div class="error">{error}</div>{/if}
 {/if}

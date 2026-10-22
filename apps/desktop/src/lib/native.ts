@@ -1,11 +1,13 @@
 // Wrappers tipados de los comandos Rust (src-tauri). Tauri convierte los nombres de los
 // argumentos de camelCase (JS) a snake_case (Rust).
 import { invoke } from "@tauri-apps/api/core";
+import type { ThemePref } from "./theme";
 
 export type AppPrefs = {
   notifications: boolean;
   setupDone: boolean;
   serverAdminLogin?: string; // presente = este equipo es el servidor
+  theme?: ThemePref; // sin valor = sigue al sistema
 };
 
 export const DEFAULT_PREFS: AppPrefs = { notifications: true, setupDone: false };

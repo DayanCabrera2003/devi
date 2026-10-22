@@ -24,7 +24,7 @@
 </script>
 
 <div class="command">
-  <button class="ghost" disabled={busy} onclick={run}>{busy ? "Guardando…" : "Guardar archivos en mi carpeta"}</button>
+  <button class="ghost small" disabled={busy} onclick={run}>{busy ? "Guardando…" : "Guardar archivos en mi carpeta"}</button>
   {#if paths}
     <ul class="saved">
       {#each paths as p (p)}<li class="mono small">{p}</li>{/each}

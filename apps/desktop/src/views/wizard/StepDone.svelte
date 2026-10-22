@@ -20,7 +20,7 @@
   }
 </script>
 
-<section class="card">
+<section class="card glass">
   <div class="card-kicker">Paso 5 de 5 · Listo</div>
   <div class="card-title">Devi ya está configurado</div>
   <p>

@@ -31,7 +31,7 @@
       {#each items as item, i (i)}
         <li>
           <span>{item}</span>
-          <button type="button" class="ghost" aria-label={`Quitar ${item}`} onclick={() => remove(i)}>×</button>
+          <button type="button" class="ghost round" aria-label={`Quitar ${item}`} onclick={() => remove(i)}>×</button>
         </li>
       {/each}
     </ul>

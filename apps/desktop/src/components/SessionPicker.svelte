@@ -1,7 +1,9 @@
 <script lang="ts">
+  // Popover de cristal con mis sesiones de Claude Code (hoja inferior en ventanas pequeñas).
   import type { Session } from "@devi/protocol";
   import { errorMessage } from "../lib/api";
   import { deliveryBadge, sortSessions } from "../lib/stores/sessions.svelte";
+  import Sheet from "./Sheet.svelte";
 
   type Props = {
     sessions: Session[];
@@ -32,10 +34,8 @@
   }
 </script>
 
-<div class="card">
-  <div class="card-kicker">Enviar a sesión</div>
-  <div class="card-title">{title}</div>
-  <div class="card-from">{hint}</div>
+<Sheet {title} onClose={onBack}>
+  <p class="sheet-sub">{hint}</p>
   <div class="sessions">
     {#if loading}
       <div class="muted">Buscando tus sesiones…</div>
@@ -55,19 +55,4 @@
   </div>
   <div class="actions"><button onclick={onBack}>Volver</button></div>
   {#if pickError ?? error}<div class="error">{pickError ?? error}</div>{/if}
-</div>
-
-<style>
-  .badge {
-    font-size: 11px;
-    padding: 1px 7px;
-    border-radius: 999px;
-    border: 1px solid var(--muted);
-    color: var(--muted);
-    white-space: nowrap;
-  }
-  .badge.live {
-    border-color: var(--ok);
-    color: var(--ok);
-  }
-</style>
+</Sheet>

@@ -2,13 +2,18 @@ import type { DeviRequest, Draft, FileMeta, UserEvent } from "@devi/protocol";
 import { type DeviApi, errorMessage } from "./api";
 import { type AuditEntry, auditNotice } from "./audit";
 import { Clock } from "./clock.svelte";
+import { type ConversationsHttp, type NativeFiles, conversationsHttp, isConversationUpdated, nativeFiles } from "./conversations-api";
 import type { MascotState } from "./mascot";
 import { type AppPrefs, type ClientConfig, type Native, type ServerStatus, prefsOf } from "./native";
 import { type Notice, noticeFor, noticeKey, shouldNotify, summaryNotice } from "./notify";
 import { ConnectionStore } from "./stores/connection.svelte";
+import { ComposerStore, DragState } from "./stores/composer.svelte";
+import { ConversationsStore } from "./stores/conversations.svelte";
 import { type Card, InboxStore } from "./stores/inbox.svelte";
 import { SessionsStore } from "./stores/sessions.svelte";
 import { TeamStore } from "./stores/team.svelte";
+import { AGENT_THREAD, waitingByPeer } from "./thread-items";
+import { ThreadStore } from "./stores/thread.svelte";
 
 export type View = "bandeja" | "ajustes" | "admin";
 export type Phase = "loading" | "wizard" | "app";
@@ -18,7 +23,13 @@ export type AppDeps = {
   makeApi: (config: ClientConfig) => DeviApi;
   notify: (n: Notice) => void | Promise<void>;
   emitMascot: (s: MascotState) => void;
+  // Conversaciones y archivos nativos; por defecto, los reales.
+  conversations?: (api: DeviApi) => ConversationsHttp;
+  files?: NativeFiles;
 };
+
+// Tras varios eventos seguidos, la lista de conversaciones se pide una sola vez.
+const CONVERSATIONS_DEBOUNCE_MS = 250;
 
 const MAX_RETRY_MS = 30_000;
 
@@ -47,9 +58,19 @@ export class DeviApp {
   readonly inbox = new InboxStore();
   readonly sessions = new SessionsStore();
   readonly clock = new Clock(); // lo arranca y lo para Shell
+  readonly convos = new ConversationsStore();
+  readonly thread = new ThreadStore();
+  readonly composer = new ComposerStore();
+  readonly drag = new DragState();
+  // Persona de la conversación abierta (null = ninguna).
+  selected = $state<string | null>(null);
+  // Lo que espera de mí cada persona según la bandeja (tarjetas abiertas y borradores).
+  waiting = $derived(waitingByPeer(this.inbox.cards, (id) => this.lookupRequest(id)));
 
   private readonly deps: AppDeps;
   private api: DeviApi | null = null;
+  private http: ConversationsHttp | null = null;
+  private convosTimer: ReturnType<typeof setTimeout> | null = null;
   private unsubscribe: (() => void) | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private retries = 0;
@@ -65,6 +86,10 @@ export class DeviApp {
 
   get native(): Native {
     return this.deps.native;
+  }
+
+  get files(): NativeFiles {
+    return this.deps.files ?? nativeFiles;
   }
 
   // ---- arranque y conexión -------------------------------------------------------
@@ -96,6 +121,7 @@ export class DeviApp {
     if (!config?.serverUrl) return;
     const api = this.deps.makeApi(config);
     this.api = api;
+    this.http = (this.deps.conversations ?? conversationsHttp)(api);
     if (this.conn.state.status !== "reconnecting") this.conn.set({ status: "connecting" });
     try {
       await this.team.refresh(api);
@@ -131,6 +157,8 @@ export class DeviApp {
     this.unsubscribe = null;
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.retryTimer = null;
+    if (this.convosTimer) clearTimeout(this.convosTimer);
+    this.convosTimer = null;
     this.cancelReplay();
   }
 
@@ -152,6 +180,7 @@ export class DeviApp {
       this.inbox.clear();
       this.startReplay();
       if (this.api) void this.team.refresh(this.api).catch(() => {});
+      void this.refreshConversations();
     } else if (this.conn.state.status !== "connected") {
       // Se cortó antes de acabar el reenvío: esas tarjetas se volverán a reenviar y contar.
       this.cancelReplay();
@@ -167,6 +196,13 @@ export class DeviApp {
       this.onAuditAlert(ev.entry);
       return;
     }
+    // conversation.updated puede no estar aún en UserEvent: se reconoce por su forma.
+    const raw: unknown = ev;
+    if (isConversationUpdated(raw)) {
+      this.scheduleConversations();
+      if (this.selected === raw.memberId) void this.reloadThread();
+      return;
+    }
     if (ev.type === "team.updated") {
       void this.team.refresh(this.api).catch(() => {});
       return;
@@ -174,6 +210,10 @@ export class DeviApp {
     if (ev.type === "sessions.updated") {
       if (ev.memberId === me) void this.sessions.load(this.api, me);
       return;
+    }
+    if ("request" in ev) {
+      this.thread.upsert(ev.request);
+      this.scheduleConversations();
     }
     const added = this.inbox.apply(ev, me);
     if (added) {
@@ -302,6 +342,8 @@ export class DeviApp {
   private applyRequest(r: DeviRequest): void {
     const me = this.team.myId;
     if (me) this.inbox.applyRequest(r, me);
+    this.thread.upsert(r);
+    this.scheduleConversations();
     this.publishMascot();
   }
 
@@ -362,6 +404,75 @@ export class DeviApp {
   async loadSessions(): Promise<void> {
     const me = this.team.myId;
     if (me && this.api) await this.sessions.load(this.api, me);
+  }
+
+  // ---- conversaciones -----------------------------------------------------------------
+
+  // Una solicitud conocida por su id: en la bandeja o en el hilo abierto.
+  lookupRequest(id: string): DeviRequest | undefined {
+    return this.inbox.requestById(id) ?? this.thread.requests.find((r) => r.id === id);
+  }
+
+  async refreshConversations(): Promise<void> {
+    if (this.http) await this.convos.load(this.http);
+  }
+
+  private scheduleConversations(): void {
+    if (this.convosTimer) clearTimeout(this.convosTimer);
+    this.convosTimer = setTimeout(() => {
+      this.convosTimer = null;
+      void this.refreshConversations();
+    }, CONVERSATIONS_DEBOUNCE_MS);
+  }
+
+  async openConversation(memberId: string): Promise<void> {
+    this.view = "bandeja";
+    if (this.selected !== memberId || this.composer.to !== memberId) await this.composer.reset(this.files, memberId);
+    this.selected = memberId;
+    if (memberId === AGENT_THREAD) this.thread.close();
+    else if (this.http) await this.thread.open(this.http, memberId);
+  }
+
+  closeConversation(): void {
+    this.selected = null;
+    this.thread.close();
+    void this.composer.reset(this.files);
+  }
+
+  async reloadThread(): Promise<void> {
+    if (this.http && this.selected) await this.thread.open(this.http, this.selected);
+  }
+
+  async loadOlder(): Promise<void> {
+    if (this.http) await this.thread.loadMore(this.http);
+  }
+
+  async pickFiles(): Promise<void> {
+    this.composer.add(this.files, await this.files.pickFiles());
+  }
+
+  // Enviar desde la app: la solicitud nueva entra en el hilo en cuanto el servidor la devuelve.
+  async sendMessage(): Promise<void> {
+    if (!this.http) throw new Error("Sin conexión con el servidor de Devi");
+    const r = await this.composer.send(this.http, this.files);
+    if (!r) return;
+    this.thread.upsert(r);
+    this.scheduleConversations();
+  }
+
+  // Archivos arrastrados y soltados sobre la ventana (Rust los lee y da tokens).
+  listenForDrops(): () => void {
+    const offs = [
+      this.files.onDragHover((s) => (this.drag.active = s.active)),
+      this.files.onFilesDropped((r) => {
+        this.drag.active = false;
+        if (this.selected) this.composer.add(this.files, r);
+        else void this.files.discardFiles(r.files.map((f) => f.token)).catch(() => {});
+      }),
+    ];
+    return () => {
+      for (const off of offs) void off.then((f) => f()).catch(() => {});
+    };
   }
 
   // ---- configuración y navegación ------------------------------------------------------
