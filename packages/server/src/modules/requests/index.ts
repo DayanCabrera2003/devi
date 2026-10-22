@@ -1,6 +1,7 @@
 import type { DeviModule, ModuleContext } from "../../core/module";
 import { registerAppRoutes } from "./app-routes";
 import { Conversations } from "./conversations";
+import { PendingReads } from "./pending";
 import { registerRequestRoutes } from "./routes";
 import { RequestsManager } from "./service";
 import { RequestsStore, requestsMigrations } from "./store";
@@ -28,7 +29,8 @@ export const requestsModule: DeviModule = {
     managers.set(ctx, requests);
     ctx.bus.on("session.closed", ({ sessionId }) => requests.onSessionClosed(sessionId));
     registerRequestRoutes(r, ctx, requests);
-    registerAppRoutes(r, ctx, requests, new Conversations(store, ctx, (x) => requests.viewOf(x)));
+    const view = (x: Parameters<RequestsManager["viewOf"]>[0]) => requests.viewOf(x);
+    registerAppRoutes(r, ctx, requests, new Conversations(store, ctx, view), new PendingReads(store, view, (d) => requests.draftViewOf(d)));
   },
 
   onStart(ctx) {

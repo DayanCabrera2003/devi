@@ -6,6 +6,7 @@ import {
 import type { Perm } from "./perms";
 import { AuditPageSchema } from "./audit";
 import { ConversationPageSchema, ConversationsResponseSchema, SendFromAppMeta } from "./conversations";
+import { PendingSchema } from "./pending";
 
 // Quién puede llamar una ruta además del permiso (lo comprueba el módulo, no el núcleo):
 // any = cualquier miembro; admin = team.admin; author = autor del borrador;
@@ -142,6 +143,10 @@ export const API = {
   // Conversaciones por persona: solo las solicitudes entre quien llama y :memberId (query: ConversationQuery).
   conversations: route({ method: "GET", path: "/api/v1/conversations", perm: null, actor: "any", body: Empty, response: ConversationsResponseSchema }),
   conversation: route({ method: "GET", path: "/api/v1/conversations/:memberId", perm: null, actor: "party", body: Empty /* query: ConversationQuery */, response: ConversationPageSchema }),
+
+  // Lecturas para el agente (herramientas del MCP): lo que me espera y una solicitud en la que soy parte.
+  pending: route({ method: "GET", path: "/api/v1/pending", perm: null, actor: "any", body: Empty, response: PendingSchema }),
+  getRequest: route({ method: "GET", path: "/api/v1/requests/:id", perm: null, actor: "party", body: Empty, response: DeviRequestSchema }),
 
   downloadFile: route({ method: "GET", path: "/api/v1/files/:id", perm: null, actor: "party", body: Empty, response: z.any() /* text/plain */ }),
 

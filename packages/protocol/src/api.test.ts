@@ -63,6 +63,16 @@ describe("catálogo de la API", () => {
     expect(API.sessionHook.body.parse({ claudeSessionId: "c", cwd: "/", parentPid: 1, status: "idle" }).machine).toBe("");
   });
 
+  test("lecturas para el agente: lo pendiente y una solicitud (sin permiso ni Origin de la app)", () => {
+    expect(API.pending).toMatchObject({ method: "GET", path: "/api/v1/pending", perm: null, actor: "any" });
+    expect(API.getRequest).toMatchObject({ method: "GET", path: "/api/v1/requests/:id", perm: null, actor: "party" });
+    expect("human" in API.pending).toBe(false);
+    expect("human" in API.getRequest).toBe(false);
+    const empty = { incoming: [], responses: [], timedOut: [], drafts: [], outgoing: [] };
+    expect(API.pending.response.parse(empty)).toEqual(empty);
+    expect(API.pending.response.safeParse({ incoming: [] }).success).toBe(false);
+  });
+
   test("los cuerpos validan", () => {
     expect(API.rejectRequest.body.safeParse({ reason: "" }).success).toBe(false);
     expect(API.rejectRequest.body.safeParse({ reason: "no tengo permisos" }).success).toBe(true);

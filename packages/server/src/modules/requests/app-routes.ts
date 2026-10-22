@@ -4,6 +4,7 @@ import { HttpError, json } from "../../core/http";
 import type { ModuleContext } from "../../core/module";
 import type { Router } from "../../core/router";
 import type { Conversations } from "./conversations";
+import type { PendingReads } from "./pending";
 import { MAX_DRAFT_BODY } from "./routes";
 import type { RequestsManager } from "./service";
 
@@ -28,8 +29,11 @@ async function readSendForm(request: Request) {
   return { meta: SendFromAppMeta.parse(parsed), files: files as File[] };
 }
 
-// Rutas de la app: enviar una solicitud escrita por la persona y leer las conversaciones por compañero.
-export function registerAppRoutes(r: Router, ctx: ModuleContext, requests: RequestsManager, conversations: Conversations): void {
+// Rutas de lectura y de la app: enviar una solicitud escrita por la persona, leer las conversaciones por
+// compañero, lo pendiente y una solicitud concreta (las dos últimas las usa el agente).
+export function registerAppRoutes(
+  r: Router, ctx: ModuleContext, requests: RequestsManager, conversations: Conversations, reads: PendingReads,
+): void {
   r.on(API.sendFromApp, async ({ request, access }) => {
     const { meta, files } = await readSendForm(request);
     if (files.length > 0) ctx.rateLimit.take("draftFiles", access.memberId);
@@ -42,4 +46,7 @@ export function registerAppRoutes(r: Router, ctx: ModuleContext, requests: Reque
     const q = ConversationQuery.parse(Object.fromEntries(url.searchParams));
     return json(conversations.page(access.memberId, params.memberId!, q));
   });
+
+  r.on(API.pending, ({ access }) => json(reads.of(access.memberId)));
+  r.on(API.getRequest, ({ params, access }) => json(reads.request(access.memberId, params.id!)));
 }

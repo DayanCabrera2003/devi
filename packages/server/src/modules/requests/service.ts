@@ -319,6 +319,10 @@ export class RequestsManager {
     return this.requestView(r);
   }
 
+  draftViewOf(d: DraftRecord): Draft {
+    return this.draftView(d);
+  }
+
   // ---- acciones de B (destinatario) -----------------------------------------
 
   forward(access: Access, id: string, sessionId: string): DeviRequest {

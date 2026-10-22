@@ -191,6 +191,14 @@ export class RequestsStore {
       .all() as RequestRecord[];
   }
 
+  // Solicitudes sin cerrar (pending o forwarded) para $memberId (dir "to") o suyas (dir "from").
+  openFor(memberId: string, dir: "to" | "from"): RequestRecord[] {
+    const col = dir === "to" ? "to_member" : "from_member";
+    return this.db
+      .query(`SELECT ${REQUEST_COLS} FROM requests WHERE ${col} = $memberId AND status IN ('pending', 'forwarded') ORDER BY created_at`)
+      .all({ memberId }) as RequestRecord[];
+  }
+
   forwardedVia(sessionId: string): RequestRecord[] {
     return this.db
       .query(`SELECT ${REQUEST_COLS} FROM requests WHERE status = 'forwarded' AND forwarded_session = $sessionId`)
