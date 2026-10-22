@@ -14,8 +14,8 @@
       {
         "label": "main",
         "title": "Devi",
-        "width": 560,
-        "height": 740,
+        "width": 980,
+        "height": 700,
         "minWidth": 300,
         "minHeight": 380,
         "center": true,
