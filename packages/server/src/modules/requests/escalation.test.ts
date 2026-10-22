@@ -160,6 +160,18 @@ describe("pedírselo a otra persona", () => {
     expect(actions).toContain("request.escalated");
   });
 
+  test("la solicitud nueva lleva el mismo contexto y el mismo tipo que la original", async () => {
+    await setup();
+    const context = { summary: "Migrando facturas", urgency: "alta" as const, git: { branch: "feat/facturas" } };
+    const d = (await f.createDraft("dayan@dev", { kind: "request", sessionId: f.dayanFront.id, to: "m-maria", message: "¿Lo miras?", context })).data;
+    await post("dayan@dev", `/api/v1/drafts/${d.id}/authorize`);
+    const r = f.userEvents("m-maria").findLast((e) => e.type === "request.incoming").request;
+    const next = (await post("dayan@dev", `/api/v1/requests/${r.id}/reassign`, { to: "m-leo" })).data.request;
+    expect(next.context).toEqual(context);
+    expect(next.kind).toBe("request");
+    expect(f.userEvents("m-leo").find((e) => e.type === "request.incoming").request.context).toEqual(context);
+  });
+
   test("también desde timed_out; la nueva escala por su cuenta", async () => {
     await setup();
     const r = await f.pendingRequest();

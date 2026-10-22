@@ -469,6 +469,8 @@ export class RequestsManager {
     try {
       this.store.transaction(() => {
         this.store.insertRequest(next);
+        // El contexto va en su propia columna: se copia aparte del registro.
+        this.store.setRequestContext(next.id, this.store.requestContext(r.id));
         this.files.recordForRequest({ requestId: next.id, direction: "request", authorMemberId: r.fromMemberId, peerMemberId: toId, written });
         r.status = "closed";
         r.closedNote = `Reenviada a ${toName}`;
