@@ -139,7 +139,7 @@ export async function listPending(deps: ReadDeps): Promise<string> {
   const parts = [
     section(
       "Solicitudes para ti",
-      "Las pendientes las decide el usuario en la app de Devi (aceptar, rechazar o reenviar a una sesión). Si están reenviadas a esta sesión, preséntaselas y, cuando decida, responde con respond_to_request.",
+      "Las pendientes las decide el usuario: en la app de Devi (aceptar, rechazar o reenviar a una sesión) o, si él lo pide, aquí con take_request (traerla a esta sesión) o decline_request (rechazarla con un motivo). Si están reenviadas a esta sesión, preséntaselas y, cuando decida, responde con respond_to_request.",
       reqs(p.incoming),
     ),
     section("Respuestas a tus solicitudes", "Muéstraselas al usuario y sugiere siguientes pasos; las acepta o reenvía él en la app de Devi.", reqs(p.responses)),

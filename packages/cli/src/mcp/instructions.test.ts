@@ -79,3 +79,15 @@ test("escalado: avisar al usuario, proponer a otra persona con list_teammates y 
   expect(line).toMatch(/decide|confirme/);
   expect(line).toContain("Pedírselo a otra persona");
 });
+
+test("aviso de solicitud: contarlo en una línea y ofrecer traerla o rechazarla; nunca actuar sin su decisión", () => {
+  const text = instructions("ana");
+  for (const t of ["take_request", "decline_request"]) expect(text).toContain(t);
+  const start = text.indexOf('kind="request_notice"');
+  expect(start).toBeGreaterThan(0);
+  const line = text.slice(start, text.indexOf("\n- ", start));
+  expect(line).toContain("take_request");
+  expect(line).toContain("decline_request");
+  expect(line).toMatch(/una línea/);
+  expect(line).toMatch(/decisión|decida/);
+});

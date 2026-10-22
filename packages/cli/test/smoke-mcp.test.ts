@@ -341,7 +341,9 @@ test("identidad: dos sesiones mías en la misma carpeta y otra persona; nada se 
   const hookInput = { session_id: "cc-dayan-1", cwd: dayan.project, hook_event_name: "UserPromptSubmit", prompt: "hola" };
   // El hook cuelga de este proceso, como el MCP de la primera sesión: se empareja con ella, no con la segunda.
   expect((await runHookProc(dayan, "working", hookInput)).trim()).toBe("");
-  expect(dayan.events.some((e) => e.meta.request_id === fromAna.id)).toBe(false);
+  // Por el canal de la primera solo llegó el aviso de llegada (request_notice), nunca la solicitud.
+  expect(dayan.events.some((e) => e.meta.request_id === fromAna.id && e.meta.kind === "request_notice")).toBe(true);
+  expect(dayan.events.some((e) => e.meta.request_id === fromAna.id && e.meta.kind !== "request_notice")).toBe(false);
   const inbox2 = await dayanApp.call("sessionInbox", {
     query: { parentPid: String(dayan2.parentPid()), claudeSessionId: "cc-dayan-2", machine: "maquina-test" },
   });

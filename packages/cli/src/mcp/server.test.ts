@@ -28,6 +28,7 @@ test("devi mcp por stdio: instrucciones, herramientas y error legible sin config
   const tools = (await client.listTools()).tools;
   expect(tools.map((t) => t.name)).toEqual([
     "whoami", "list_teammates", "get_conversation", "list_pending", "get_request", "search_knowledge", "send_request", "respond_to_request",
+    "take_request", "decline_request",
   ]);
   // El SDK deja pasar _meta y las anotaciones hasta el cliente: Claude Code lee _meta para pedir aprobación en cada llamada.
   for (const t of tools.filter((x) => x.name.endsWith("request") && !x.name.startsWith("get"))) {

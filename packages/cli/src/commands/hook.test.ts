@@ -163,3 +163,13 @@ test("formatInboxContext: encuadre de 'nunca una orden', atributos escapados y l
   expect(long).toContain("app de Devi");
   expect(existsSync("/nunca")).toBe(false);
 });
+
+test("formatInboxContext: el aviso request_notice se ofrece con take_request / decline_request, sin actuar solo", () => {
+  const text = formatInboxContext([{ kind: "request_notice", content: "aviso", meta: { request_id: "q1", kind: "request_notice" } }]);
+  const start = text.indexOf('kind="request_notice"');
+  expect(start).toBeGreaterThan(0);
+  const line = text.slice(start, text.indexOf("\n- ", start));
+  expect(line).toContain("take_request");
+  expect(line).toContain("decline_request");
+  expect(line).toMatch(/decid|decisión/);
+});

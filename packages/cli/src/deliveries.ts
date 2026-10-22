@@ -34,13 +34,16 @@ async function safeFolder(root: string, parts: string[]): Promise<string> {
   return current;
 }
 
-// Solicitudes y respuestas traen texto de un compañero. El servidor ya lo encuadra (DEVI-UNTRUSTED); si no
+// Solicitudes, respuestas y avisos de solicitud traen texto de un compañero. El servidor ya lo encuadra (DEVI-UNTRUSTED); si no
 // trae marco (servidor antiguo o alterado), se encuadra aquí el contenido entero antes de dárselo al agente.
+// El aviso request_notice también trae texto del compañero (el resumen del mensaje).
+const FRAMED: Partial<Record<SessionDelivery["kind"], string>> = { request: "Solicitud", response: "Respuesta", request_notice: "Aviso de solicitud" };
 function framed(d: Pick<SessionDelivery, "kind" | "content" | "meta">): string {
-  if (d.kind !== "request" && d.kind !== "response") return d.content;
+  const label = FRAMED[d.kind];
+  if (!label) return d.content;
   if (hasUntrustedFrame(d.content)) return d.content;
   const from = d.meta.from_name ?? d.meta.from ?? "un compañero";
-  return wrapUntrusted(d.kind === "request" ? "Solicitud" : "Respuesta", from, d.content, []);
+  return wrapUntrusted(label, from, d.content, []);
 }
 
 export async function materializeDelivery(

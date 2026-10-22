@@ -3,6 +3,7 @@ import {
   type Approval, type CreateDraftResult, type GitContext, type RequestContext, SECRETS_FLAG, type Session, scanForInjection, scanForSecrets,
 } from "@devi/protocol";
 import { readLocalFiles } from "../files";
+import { declineRequest, takeRequest } from "./attend-tools";
 import { type ContextResult, contextNote, contextScanText, outgoingContext } from "./context-arg";
 import { readableError } from "./errors";
 import { collectGitContext } from "./git-context";
@@ -48,6 +49,10 @@ export async function callTool(name: string, args: Record<string, unknown>, deps
         return ok(await getRequest(readDeps(client, deps), args));
       case "search_knowledge":
         return ok(await searchKnowledge(client, args));
+      case "take_request":
+        return ok(await takeRequest(attendDeps(client, deps), args));
+      case "decline_request":
+        return ok(await declineRequest(attendDeps(client, deps), args));
       case "send_request":
       case "respond_to_request": {
         const message = str(args.message);
@@ -125,6 +130,10 @@ export async function callTool(name: string, args: Record<string, unknown>, deps
 
 const readDeps = (client: DeviClient, deps: ToolDeps) => ({
   client, session: deps.session, receivedDir: deps.receivedDir ?? "", now: deps.now ?? Date.now,
+});
+
+const attendDeps = (client: DeviClient, deps: ToolDeps) => ({
+  client, session: deps.session, approval: deps.approval, receivedDir: deps.receivedDir ?? "",
 });
 
 // Todas las sesiones de una persona son el mismo miembro de Devi: no hay solicitudes a uno mismo.

@@ -66,3 +66,8 @@ test("la skill devi: frontmatter que la activa en los casos de uso, y una guía 
   expect(skill).toMatch(/Ejemplo bueno/);
   expect(skill).toMatch(/Ejemplo malo/);
 });
+
+test("la skill devi: atender solicitudes desde Claude Code (aviso, traer y rechazar)", () => {
+  const skill = pluginFiles("devi", "1.2.3")["devi/skills/devi/SKILL.md"] as string;
+  for (const s of ['kind="request_notice"', "take_request", "decline_request", "Remote Control"]) expect(skill).toContain(s);
+});
