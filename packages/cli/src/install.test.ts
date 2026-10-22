@@ -26,9 +26,11 @@ describe("install-integration", () => {
   test("escribe el marketplace", async () => {
     const d = mkdtempSync(join(tmpdir(), "devi-mp-"));
     const written = await writeMarketplace(d, "/b/devi", "1.0.0");
-    expect(written.length).toBe(2);
+    expect(written.length).toBe(3);
     const plugin = JSON.parse(readFileSync(join(d, "devi/.claude-plugin/plugin.json"), "utf8"));
     expect(plugin.mcpServers.devi).toEqual({ command: "/b/devi", args: ["mcp"] });
+    // La skill se escribe como Markdown, no como JSON.
+    expect(readFileSync(join(d, "devi/skills/devi/SKILL.md"), "utf8")).toStartWith("---\nname: devi\n");
   });
 
   test("pasos de claude: añade e instala la primera vez; actualiza después", () => {

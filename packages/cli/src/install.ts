@@ -1,7 +1,7 @@
 import { chmod, copyFile, mkdir, readdir, rename as fsRename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { MARKETPLACE_NAME, PLUGIN_ID } from "./paths";
-import { pluginFiles, renderJson } from "./plugin";
+import { pluginFiles, renderFile } from "./plugin";
 
 // ¿Se está ejecutando el binario compilado (bun build --compile) y no `bun src/main.ts`?
 export function isCompiledBinary(argv1: string | undefined): boolean {
@@ -63,7 +63,7 @@ export async function writeMarketplace(dir: string, bin: string, version: string
   for (const [rel, content] of Object.entries(pluginFiles(bin, version))) {
     const path = join(dir, rel);
     await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, renderJson(content), "utf8");
+    await writeFile(path, renderFile(content), "utf8");
     written.push(path);
   }
   return written;

@@ -1,7 +1,8 @@
 {
   "name": "devi-local",
   "owner": {
-    "name": "Devi"
+    "name": "Dayan Cabrera",
+    "url": "https://github.com/DayanCabrera2003"
   },
   "metadata": {
     "description": "Marketplace local de Devi (lo genera `devi install-integration`)"

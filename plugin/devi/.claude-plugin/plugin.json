@@ -1,10 +1,22 @@
 {
   "name": "devi",
+  "displayName": "Devi",
   "version": "0.3.1",
   "description": "Devi: conecta las sesiones de Claude Code de tu equipo (solicitudes, respuestas y archivos con autorización humana)",
   "author": {
-    "name": "Devi"
+    "name": "Dayan Cabrera",
+    "url": "https://github.com/DayanCabrera2003"
   },
+  "homepage": "https://github.com/DayanCabrera2003/devi",
+  "repository": "https://github.com/DayanCabrera2003/devi",
+  "keywords": [
+    "equipo",
+    "solicitudes",
+    "permisos",
+    "revisiones",
+    "mcp",
+    "canal"
+  ],
   "mcpServers": {
     "devi": {
       "command": "devi",
