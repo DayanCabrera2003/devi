@@ -4,7 +4,7 @@ import {
   CallToolRequestSchema, GetPromptRequestSchema, ListPromptsRequestSchema, ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { createClient, type DeviClient } from "@devi/client";
-import type { Session } from "@devi/protocol";
+import { SESSION_FEATURES, type Session } from "@devi/protocol";
 import { sessionNameFor } from "../commands/claude";
 import { loadClientConfig } from "../config";
 import { debugPairing, pairing } from "../pairing";
@@ -34,7 +34,7 @@ export async function runMcp(sys: Sys): Promise<void> {
   let receivedDir = "";
   try {
     const cfg = await loadClientConfig(sys);
-    client = createClient({ baseUrl: cfg.serverUrl, devUser: cfg.devUser });
+    client = createClient({ baseUrl: cfg.serverUrl, devUser: cfg.devUser, onIgnored: log });
     receivedDir = cfg.receivedDir;
   } catch (e) {
     configError = (e as Error).message;
@@ -79,6 +79,8 @@ export async function runMcp(sys: Sys): Promise<void> {
   const register = {
     name: sessionName, cwd, channel, ...pairing(sys),
     instanceId: crypto.randomUUID(),
+    // Entregas nuevas que entiende este MCP: el servidor no se las manda a uno que no las declare.
+    features: [...SESSION_FEATURES],
     ...(sys.env.CLAUDE_CODE_SESSION_ID ? { claudeSessionId: sys.env.CLAUDE_CODE_SESSION_ID } : {}),
   };
 

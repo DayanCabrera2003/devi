@@ -86,6 +86,22 @@ const REQUEST_ITEM = {
 };
 
 describe("runHook sin canal: bandeja", () => {
+  test("una entrega con un kind desconocido (servidor más nuevo) se salta: las demás llegan igual", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "devi-hook-"));
+    const config = join(dir, "config.json");
+    const future = { id: "i0", kind: "algo_futuro", createdAt: 1, content: "?", meta: { inbox_id: "i0" } };
+    const srv = inboxServer([future, { ...REQUEST_ITEM, meta: { ...REQUEST_ITEM.meta, files: "[]" } }]);
+    writeFileSync(config, JSON.stringify({ serverUrl: srv.url, devUser: "maria@dev", receivedDir: join(dir, "recibidos") }));
+    const out: string[] = [];
+    const s = { platform: "linux" as const, env: { DEVI_CONFIG: config, DEVI_MACHINE_ID: "M1" }, home: dir };
+    await runHook("working", s, stdin(INPUT), (t) => void out.push(t));
+    expect(out).toHaveLength(1);
+    const ctx: string = JSON.parse(out[0]!).hookSpecificOutput.additionalContext;
+    expect(ctx).toContain("¿me apruebas el PR?");
+    expect(ctx).not.toContain("algo_futuro");
+    expect(srv.seen.find((x) => x.path === "/api/v1/sessions/inbox/ack")?.body).toEqual({ ids: ["i1"] });
+  });
+
   test("inyecta las entregas como additionalContext con rutas locales y las confirma después", async () => {
     const dir = mkdtempSync(join(tmpdir(), "devi-hook-"));
     const config = join(dir, "config.json");

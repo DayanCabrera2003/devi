@@ -81,6 +81,20 @@ describe("suscripciones", () => {
     expect(srv.seen[0]!.path).toBe("/api/v1/events/session/s%201");
   });
 
+  test("subscribeSession salta entregas con un kind desconocido, lo cuenta y sigue con las demás", async () => {
+    const ok = { kind: "draft_authorized", content: "salió", meta: { draft_id: "d1" } };
+    const future = { kind: "algo_futuro", content: "?", meta: {} };
+    const srv = serve((req) => sseResponse([{ event: "deliver", data: future }, { event: "deliver", data: ok }], false, req.signal));
+    const got: SessionDelivery[] = [];
+    const ignored: string[] = [];
+    const stop = createClient({ baseUrl: srv.url, onIgnored: (m) => ignored.push(m) }).subscribeSession("s1", (d) => got.push(d));
+    await Bun.sleep(100);
+    stop();
+    expect(got).toEqual([ok as SessionDelivery]);
+    expect(ignored).toHaveLength(1);
+    expect(ignored[0]).toContain("algo_futuro");
+  });
+
   test("subscribeUser reconecta tras una caída (espera inicial de 1 s)", async () => {
     let n = 0;
     const srv = serve((req, url) => {

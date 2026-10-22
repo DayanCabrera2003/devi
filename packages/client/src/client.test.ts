@@ -194,3 +194,24 @@ describe("timeout de petición", () => {
     }
   });
 });
+
+describe("tolerancia a entregas de un servidor más nuevo", () => {
+  const item = (kind: string, id = kind) => ({ id, kind, content: "x", meta: {}, createdAt: 1 });
+
+  test("bandeja: salta los kind desconocidos (y lo cuenta) en vez de fallar entera", async () => {
+    const srv = serve(() => Response.json([item("request", "a"), item("algo_futuro", "b"), { roto: true }, item("response", "c")]));
+    const ignored: string[] = [];
+    const client = createClient({ baseUrl: srv.url, onIgnored: (m) => ignored.push(m) });
+    const got = await client.call("sessionInbox", { query: { parentPid: "1", claudeSessionId: "c", machine: "" } });
+    expect(got.map((i) => i.id)).toEqual(["a", "c"]);
+    expect(ignored).toHaveLength(2);
+    expect(ignored[0]).toContain("algo_futuro");
+  });
+
+  test("bandeja: si no es una lista, sigue siendo una respuesta inesperada", async () => {
+    const srv = serve(() => Response.json({ no: "lista" }));
+    const err = await createClient({ baseUrl: srv.url }).call("sessionInbox", { query: { parentPid: "1", claudeSessionId: "c", machine: "" } }).catch((e) => e);
+    expect(err).toBeInstanceOf(DeviApiError);
+    expect(err.body.code).toBe("bad_response");
+  });
+});

@@ -6,6 +6,7 @@ import {
   ConversationsResponseSchema,
   DeviRequestSchema,
   ErrorBodySchema,
+  InboxItemSchema,
   PRESENCE,
   SESSION_EVENT,
   SessionDeliverySchema,
@@ -19,6 +20,7 @@ import {
   type CreateDraftMeta,
   type DeviRequest,
   type ErrorBody,
+  type InboxItem,
   type SessionDelivery,
   type UserEvent,
 } from "@devi/protocol";
@@ -33,6 +35,9 @@ export type ClientOptions = { baseUrl: string; devUser?: string; fetch?: typeof 
   // Opción interna SOLO para tests en Bun: manda la cabecera Origin como la manda el navegador de la app
   // (en el webview la pone el propio navegador). La CLI y el MCP nunca la usan.
   origin?: string;
+  // Entregas que esta versión no entiende (un kind nuevo de un servidor más nuevo): se saltan sin romper el resto
+  // de la bandeja o del stream, y se avisa por aquí (el MCP y el hook lo apuntan en su log).
+  onIgnored?: (message: string) => void;
 };
 
 // Rutas cuya respuesta no es JSON validable (z.any()): bytes, texto o SSE. Se listan por nombre
@@ -100,6 +105,26 @@ export function createClient(opts: ClientOptions): DeviClient {
     return res;
   }
 
+  const ignored = (what: string, raw: unknown) => {
+    const kind = raw && typeof raw === "object" && "kind" in raw ? String((raw as { kind: unknown }).kind) : "?";
+    opts.onIgnored?.(`${what} ignorada: kind "${kind}" desconocido o formato inesperado (¿servidor más nuevo?)`);
+  };
+
+  // La bandeja se valida entrega a entrega: una que esta versión no entiende no debe dejar sin las demás.
+  async function lenientInbox(res: Response): Promise<InboxItem[]> {
+    const data: unknown = await res.json().catch(() => undefined);
+    if (!Array.isArray(data)) {
+      throw new DeviApiError(res.status, { error: "Respuesta inesperada del servidor de Devi (¿versiones distintas?)", code: "bad_response" });
+    }
+    const out: InboxItem[] = [];
+    for (const raw of data) {
+      const r = InboxItemSchema.safeParse(raw);
+      if (r.success) out.push(r.data);
+      else ignored("entrega de la bandeja", raw);
+    }
+    return out;
+  }
+
   async function parsed<S extends z.ZodType>(res: Response, schema: S, isRaw = false): Promise<z.infer<S>> {
     if (isRaw) return (await raw(res)) as z.infer<S>;
     const data: unknown = await res.json().catch(() => undefined);
@@ -143,6 +168,7 @@ export function createClient(opts: ClientOptions): DeviClient {
       const path = buildPath(route.path, callOpts.params ?? {}) + q;
       const hasBody = route.method === "POST" || route.method === "PATCH";
       const res = await send(route.method, path, hasBody ? { body: JSON.stringify(callOpts.body ?? {}), json: true } : {});
+      if (name === "sessionInbox") return (await lenientInbox(res)) as never;
       return parsed(res, route.response, RAW_ROUTES.has(name));
     },
 
@@ -216,6 +242,7 @@ export function createClient(opts: ClientOptions): DeviClient {
           if (f.event !== SESSION_EVENT) return;
           const d = safeJson(f.data, SessionDeliverySchema);
           if (d) onDelivery(d);
+          else ignored("entrega del canal", rawJson(f.data));
         },
       });
       return () => {
@@ -238,6 +265,14 @@ async function raw(res: Response): Promise<unknown> {
   if (type.includes("application/json")) return res.json();
   if (type.startsWith("text/")) return res.text();
   return res.arrayBuffer();
+}
+
+function rawJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
 }
 
 function safeJson<S extends z.ZodType>(text: string, schema: S): z.infer<S> | null {

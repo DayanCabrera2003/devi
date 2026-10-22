@@ -34,6 +34,8 @@ function clientWith(cfg: { serverUrl: string; devUser?: string }, signal: AbortS
   return createClient({
     baseUrl: cfg.serverUrl,
     devUser: cfg.devUser,
+    // Una entrega que esta versión no entiende se salta (las demás llegan igual); stderr no llega al agente.
+    onIgnored: (m) => void process.stderr.write(`[devi hook] ${m}\n`),
     fetch: ((url: string, init?: RequestInit) => fetch(url, { ...init, signal })) as typeof fetch,
   });
 }
