@@ -1,6 +1,6 @@
 {
   "name": "devi",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Devi: la mascota que conecta las sesiones de Claude Code de un equipo",
   "type": "module",
   "private": true,

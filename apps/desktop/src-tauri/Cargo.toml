@@ -1,6 +1,6 @@
 [package]
 name = "devi-desktop"
-version = "0.3.0"
+version = "0.3.1"
 description = "Devi: la mascota que conecta las sesiones de Claude Code de un equipo"
 edition = "2021"
 rust-version = "1.80"

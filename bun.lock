@@ -17,7 +17,7 @@
     },
     "apps/desktop": {
       "name": "@devi/desktop",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "dependencies": {
         "@devi/client": "workspace:*",
         "@devi/protocol": "workspace:*",
@@ -45,7 +45,7 @@
     },
     "packages/cli": {
       "name": "@devi/cli",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "bin": {
         "devi": "src/main.ts",
       },
@@ -59,7 +59,7 @@
     },
     "packages/client": {
       "name": "@devi/client",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "dependencies": {
         "@devi/protocol": "workspace:*",
         "zod": "^4.6.5",
@@ -74,7 +74,7 @@
     },
     "packages/server": {
       "name": "@devi/server",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "dependencies": {
         "@devi/protocol": "workspace:*",
         "zod": "^4.6.5",
