@@ -17,7 +17,7 @@ function ipc(cmd: string): unknown {
     case "run_devi":
       return { code: 0, stdout: '{"installed":true,"files":[{"path":"~/.bashrc","installed":true},{"path":"~/.zshrc","installed":true}]}', stderr: "" };
     case "tailscale_self_login":
-      return { login: "dayan@equipo.dev", dnsName: "pc-dayan.tail1234.ts.net" };
+      return { login: "dayan@equipo.dev", dnsName: "devi.tu-tailnet.ts.net" };
     case "tailscale_serve_configured":
     case "plugin:autostart|is_enabled":
       return true;
@@ -108,7 +108,7 @@ export async function mountDemo(target: HTMLElement, screen: string): Promise<vo
     files: fakeFiles,
   });
   app.config = {
-    serverUrl: "https://pc-dayan.tail1234.ts.net",
+    serverUrl: "https://devi.tu-tailnet.ts.net",
     app: { notifications: true, setupDone: true, serverAdminLogin: screen.startsWith("wizard") ? undefined : "dayan@equipo.dev", theme: isThemePref(theme) ? theme : "system" },
   };
   app.clock.start();

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 100 100" role="img" aria-label="Devi">
+  <title>Devi</title>
+  <circle cx="50" cy="50" r="44" fill="#FFFFFF"/>
+  <g fill="#111111">
+    <ellipse cx="36" cy="46" rx="6" ry="9"/>
+    <ellipse cx="64" cy="46" rx="6" ry="9"/>
+  </g>
+</svg>
