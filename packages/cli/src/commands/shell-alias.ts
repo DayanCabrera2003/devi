@@ -36,14 +36,19 @@ export function renderBlock(kind: ShellKind, devi: string): string {
     const d = shQuote(devi);
     body = [
       "# Para usar el claude original: `command claude ...` o `DEVI_NO_ALIAS=1 claude ...`.",
+      "# Con DEVI_NO_ALIAS=1 al cargar el rc (lo usa devi para localizar claude) la funcion no se define.",
+      'if [ "${DEVI_NO_ALIAS:-}" != 1 ]; then',
       "function claude {",
       `  if [ "\${DEVI_NO_ALIAS:-}" = 1 ] || [ ! -x ${d} ]; then command claude "$@"; else ${d} claude -- "$@"; fi`,
       "}",
+      "fi",
     ];
   } else if (kind === "fish") {
     const d = fishQuote(devi);
     body = [
       "# Para usar el claude original: `command claude ...` o `DEVI_NO_ALIAS=1 claude ...`.",
+      "# Con DEVI_NO_ALIAS=1 al cargar la config (lo usa devi para localizar claude) la funcion no se define.",
+      'if test "$DEVI_NO_ALIAS" != 1',
       "function claude",
       `    if test "$DEVI_NO_ALIAS" = 1; or not test -x ${d}`,
       "        command claude $argv",
@@ -51,12 +56,14 @@ export function renderBlock(kind: ShellKind, devi: string): string {
       `        ${d} claude -- $argv`,
       "    end",
       "end",
+      "end",
     ];
   } else {
     // '--' entre comillas: Windows PowerShell se come un -- sin comillas al llamar a un ejecutable.
     const d = psQuote(devi);
     body = [
       "# Para usar el claude original: `claude.exe ...` (o claude.cmd) o `$env:DEVI_NO_ALIAS = '1'`.",
+      "if ($env:DEVI_NO_ALIAS -ne '1') {",
       "function claude {",
       `  if ($env:DEVI_NO_ALIAS -eq '1' -or -not (Test-Path -LiteralPath ${d})) {`,
       "    $real = Get-Command -Name claude -CommandType Application, ExternalScript -ErrorAction SilentlyContinue | Select-Object -First 1",
@@ -64,6 +71,7 @@ export function renderBlock(kind: ShellKind, devi: string): string {
       "  } else {",
       `    & ${d} claude '--' @args`,
       "  }",
+      "}",
       "}",
     ];
   }

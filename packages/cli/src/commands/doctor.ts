@@ -3,6 +3,7 @@ import { MANAGED_SETTINGS_SNIPPET, decideChannelMode, readChannelPolicy, type Ch
 import { ConfigError, loadClientConfig } from "../config";
 import { readableError } from "../mcp/errors";
 import { PLUGIN_ID, type Sys } from "../paths";
+import { CLAUDE_NOT_FOUND } from "../claude-bin";
 import { run } from "../proc";
 
 export type Check = { name: string; ok: boolean; detail: string; fix?: string };
@@ -96,7 +97,7 @@ export async function collectChecks(sys: Sys): Promise<Check[]> {
   }
 
   const list = await run("claude", ["plugin", "list", "--json"], { timeoutMs: 15_000 });
-  if (!list) checks.push({ name: "Claude Code", ok: false, detail: "no encuentro `claude` en el PATH", fix: "Instala Claude Code: https://code.claude.com" });
+  if (!list) checks.push({ name: "Claude Code", ok: false, detail: CLAUDE_NOT_FOUND, fix: "Instala Claude Code o define DEVI_CLAUDE_BIN con su ruta." });
   else {
     const p = pluginInstalled(list.stdout);
     checks.push(

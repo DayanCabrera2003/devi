@@ -228,5 +228,6 @@ Una solicitud, una respuesta o un archivo adjunto pueden intentar manipular la s
 | «Esta acción solo se puede hacer desde la app de Devi» | Autoriza, responde o administra desde la app, no desde la terminal ni desde Claude. |
 | «La aprobación en el chat está desactivada en este equipo» | El admin la desactivó en Admin → Servidor: autoriza el borrador en la app. |
 | El envío se deniega solo con `claude -p` | Es lo esperado: el aviso necesita a una persona. Usa una sesión interactiva o `DEVI_APPROVAL=app` y autoriza en la app. |
+| «No encuentro Claude Code» | Las apps abiertas desde el menú no heredan el PATH de tu shell. Devi busca `claude` en el PATH, en sitios habituales (`~/.local/bin`, `~/.claude/local`, `~/.bun/bin`, Homebrew…) y en tu shell de login. Si está en otro sitio, indica su ruta con la variable `DEVI_CLAUDE_BIN` (p. ej. `export DEVI_CLAUDE_BIN=/ruta/a/claude`; `CLAUDE_BIN` también vale). |
 
 Diagnóstico completo: **Ajustes → Diagnóstico (devi doctor)**, o `devi doctor` en una terminal.

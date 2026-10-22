@@ -38,6 +38,17 @@ describe("bloques", () => {
     expect(b).toContain("command claude");
   });
 
+  test("con DEVI_NO_ALIAS=1 al cargar el rc, la función claude no se define (sh, fish, PowerShell)", () => {
+    const sh = renderBlock("sh", DEVI);
+    expect(sh).toContain('if [ "${DEVI_NO_ALIAS:-}" != 1 ]; then');
+    expect(sh.indexOf("DEVI_NO_ALIAS:-}\" != 1")).toBeLessThan(sh.indexOf("function claude"));
+    const fish = renderBlock("fish", DEVI);
+    expect(fish).toContain('if test "$DEVI_NO_ALIAS" != 1');
+    expect(fish.indexOf('!= 1')).toBeLessThan(fish.indexOf("function claude"));
+    const ps = renderBlock("powershell", DEVI);
+    expect(ps).toContain("if ($env:DEVI_NO_ALIAS -ne '1') {");
+  });
+
   test("sh: la ruta va entre comillas simples escapadas", () => {
     expect(renderBlock("sh", "/a b/it's/devi")).toContain(`'/a b/it'\\''s/devi' claude -- "$@"`);
   });

@@ -36,3 +36,22 @@ test("--json: si lanzar `claude` lanza, el informe final es JSON con ok:false y 
   expect(last.error).toContain("spawn EACCES");
   expect(last.steps.at(-1).detail).toContain("spawn EACCES");
 });
+
+test("sin claude localizable, el error es el mensaje nuevo con DEVI_CLAUDE_BIN", async () => {
+  const d = mkdtempSync(join(tmpdir(), "devi-ii-"));
+  writeFileSync(join(d, "devi-src"), "bin");
+  const lines: string[] = [];
+  const spy = spyOn(console, "log").mockImplementation((...a: unknown[]) => void lines.push(a.join(" ")));
+  try {
+    const code = await runInstallIntegration(
+      { from: join(d, "devi-src"), binDir: join(d, "bin"), marketplaceDir: join(d, "mp"), skipClaude: false, json: true },
+      { platform: "linux", env: {}, home: d },
+      { run: async () => null },
+    );
+    expect(code).toBe(1);
+  } finally {
+    spy.mockRestore();
+  }
+  const last = JSON.parse(lines[lines.length - 1]!);
+  expect(last.error).toBe("No encuentro Claude Code. Instálalo (https://claude.com/claude-code) o indica su ruta con DEVI_CLAUDE_BIN.");
+});

@@ -2,7 +2,8 @@ import { basename } from "node:path";
 import type { ChannelMode } from "../args";
 import { channelArgs, decideChannelMode, readChannelPolicy } from "../channel-policy";
 import type { Sys } from "../paths";
-import { spawnArgv, which } from "../proc";
+import { CLAUDE_NOT_FOUND, claudeSpawnEnv, findClaude } from "../claude-bin";
+import { spawnArgv } from "../proc";
 
 export function sessionNameFor(session: string | undefined, cwd: string): string {
   return session ?? (basename(cwd) || "sesion");
@@ -37,9 +38,9 @@ export async function runClaude(
   opts: { session: string | undefined; channel: ChannelMode; passthrough: string[] },
   sys: Sys,
 ): Promise<number> {
-  const claude = which("claude");
+  const claude = await findClaude(sys.env, sys.platform, sys.home);
   if (!claude) {
-    console.error("[devi] no encuentro `claude` en el PATH. Instala Claude Code: https://code.claude.com");
+    console.error(`[devi] ${CLAUDE_NOT_FOUND}`);
     return 127;
   }
   const mode = decideChannelMode(opts.channel, await readChannelPolicy(sys));
@@ -50,7 +51,7 @@ export async function runClaude(
   const args = buildClaudeArgs({ session, mode, passthrough: opts.passthrough });
   const child = Bun.spawn(spawnArgv(claude, args, sys.platform), {
     stdio: ["inherit", "inherit", "inherit"],
-    env: claudeEnv(process.env, session, args),
+    env: claudeSpawnEnv(claudeEnv(process.env, session, args), claude, sys.platform) as Record<string, string>,
   });
   // Ctrl+C es para Claude Code, no para este proceso.
   const ignore = () => {};

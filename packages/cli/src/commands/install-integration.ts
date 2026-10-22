@@ -1,5 +1,6 @@
 import { claudeSteps, installBinary, isCompiledBinary, parseJsonList, writeMarketplace } from "../install";
 import { marketplaceDir as defaultMarketplaceDir, binaryName, stableBinDir, type Sys } from "../paths";
+import { CLAUDE_NOT_FOUND } from "../claude-bin";
 import { run as defaultRun } from "../proc";
 import { CLI_VERSION } from "../version";
 import { join } from "node:path";
@@ -61,7 +62,7 @@ export async function runInstallIntegration(
   async function integrateWithClaude() {
     const mps = await run("claude", ["plugin", "marketplace", "list", "--json"]);
     if (!mps) {
-      step({ step: "claude", ok: false, detail: "no encuentro `claude` en el PATH; instala Claude Code y repite" });
+      step({ step: "claude", ok: false, detail: CLAUDE_NOT_FOUND });
     } else {
       const plugins = await run("claude", ["plugin", "list", "--json"]);
       const steps = claudeSteps({
