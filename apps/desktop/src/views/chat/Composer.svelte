@@ -25,6 +25,11 @@
     field.style.height = `${Math.min(field.scrollHeight, 160)}px`;
   });
 
+  function removeFile(token: string) {
+    if (previewing?.token === token) previewing = null;
+    void c.remove(app.files, token);
+  }
+
   async function pick() {
     pickError = null;
     try {
@@ -55,7 +60,7 @@
       {#each c.files as f (f.token)}
         <span class="chip-file">
           <button title="Ver {f.name} ({formatBytes(f.size)})" onclick={() => (previewing = f)}>{f.name}</button>
-          <button aria-label="Quitar {f.name}" onclick={() => c.remove(app.files, f.token)}><Icon name="close" /></button>
+          <button aria-label="Quitar {f.name}" onclick={() => removeFile(f.token)}><Icon name="close" /></button>
         </span>
       {/each}
     </div>

@@ -72,4 +72,14 @@ describe("Settings", () => {
     expect(await findByText("Sin permiso para el arranque automático")).toBeTruthy();
     expect(box.checked).toBe(false);
   });
+
+  test("el tema se elige en Apariencia y se guarda en las prefs", async () => {
+    const writeConfig = vi.fn(async () => {});
+    const { app, context } = await fakeApp({}, { writeConfig });
+    const { getByRole } = render(Settings, { context });
+    expect((getByRole("radio", { name: "Sistema" }) as HTMLInputElement).checked).toBe(true);
+    await fireEvent.click(getByRole("radio", { name: "Oscuro" }));
+    await vi.waitFor(() => expect(app.prefs.theme).toBe("dark"));
+    expect(writeConfig).toHaveBeenCalledWith(expect.objectContaining({ app: expect.objectContaining({ theme: "dark" }) }));
+  });
 });
