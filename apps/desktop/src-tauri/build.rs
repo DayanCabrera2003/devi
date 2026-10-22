@@ -3,6 +3,9 @@ fn main() {
         tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(&[
             "save_received_files",
             "save_db_export",
+            "pick_files",
+            "take_files",
+            "discard_files",
             "read_client_config",
             "write_client_config",
             "choose_received_dir",
