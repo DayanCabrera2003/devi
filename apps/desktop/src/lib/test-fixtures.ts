@@ -23,6 +23,7 @@ export function req(over: Partial<DeviRequest> = {}): DeviRequest {
   return {
     id: "q1",
     origin: "session",
+    kind: "request",
     fromMemberId: "m2",
     fromSessionId: "s9",
     fromSessionName: "backend",

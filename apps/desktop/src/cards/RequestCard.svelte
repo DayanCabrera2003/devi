@@ -4,6 +4,7 @@
   import ContextBlock from "../components/ContextBlock.svelte";
   import DecisionForm from "../components/DecisionForm.svelte";
   import FileList from "../components/FileList.svelte";
+  import HandoffStart from "../components/HandoffStart.svelte";
   import InjectionWarning from "../components/InjectionWarning.svelte";
   import SaveFilesButton from "../components/SaveFilesButton.svelte";
   import SendConfirm from "../components/SendConfirm.svelte";
@@ -20,6 +21,7 @@
 
   let mode = $state<"view" | "pick" | "accept" | "reject">("view");
   const from = $derived(app.team.nameOf(request.fromMemberId));
+  const handoff = $derived(request.kind === "handoff");
   const caption = $derived(requestCaption(request, app.team.myId));
   const hint = $derived(
     request.files.length > 0
@@ -54,7 +56,7 @@
 <div class="group them">
   <div class="from">{originLabel(request as ThreadRequest)}</div>
   <div class="bubble" class:alert={scan.level === "high"}>
-    <span class="sr-only">{from} te pide algo:</span>
+    {#if handoff}<span class="bubble-label">Traspaso de {from}</span>{:else}<span class="sr-only">{from} te pide algo:</span>{/if}
     <p class="card-msg">{request.message}</p>
   </div>
   <InjectionWarning scan={messageScan} />
@@ -68,7 +70,8 @@
   {#if scan.level === "high"}<SendConfirm bind:checked={reviewed} />{/if}
   <div class="actions">
     <button class="primary" disabled={blocked} onclick={openPicker}>Enviar a mi sesión</button>
-    <button onclick={() => (mode = "accept")}>Lo hago yo</button>
+    {#if handoff}<HandoffStart requestId={request.id} />{/if}
+    <button onclick={() => (mode = "accept")}>{handoff ? "Aceptar" : "Lo hago yo"}</button>
     <button class="no" onclick={() => (mode = "reject")}>Rechazar</button>
   </div>
 </div>

@@ -51,6 +51,7 @@ const r = (o: Partial<ThreadRequest> & Pick<ThreadRequest, "id" | "fromMemberId"
   ...base,
   createdAt: o.sentAt,
   origin: "session",
+  kind: "request",
   ...o,
 });
 

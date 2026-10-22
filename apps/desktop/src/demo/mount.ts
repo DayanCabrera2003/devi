@@ -64,7 +64,7 @@ function fakeConversations(screen: string): ConversationsHttp {
     conversations: async () => ({ items: fx.conversationItems(screen) }),
     conversation: async (memberId) => ({ requests: fx.threadFor(memberId, screen).slice().reverse(), nextBefore: memberId === "m-maria" ? 1 : undefined }),
     sendFromApp: async (meta) => ({
-      id: `q-${Date.now()}`, fromMemberId: fx.ME.member.id, toMemberId: meta.to, fromSessionId: "", fromSessionName: "", origin: "app",
+      id: `q-${Date.now()}`, fromMemberId: fx.ME.member.id, toMemberId: meta.to, fromSessionId: "", fromSessionName: "", origin: "app", kind: "request",
       message: meta.message, status: "pending", files: [], responseFiles: [], createdAt: Date.now(), sentAt: Date.now(), deadline: Date.now() + 3_600_000,
     }),
   };

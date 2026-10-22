@@ -18,7 +18,10 @@
   // Respuesta: la solicitud original sale de la bandeja; si no está, no se pide al servidor.
   const original = $derived(draft.kind === "response" ? app.inbox.requestById(draft.requestId) : undefined);
   const title = $derived.by(() => {
-    if (draft.kind === "request") return `Tu agente quiere enviar esto a ${app.team.nameOf(draft.toMemberId)}`;
+    if (draft.kind === "request") {
+      const what = draft.requestKind === "handoff" ? "este traspaso" : "esto";
+      return `Tu agente quiere enviar ${what} a ${app.team.nameOf(draft.toMemberId)}`;
+    }
     if (original) return `Respuesta a ${app.team.nameOf(original.fromMemberId)}`;
     return `Respuesta a la solicitud ${draft.requestId.slice(0, 8)}`;
   });
