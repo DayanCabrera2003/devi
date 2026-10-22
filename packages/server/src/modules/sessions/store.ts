@@ -37,6 +37,16 @@ export const sessionsMigrations: Migration[] = [
       CREATE INDEX session_inbox_session ON session_inbox(session_id, created_at);
     `,
   },
+  {
+    // machine: id estable de la máquina del MCP (un pid solo es único dentro de una máquina).
+    // instance_id: id de cada proceso `devi mcp`, para que sus reconexiones vuelvan a la misma sesión.
+    version: 3,
+    sql: `
+      ALTER TABLE sessions ADD COLUMN machine TEXT NOT NULL DEFAULT '';
+      ALTER TABLE sessions ADD COLUMN instance_id TEXT;
+      CREATE INDEX sessions_instance ON sessions(member_id, instance_id);
+    `,
+  },
 ];
 
 export type InboxRecord = { id: string; sessionId: string; kind: InboxItem["kind"]; content: string; meta: string; createdAt: number };
@@ -51,11 +61,13 @@ export type SessionRecord = {
   claudeSessionId: string | null;
   lastSeen: number;
   channel: boolean;
+  machine: string;
+  instanceId: string | null;
 };
 
 type Row = Omit<SessionRecord, "channel"> & { channel: number };
 const COLS = `id, member_id AS memberId, name, cwd, parent_pid AS parentPid, status,
-  claude_session_id AS claudeSessionId, last_seen AS lastSeen, channel`;
+  claude_session_id AS claudeSessionId, last_seen AS lastSeen, channel, machine, instance_id AS instanceId`;
 const rec = (r: Row | null): SessionRecord | null => (r ? { ...r, channel: r.channel === 1 } : null);
 
 export class SessionsStore {
@@ -64,8 +76,8 @@ export class SessionsStore {
   insert(s: SessionRecord): void {
     this.db
       .query(
-        `INSERT INTO sessions (id, member_id, name, cwd, parent_pid, status, claude_session_id, last_seen, channel)
-         VALUES ($id, $memberId, $name, $cwd, $parentPid, $status, $claudeSessionId, $lastSeen, $channel)`,
+        `INSERT INTO sessions (id, member_id, name, cwd, parent_pid, status, claude_session_id, last_seen, channel, machine, instance_id)
+         VALUES ($id, $memberId, $name, $cwd, $parentPid, $status, $claudeSessionId, $lastSeen, $channel, $machine, $instanceId)`,
       )
       .run({ ...s, channel: s.channel ? 1 : 0 });
   }
@@ -80,39 +92,37 @@ export class SessionsStore {
       .all({ memberId }) as Row[]).map((r) => rec(r)!);
   }
 
-  // Misma persona, mismo nombre y mismo Claude Code: el MCP se está volviendo a registrar.
-  same(memberId: string, name: string, parentPid: number): SessionRecord | null {
+  // Reconexión del mismo proceso `devi mcp` (mismo instanceId).
+  byInstance(memberId: string, instanceId: string): SessionRecord | null {
     return rec(this.db
-      .query(`SELECT ${COLS} FROM sessions WHERE member_id = $memberId AND name = $name AND parent_pid = $parentPid`)
-      .get({ memberId, name, parentPid }) as Row | null);
+      .query(`SELECT ${COLS} FROM sessions WHERE member_id = $memberId AND instance_id = $instanceId`)
+      .get({ memberId, instanceId }) as Row | null);
   }
 
-  updateOnReregister(id: string, cwd: string, channel: boolean, lastSeen: number): void {
+  // Reconexión de un MCP antiguo, que no manda instanceId: mismo Claude Code (máquina y pid).
+  legacySame(memberId: string, machine: string, parentPid: number): SessionRecord | null {
+    return rec(this.db
+      .query(`SELECT ${COLS} FROM sessions WHERE member_id = $memberId AND machine = $machine AND parent_pid = $parentPid
+              AND instance_id IS NULL ORDER BY last_seen DESC`)
+      .get({ memberId, machine, parentPid }) as Row | null);
+  }
+
+  rename(id: string, name: string): void {
+    this.db.query("UPDATE sessions SET name = $name WHERE id = $id").run({ id, name });
+  }
+
+  updateOnReregister(id: string, r: { cwd: string; channel: boolean; lastSeen: number; claudeSessionId: string | null }): void {
     this.db
-      .query("UPDATE sessions SET cwd = $cwd, channel = $channel, last_seen = $lastSeen WHERE id = $id")
-      .run({ id, cwd, channel: channel ? 1 : 0, lastSeen });
+      .query(`UPDATE sessions SET cwd = $cwd, channel = $channel, last_seen = $lastSeen,
+              claude_session_id = COALESCE($claudeSessionId, claude_session_id) WHERE id = $id`)
+      .run({ id, cwd: r.cwd, channel: r.channel ? 1 : 0, lastSeen: r.lastSeen, claudeSessionId: r.claudeSessionId });
   }
 
-  // Sesiones que un nuevo registro sustituye: mismo nombre o mismo Claude Code (pid padre).
-  replacedBy(memberId: string, name: string, parentPid: number): string[] {
-    const rows = this.db
-      .query("SELECT id FROM sessions WHERE member_id = $memberId AND (name = $name OR parent_pid = $parentPid)")
-      .all({ memberId, name, parentPid }) as { id: string }[];
-    return rows.map((r) => r.id);
-  }
-
-  // Emparejamiento hook ↔ MCP: primero por pid del proceso padre (Claude Code), luego por claude_session_id.
-  // Si algún día el registro trae también claudeSessionId, se guardará en esa misma columna y esta
-  // consulta lo empareja sin cambios.
-  findForHook(memberId: string, parentPid: number, claudeSessionId: string): SessionRecord | null {
-    return rec(
-      (this.db
-        .query(`SELECT ${COLS} FROM sessions WHERE member_id = $memberId AND parent_pid = $parentPid ORDER BY last_seen DESC`)
-        .get({ memberId, parentPid }) as Row | null) ??
-      (this.db
-        .query(`SELECT ${COLS} FROM sessions WHERE member_id = $memberId AND claude_session_id = $claudeSessionId`)
-        .get({ memberId, claudeSessionId }) as Row | null),
-    );
+  // Sesiones del mismo Claude Code (misma persona, máquina y pid): un registro nuevo las sustituye.
+  sameClaudeCode(memberId: string, machine: string, parentPid: number): SessionRecord[] {
+    return (this.db
+      .query(`SELECT ${COLS} FROM sessions WHERE member_id = $memberId AND machine = $machine AND parent_pid = $parentPid`)
+      .all({ memberId, machine, parentPid }) as Row[]).map((r) => rec(r)!);
   }
 
   updateFromHook(id: string, status: Session["status"], claudeSessionId: string, lastSeen: number): void {

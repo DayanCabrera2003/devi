@@ -43,17 +43,26 @@ export const CreateRoleBody = RoleFields.extend({
 });
 export const UpdateRoleBody = RoleFields.partial();
 
+// Identidad de una sesión (ver "Identidad y sesiones" en docs/arquitectura.md). La persona sale siempre del
+// login de Tailscale; estos campos solo distinguen entre las sesiones de esa misma persona:
+// - parentPid: pid de Claude Code (el MCP y los hooks son hijos directos suyos);
+// - machine: id estable de la máquina (un pid solo es único dentro de una máquina);
+// - instanceId: id aleatorio de cada proceso `devi mcp`, estable mientras vive (reconexiones idempotentes);
+// - claudeSessionId: session_id de Claude Code si el MCP lo conoce (CLAUDE_CODE_SESSION_ID).
+// name es el nombre que se pide (la carpeta); el servidor lo hace único por persona: "api", "api (2)"…
 // channel: la sesión tiene el canal de Claude Code cargado (recibe las entregas en tiempo real).
 // Sin canal, las entregas esperan en la bandeja de la sesión hasta que un hook las recoge.
+const Machine = z.string().max(200).default("");
 export const RegisterSessionBody = z.object({
   name: NonEmpty, cwd: z.string(), parentPid: z.number().int(), channel: z.boolean().default(false),
+  machine: Machine, instanceId: z.string().min(1).max(200).optional(), claudeSessionId: z.string().min(1).max(200).optional(),
 });
 export const HookBody = z.object({
-  claudeSessionId: z.string(), cwd: z.string(), parentPid: z.number().int(), status: SessionStatusSchema,
+  claudeSessionId: z.string(), cwd: z.string(), parentPid: z.number().int(), status: SessionStatusSchema, machine: Machine,
 });
 
 // GET /sessions/inbox va con query: el hook se identifica igual que en POST /sessions/hook.
-export const InboxQuery = z.object({ parentPid: z.coerce.number().int(), claudeSessionId: z.string() });
+export const InboxQuery = z.object({ parentPid: z.coerce.number().int(), claudeSessionId: z.string(), machine: Machine });
 export const AckInboxBody = z.object({ ids: z.array(z.string()).max(200) });
 
 // POST /drafts es multipart: campo "meta" (JSON de este esquema) + 0..5 campos "files".

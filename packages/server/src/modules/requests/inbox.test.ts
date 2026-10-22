@@ -41,6 +41,19 @@ describe("bandeja de sesión (entregas sin canal)", () => {
     expect((await inbox("dayan@dev", 200)).data).toEqual([]); // el pid 200 es de María
   });
 
+  test("dos sesiones de la misma persona: la bandeja de una nunca entrega lo de la otra", async () => {
+    f = await setupFlow();
+    // Otra sesión de María en la MISMA carpeta y máquina, con otro Claude Code (pid 201).
+    const other = (await f.call("maria@dev", "POST", "/api/v1/sessions", { name: "backend-api", cwd: "/repo/backend-api", parentPid: 201 }, agent)).data;
+    expect(other.name).toBe("backend-api (2)");
+    await f.forwardedRequest(); // reenviada a la primera (pid 200)
+    expect((await inbox("maria@dev", 201, "cs-otra")).data).toEqual([]);
+    expect((await inbox("maria@dev", 200, "cs-primera")).data).toHaveLength(1);
+    // Aunque la otra herede el claudeSessionId de la primera, su pid manda.
+    await f.call("maria@dev", "POST", "/api/v1/sessions/hook", { claudeSessionId: "cs-primera", cwd: "/r", parentPid: 200, status: "working" }, agent);
+    expect((await inbox("maria@dev", 201, "cs-primera")).data).toEqual([]);
+  });
+
   test("draft_authorized y draft_discarded van a la bandeja del autor, en orden; debug no", async () => {
     f = await setupFlow({ dev: true });
     await f.pendingRequest();

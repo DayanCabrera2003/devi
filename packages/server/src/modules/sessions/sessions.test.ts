@@ -64,12 +64,14 @@ describe("sesiones", () => {
     stream.close();
   });
 
-  test("mismo nombre o mismo Claude Code (pid) sustituye a la anterior", async () => {
+  test("mismo Claude Code (pid) sustituye a la anterior; el mismo nombre en otro Claude Code, no", async () => {
     await setup();
     const a = (await register("dayan@dev", "frontend", 100)).data;
     const b = (await register("dayan@dev", "frontend", 200)).data;
-    const c = (await register("dayan@dev", "otra", 200)).data;
-    expect((await t.openStream("dayan@dev", `/api/v1/events/session/${a.id}`)).status).toBe(404);
+    // Claude Code relanza su MCP (otro proceso, otro instanceId): sustituye a la del mismo pid.
+    const c = (await t.call("dayan@dev", "POST", "/api/v1/sessions", { name: "otra", cwd: "/r", parentPid: 200, instanceId: "nuevo" })).data;
+    expect(b.name).toBe("frontend (2)");
+    expect((await t.openStream("dayan@dev", `/api/v1/events/session/${a.id}`)).status).toBe(200);
     expect((await t.openStream("dayan@dev", `/api/v1/events/session/${b.id}`)).status).toBe(404);
     expect((await t.openStream("dayan@dev", `/api/v1/events/session/${c.id}`)).status).toBe(200);
   });
@@ -138,11 +140,11 @@ describe("cerrar o sustituir una sesión cierra su SSE", () => {
     expect(closed).toContain(s.id);
   });
 
-  test("sustituirla (mismo nombre, otro pid) cierra el stream de la anterior", async () => {
+  test("sustituirla (mismo Claude Code, otro MCP) cierra el stream de la anterior", async () => {
     await setup();
     const a = (await register("dayan@dev", "frontend", 100)).data;
     await t.openStream("dayan@dev", `/api/v1/events/session/${a.id}`);
-    await register("dayan@dev", "frontend", 200);
+    await t.call("dayan@dev", "POST", "/api/v1/sessions", { name: "frontend", cwd: "/r", parentPid: 100, instanceId: "nuevo" });
     expect(t.app.ctx.sse.isOpen(`session:${a.id}`)).toBe(false);
   });
 

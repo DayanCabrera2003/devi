@@ -47,11 +47,20 @@ describe("catálogo de la API", () => {
     expect(API.ackInbox).toMatchObject({ method: "POST", path: "/api/v1/sessions/inbox/ack", actor: "owner" });
     expect("human" in API.sessionInbox).toBe(false);
     expect("human" in API.ackInbox).toBe(false);
-    expect(InboxQuery.parse({ parentPid: "12", claudeSessionId: "c1" })).toEqual({ parentPid: 12, claudeSessionId: "c1" });
+    expect(InboxQuery.parse({ parentPid: "12", claudeSessionId: "c1" })).toEqual({ parentPid: 12, claudeSessionId: "c1", machine: "" });
+    expect(InboxQuery.parse({ parentPid: "12", claudeSessionId: "c1", machine: "M1" }).machine).toBe("M1");
     expect(API.ackInbox.body.safeParse({ ids: ["a"] }).success).toBe(true);
     expect(API.ackInbox.body.safeParse({}).success).toBe(false);
     expect(RegisterSessionBody.parse({ name: "a", cwd: "/", parentPid: 1 }).channel).toBe(false);
     expect(RegisterSessionBody.parse({ name: "a", cwd: "/", parentPid: 1, channel: true }).channel).toBe(true);
+  });
+
+  test("identidad de la sesión: máquina, instancia del MCP y claudeSessionId (opcionales, compatibles con MCP antiguos)", () => {
+    expect(RegisterSessionBody.parse({ name: "a", cwd: "/", parentPid: 1 })).toEqual({ name: "a", cwd: "/", parentPid: 1, channel: false, machine: "" });
+    const full = { name: "a", cwd: "/", parentPid: 1, channel: true, machine: "M1", instanceId: "i1", claudeSessionId: "cs" };
+    expect(RegisterSessionBody.parse(full)).toEqual(full);
+    expect(RegisterSessionBody.safeParse({ ...full, instanceId: "" }).success).toBe(false);
+    expect(API.sessionHook.body.parse({ claudeSessionId: "c", cwd: "/", parentPid: 1, status: "idle" }).machine).toBe("");
   });
 
   test("los cuerpos validan", () => {
