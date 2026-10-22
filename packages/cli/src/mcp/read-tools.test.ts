@@ -25,7 +25,7 @@ const SESSION = { id: "s1", memberId: "m1", name: "api (2)", cwd: "/repo/api", s
 const sessionOf = (id: string, memberId: string, name: string) => ({ ...SESSION, id, memberId, name });
 
 const req = (over: object = {}) => ({
-  id: "q1", origin: "session" as const, fromMemberId: "m1", fromSessionId: "s1", fromSessionName: "api (2)", toMemberId: "m2",
+  id: "q1", origin: "session" as const, kind: "request" as const, fromMemberId: "m1", fromSessionId: "s1", fromSessionName: "api (2)", toMemberId: "m2",
   message: "¿Me apruebas el PR #12 de backend-api?", status: "pending" as const, files: [], responseFiles: [],
   createdAt: NOW - 30 * MIN, sentAt: NOW - 30 * MIN, deadline: NOW + 30 * MIN, ...over,
 });

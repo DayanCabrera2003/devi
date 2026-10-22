@@ -4,7 +4,7 @@ import { DeviApiError } from "./errors";
 import { fakeServer } from "./fake-server";
 
 const REQUEST = {
-  id: "q1", origin: "app", fromMemberId: "m1", fromSessionId: "", fromSessionName: "", toMemberId: "m2", message: "hola",
+  id: "q1", origin: "app", kind: "request", fromMemberId: "m1", fromSessionId: "", fromSessionName: "", toMemberId: "m2", message: "hola",
   status: "pending", files: [{ id: "f1", name: "a.txt", size: 6, direction: "request" }], responseFiles: [],
   createdAt: 1, sentAt: 1, deadline: 2,
 };
