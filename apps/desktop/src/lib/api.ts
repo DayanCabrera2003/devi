@@ -4,6 +4,7 @@ import { createClient } from "@devi/client";
 import {
   API,
   API_VERSION,
+  AUDIT_FEATURES,
   AuditQuery,
   PERM_LABELS,
   VERSION_HEADER,
@@ -214,6 +215,8 @@ export class DeviApi {
     const q = AuditQuery.parse(opts);
     const query: Record<string, string> = { limit: String(q.limit) };
     if (q.before !== undefined) query.before = String(q.before);
+    // Esta versión conoce las acciones nuevas; sin esto, el servidor las da como su equivalente antiguo.
+    query.features = AUDIT_FEATURES.inChat;
     return this.call<AuditPage>("audit", { query });
   }
 

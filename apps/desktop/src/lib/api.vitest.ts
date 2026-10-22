@@ -70,15 +70,15 @@ describe("DeviApi", () => {
     await expect(api.exportDb()).rejects.toMatchObject({ status: 403 });
   });
 
-  test("audit: llama a API.audit con limit y before en la query", async () => {
+  test("audit: llama a API.audit con limit y before en la query y declara entender las acciones nuevas", async () => {
     const { client, call } = fakeClient();
     const page = { entries: [], nextBefore: 7 };
     call.mockResolvedValueOnce(page as never);
     const api = new DeviApi(client, "https://pc.t.ts.net");
     expect(await api.audit({ limit: 50, before: 123 })).toEqual(page);
-    expect(call).toHaveBeenLastCalledWith("audit", { query: { limit: "50", before: "123" } });
+    expect(call).toHaveBeenLastCalledWith("audit", { query: { limit: "50", before: "123", features: "audit_in_chat" } });
     await api.audit({ limit: 20 });
-    expect(call).toHaveBeenLastCalledWith("audit", { query: { limit: "20" } });
+    expect(call).toHaveBeenLastCalledWith("audit", { query: { limit: "20", features: "audit_in_chat" } });
   });
 
   test("audit: AuditQuery rechaza un limit fuera de rango sin llamar al servidor", () => {
