@@ -71,6 +71,9 @@
     <div class="toolbar">
       <span class="conn" title={app.conn.label}><span class="dot" class:on={app.conn.online}></span><span>{app.conn.label}</span></span>
       <span class="spacer"></span>
+      <button class="icon" class:active={app.view === "base"} aria-label="Base del equipo" title="Base del equipo" onclick={() => app.goto(app.view === "base" ? "bandeja" : "base")}>
+        <Icon name="book" />
+      </button>
       <button class="icon" class:active={app.view === "ajustes"} aria-label="Ajustes" title="Ajustes" onclick={() => app.goto(app.view === "ajustes" ? "bandeja" : "ajustes")}>
         <Icon name="gear" />
       </button>

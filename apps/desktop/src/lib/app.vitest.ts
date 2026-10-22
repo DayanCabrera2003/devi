@@ -491,6 +491,19 @@ describe("DeviApp", () => {
     });
   });
 
+  test("base del equipo: si no se guardó (posibles secretos) avisa; si se guardó, la vista se refresca", async () => {
+    const t = setup();
+    await t.app.boot();
+    t.status("open");
+    t.event({ type: "knowledge.refused", requestId: "q1", reasons: ["Token de GitHub (ghp_…)"] } as UserEvent);
+    expect(t.notify).toHaveBeenCalledWith(expect.objectContaining({ title: "Devi · No se guardó en la base del equipo" }));
+    expect(t.notify.mock.calls.at(-1)![0].body).toContain("Token de GitHub");
+    const before = t.app.knowledgeVersion;
+    t.event({ type: "knowledge.saved", entry: { id: "k1", requestId: "q1", question: "?", answer: "!", askedBy: "m2", askedByName: "María", answeredBy: "m1", answeredByName: "Dayan", createdAt: 1 } } as UserEvent);
+    expect(t.app.knowledgeVersion).toBe(before + 1);
+    expect(t.app.inbox.cards).toHaveLength(0);
+  });
+
   test("el icono de la bandeja sigue lo que me espera, sin repetir el mismo número", async () => {
     vi.useFakeTimers();
     const trayAttention = vi.fn();

@@ -61,6 +61,9 @@
   {/if}
   <InjectionWarning {scan} />
   <FileList files={draft.files} load={(id) => app.downloadFile(id)} onScan={(id, s) => (fileScans[id] = s)} />
+  {#if draft.kind === "response" && draft.shareWithTeam}
+    <div class="caption">Se guardará en la base del equipo (la pregunta y esta respuesta, sin archivos).</div>
+  {/if}
   <div class="caption">Nada sale de tu equipo hasta que lo autorices. Caduca en {minutesLeft} min.</div>
   <div class="actions">
     <button class="primary" disabled={busy} onclick={() => run(() => app.authorizeDraft(draft))}>Autorizar envío</button>

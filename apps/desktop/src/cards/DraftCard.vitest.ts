@@ -54,4 +54,11 @@ describe("DraftCard", () => {
     expect(await findByText(/Caduca en 10 min/)).toBeTruthy();
     stop();
   });
+
+  test("respuesta que se guardará en la base del equipo: lo dice antes de autorizar", async () => {
+    const { context } = await fakeApp();
+    const d = draft({ kind: "response", requestId: "q1", message: "Con make deploy", shareWithTeam: true });
+    const { getByText } = render(DraftCard, { props: { draft: d }, context });
+    expect(getByText(/Se guardará en la base del equipo/)).toBeTruthy();
+  });
 });

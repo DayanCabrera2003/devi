@@ -12,6 +12,7 @@
   import Sidebar from "./chat/Sidebar.svelte";
   import Thread from "./chat/Thread.svelte";
   import Welcome from "./chat/Welcome.svelte";
+  import KnowledgeView from "./knowledge/KnowledgeView.svelte";
   import Wizard from "./wizard/Wizard.svelte";
 
   const app = useApp();
@@ -20,7 +21,7 @@
   $effect(() => applyTheme(app.prefs.theme));
 
   const page = $derived(
-    app.view === "ajustes" ? "ajustes" : app.view === "admin" && app.team.isAdmin ? "admin" : app.selected ? "thread" : "none",
+    app.view === "ajustes" ? "ajustes" : app.view === "base" ? "base" : app.view === "admin" && app.team.isAdmin ? "admin" : app.selected ? "thread" : "none",
   );
 </script>
 
@@ -44,6 +45,8 @@
         <div class="pane">
           {#if page === "ajustes"}
             <Settings />
+          {:else if page === "base"}
+            <KnowledgeView />
           {:else if page === "admin"}
             <Admin />
           {:else if page === "thread" && app.selected}

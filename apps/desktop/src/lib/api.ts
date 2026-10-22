@@ -16,6 +16,7 @@ import {
   type DeviRequest,
   type Draft,
   type ErrorBody,
+  type KnowledgeResult,
   type Me,
   type Member,
   type Role,
@@ -148,8 +149,9 @@ export class DeviApi {
   forwardRequest(id: string, sessionId: string) {
     return this.call<DeviRequest>("forwardRequest", { params: { id }, body: { sessionId } });
   }
-  acceptRequest(id: string, note?: string) {
-    return this.call<DeviRequest>("acceptRequest", { params: { id }, body: note ? { note } : {} });
+  acceptRequest(id: string, note?: string, shareWithTeam = false) {
+    const body = { ...(note ? { note } : {}), ...(note && shareWithTeam ? { shareWithTeam: true } : {}) };
+    return this.call<DeviRequest>("acceptRequest", { params: { id }, body });
   }
   rejectRequest(id: string, reason: string) {
     return this.call<DeviRequest>("rejectRequest", { params: { id }, body: { reason } });
@@ -170,6 +172,12 @@ export class DeviApi {
   updateSettings(body: Partial<Settings>) { return this.call<Settings>("updateSettings", { body }); }
 
   downloadFile(id: string) { return this.client.downloadFile(id); }
+
+  // Base del equipo: buscar (sin texto, las más recientes) y retirar una entrada (quien respondió o un admin).
+  searchKnowledge(q: string, limit: number) {
+    return this.call<KnowledgeResult>("searchKnowledge", { query: { q, limit: String(limit) } });
+  }
+  withdrawKnowledge(id: string) { return this.call<{ ok: true }>("withdrawKnowledge", { params: { id } }); }
 
   // Conversaciones por persona y envío desde la app (multipart: meta + archivos).
   sendFromApp(meta: { to: string; message: string }, files: { name: string; content: string }[]) {

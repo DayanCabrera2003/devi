@@ -35,6 +35,8 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   "settings.updated": "Ajustes del servidor cambiados",
   "db.exported": "Base de datos exportada",
   "login.rejected": "Acceso rechazado",
+  "knowledge.shared": "Respuesta guardada en la base del equipo",
+  "knowledge.withdrawn": "Respuesta retirada de la base del equipo",
 };
 
 // Por si un servidor más nuevo manda una acción que esta versión aún no conoce.
@@ -49,6 +51,7 @@ const TARGET_LABELS: Record<AuditTarget, string> = {
   settings: "Ajustes",
   db: "Base de datos",
   login: "Login",
+  knowledge: "Base del equipo",
 };
 
 export function describeTarget(e: Pick<AuditEntry, "targetType" | "targetId">, nameOf: (memberId: string) => string): string {

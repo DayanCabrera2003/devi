@@ -54,7 +54,7 @@ describe("PopoverView", () => {
     const { getByRole } = render(PopoverView, { props: { host: host() }, context });
     await fireEvent.click(getByRole("button", { name: "Lo hago yo" }));
     await fireEvent.click(getByRole("button", { name: "Confirmar: lo hago yo" }));
-    await vi.waitFor(() => expect(acceptRequest).toHaveBeenCalledWith("q1", undefined));
+    await vi.waitFor(() => expect(acceptRequest).toHaveBeenCalledWith("q1", undefined, false));
   });
 
   test("Enviar a mi sesión muestra la lista de sesiones en el panel", async () => {

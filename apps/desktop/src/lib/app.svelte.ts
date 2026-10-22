@@ -15,7 +15,7 @@ import { TeamStore } from "./stores/team.svelte";
 import { AGENT_THREAD, waitingByPeer } from "./thread-items";
 import { ThreadStore } from "./stores/thread.svelte";
 
-export type View = "bandeja" | "ajustes" | "admin";
+export type View = "bandeja" | "ajustes" | "admin" | "base";
 export type Phase = "loading" | "wizard" | "app";
 
 export type AppDeps = {
@@ -54,6 +54,8 @@ export class DeviApp {
   // Alertas de seguridad (audit.alert) aún no vistas en Admin → Auditoría: dan el número de la pestaña.
   auditAlerts = $state<AuditEntry[]>([]);
   serverError = $state<string | null>(null);
+  // Sube cada vez que una respuesta mía entra en la base del equipo: la vista «Base del equipo» se recarga.
+  knowledgeVersion = $state(0);
 
   readonly conn = new ConnectionStore();
   readonly team = new TeamStore();
@@ -197,6 +199,19 @@ export class DeviApp {
     if (!me || !this.api) return;
     if (ev.type === "audit.alert") {
       this.onAuditAlert(ev.entry);
+      return;
+    }
+    if (ev.type === "knowledge.saved") {
+      this.knowledgeVersion++;
+      return;
+    }
+    if (ev.type === "knowledge.refused") {
+      if (shouldNotify(this.prefs, this.paused)) {
+        void this.deps.notify({
+          title: "Devi · No se guardó en la base del equipo",
+          body: `Tu respuesta no se publicó porque parece contener secretos: ${ev.reasons.join(", ")}.`,
+        });
+      }
       return;
     }
     if (ev.type === "conversation.updated") {
@@ -379,8 +394,8 @@ export class DeviApp {
     this.applyRequest(await this.need().forwardResponse(r.id, sessionId));
   }
 
-  async accept(r: DeviRequest, note: string): Promise<void> {
-    this.applyRequest(await this.need().acceptRequest(r.id, note || undefined));
+  async accept(r: DeviRequest, note: string, shareWithTeam = false): Promise<void> {
+    this.applyRequest(await this.need().acceptRequest(r.id, note || undefined, shareWithTeam));
   }
 
   async reject(r: DeviRequest, reason: string): Promise<void> {

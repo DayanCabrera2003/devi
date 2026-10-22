@@ -85,7 +85,7 @@
     inline={compact}
   />
 {:else if mode === "accept"}
-  <DecisionForm kind="accept" fromName={from} message={request.message} onConfirm={(t) => app.accept(request, t)} onBack={() => (mode = "view")} inline={compact} />
+  <DecisionForm kind="accept" fromName={from} message={request.message} onConfirm={(t, share) => app.accept(request, t, share)} onBack={() => (mode = "view")} inline={compact} />
 {:else if mode === "reject"}
   <DecisionForm kind="reject" fromName={from} message={request.message} onConfirm={(t) => app.reject(request, t)} onBack={() => (mode = "view")} inline={compact} />
 {/if}
