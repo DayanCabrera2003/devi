@@ -90,7 +90,8 @@ export function requestCaption(r: DeviRequest, me: string | null): Caption {
   else if (outcome === "answered") c = { text: "Respondido", tone: "good" };
   else if (r.status === "timed_out") c = { text: "Sin respuesta", tone: "warn" };
   else if (r.status === "forwarded") c = { text: mine ? "En su sesión" : "En tu sesión", tone: "" };
-  else if (r.status === "closed") c = { text: "Cerrada", tone: "" };
+  else if (r.status === "closed") c = { text: r.closedNote ?? "Cerrada", tone: "" };
+  else if (mine && r.status === "pending" && r.escalatedAt !== undefined) c = { text: "Sin respuesta todavía", tone: "warn" };
   else c = { text: mine ? "Enviado" : "Recibido", tone: "" };
   return { ...c, text: `${c.text} · ${at}` };
 }

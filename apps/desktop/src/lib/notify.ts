@@ -1,4 +1,5 @@
 import { OUTCOME, truncate } from "./format";
+import type { DeviRequest } from "@devi/protocol";
 import type { Card } from "./stores/inbox.svelte";
 
 export type Notice = { title: string; body: string };
@@ -21,6 +22,14 @@ export function noticeFor(card: Card, nameOf: (id: string) => string): Notice {
     case "timeout":
       return { title: `Devi · Sin respuesta de ${nameOf(card.request.toMemberId)}`, body: truncate(card.request.message) };
   }
+}
+
+// Una solicitud mía sigue sin respuesta al cumplirse el plazo de escalado.
+export function escalationNotice(r: DeviRequest, nameOf: (id: string) => string): Notice {
+  return {
+    title: `Devi · ${nameOf(r.toMemberId)} aún no ha respondido`,
+    body: truncate(`«${r.message}». Puedes usar «Pedírselo a otra persona» en la conversación.`),
+  };
 }
 
 // Identidad de un aviso: la misma tarjeta reenviada al reconectar no vuelve a avisar,

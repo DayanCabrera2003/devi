@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import { errorMessage } from "../../lib/api";
   import { useApp } from "../../lib/context";
+  import EscalationSetting from "./EscalationSetting.svelte";
   import type { Settings } from "@devi/protocol";
   import {
     SETTINGS_BOUNDS,
@@ -196,6 +197,7 @@
     {#if chatMsg}<div class="ok-text">{chatMsg}</div>{/if}
     {#if chatError}<div class="error">{chatError}</div>{/if}
   </section>
+  <EscalationSetting settings={loaded} onSaved={(s) => (loaded = s)} />
 {/if}
 
 <section class="card">

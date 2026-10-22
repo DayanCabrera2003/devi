@@ -5,7 +5,9 @@
   import InjectionWarning from "../components/InjectionWarning.svelte";
   import { useApp } from "../lib/context";
   import type { ThreadRequest } from "../lib/conversations-api";
+  import { canReassign } from "../lib/reassign";
   import { hasReplyBubble, originLabel, requestCaption } from "../lib/thread-items";
+  import ReassignButton from "./ReassignButton.svelte";
 
   type Props = { request: ThreadRequest };
   let { request }: Props = $props();
@@ -28,6 +30,9 @@
     <div class="caption" class:good={caption.tone === "good"} class:bad={caption.tone === "bad"} class:warn={caption.tone === "warn"}>
       {caption.text}
     </div>
+    {#if canReassign(request, app.team.myId)}
+      <div class="actions"><ReassignButton {request} primary={request.escalatedAt !== undefined} /></div>
+    {/if}
   {/if}
 </div>
 {#if reply}

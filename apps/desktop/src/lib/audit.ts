@@ -22,6 +22,8 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   "request.resent": "Solicitud reenviada",
   "request.ignored": "Solicitud ignorada",
   "request.timed_out": "Solicitud sin respuesta a tiempo",
+  "request.escalated": "Aviso de solicitud sin respuesta (escalado)",
+  "request.reassigned": "Solicitud pedida a otra persona",
   "response.accepted": "Respuesta aceptada",
   "response.forwarded": "Respuesta enviada a una sesión",
   "file.downloaded": "Archivo descargado",

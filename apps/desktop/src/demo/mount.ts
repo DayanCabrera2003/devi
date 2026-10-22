@@ -48,6 +48,10 @@ function fakeApi(screen: string): DeviApi {
     forwardResponse: async (id: string) => touch(find(id), "closed"),
     resendRequest: async (id: string) => touch(find(id), "pending"),
     ignoreRequest: async (id: string) => touch(find(id), "closed"),
+    reassignRequest: async (id: string, to: string) => ({
+      request: { ...find(id), id: `q-${Date.now()}`, toMemberId: to, status: "pending" },
+      original: { ...touch(find(id), "closed"), closedNote: "Reenviada" },
+    }),
     authorizeDraft: async () => ({}),
     discardDraft: async () => ({}),
     subscribe: (onEvent: (e: UserEvent) => void, onStatus: (s: string) => void) => {

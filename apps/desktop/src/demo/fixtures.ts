@@ -159,6 +159,7 @@ export const SETTINGS: Settings & { chatApproval: boolean } = {
   fileMaxAgeDays: 30,
   allowedDomains: ["equipo.dev"],
   chatApproval: true,
+  escalateAfterMs: 30 * MIN,
 };
 
 export const AUDIT: AuditEntry[] = [

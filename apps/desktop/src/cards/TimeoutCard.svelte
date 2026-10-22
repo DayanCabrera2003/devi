@@ -4,6 +4,7 @@
   import { errorMessage } from "../lib/api";
   import { useApp } from "../lib/context";
   import { waited } from "../lib/format";
+  import ReassignButton from "./ReassignButton.svelte";
 
   type Props = { request: DeviRequest };
   let { request }: Props = $props();
@@ -31,6 +32,7 @@
   <div class="actions">
     <button class="primary" disabled={busy} onclick={() => run(() => app.resend(request))}>Reenviar</button>
     <button disabled={busy} onclick={() => run(() => app.ignore(request))}>Ignorar</button>
+    <ReassignButton {request} />
   </div>
   {#if error}<div class="error">{error}</div>{/if}
 </div>

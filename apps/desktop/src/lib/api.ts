@@ -15,6 +15,7 @@ import {
   type CreateRoleBody,
   type DeviRequest,
   type Draft,
+  type ReassignResult,
   type ErrorBody,
   type KnowledgeResult,
   type Me,
@@ -165,6 +166,7 @@ export class DeviApi {
   }
   resendRequest(id: string) { return this.call<DeviRequest>("resendRequest", { params: { id }, body: {} }); }
   ignoreRequest(id: string) { return this.call<DeviRequest>("ignoreRequest", { params: { id }, body: {} }); }
+  reassignRequest(id: string, to: string) { return this.call<ReassignResult>("reassignRequest", { params: { id }, body: { to } }); }
 
   createMember(body: MemberBody) { return this.call<Member>("createMember", { body }); }
   updateMember(id: string, body: MemberPatch) { return this.call<Member>("updateMember", { params: { id }, body }); }

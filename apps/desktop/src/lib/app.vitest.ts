@@ -22,6 +22,10 @@ function setup(config: ClientConfig | null = CONFIG, extra: { trayAttention?: (p
     acceptResponse: vi.fn(async () => mine({ status: "closed", outcome: "answered" })),
     resendRequest: vi.fn(async () => mine({ status: "pending", sentAt: 9_000 })),
     ignoreRequest: vi.fn(async () => mine({ status: "closed" })),
+    reassignRequest: vi.fn(async (id: string, to: string) => ({
+      request: mine({ id: "q20", toMemberId: to, status: "pending" }),
+      original: mine({ id, status: "closed", closedNote: "Reenviada a Leo", replacedBy: "q20" }),
+    })),
     subscribe: vi.fn((ev: (e: UserEvent) => void, st: (s: string, err?: unknown) => void) => {
       onEvent = ev;
       onStatus = st;
@@ -521,5 +525,39 @@ describe("DeviApp", () => {
     expect(trayAttention).toHaveBeenCalledTimes(calls + 2);
     await t.app.discardDraft(draft());
     expect(trayAttention).toHaveBeenLastCalledWith(1);
+  });
+
+  describe("escalado", () => {
+    test("request.escalated avisa una vez (respeta la pausa) y actualiza la solicitud", async () => {
+      vi.useFakeTimers();
+      const t = setup();
+      await t.app.boot();
+      t.status("open");
+      await settle();
+      const ev: UserEvent = { type: "request.escalated", request: mine({ escalatedAt: 5_000 }) };
+      t.event(ev);
+      t.event(ev);
+      expect(t.notify).toHaveBeenCalledOnce();
+      expect(t.notify.mock.calls[0]?.[0]).toMatchObject({ title: "Devi · María aún no ha respondido" });
+      expect(t.notify.mock.calls[0]?.[0].body).toContain("Pedírselo a otra persona");
+      expect(t.app.inbox.cards).toHaveLength(0); // no es una tarjeta nueva
+
+      t.app.setPaused(true);
+      t.event({ type: "request.escalated", request: mine({ id: "q8", escalatedAt: 6_000 }) });
+      expect(t.notify).toHaveBeenCalledOnce();
+    });
+
+    test("pedírselo a otra persona: llama al servidor y quita la tarjeta de la original", async () => {
+      vi.useFakeTimers();
+      const t = setup();
+      await t.app.boot();
+      t.status("open");
+      await settle();
+      t.event({ type: "request.timed_out", request: mine({ status: "timed_out" }) });
+      expect(t.app.inbox.cards.map((c) => c.key)).toContain("timeout:q7");
+      await t.app.reassign(mine(), "m3");
+      expect(t.api.reassignRequest).toHaveBeenCalledWith("q7", "m3");
+      expect(t.app.inbox.cards.map((c) => c.key)).not.toContain("timeout:q7");
+    });
   });
 });

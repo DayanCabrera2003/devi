@@ -4,7 +4,7 @@ import { fakeApp } from "../../lib/test-app";
 import { SESSIONS, TEAM } from "../../lib/test-fixtures";
 import ServerTab from "./ServerTab.svelte";
 
-const SETTINGS = { requestTimeoutMs: 3_600_000, draftTtlMs: 900_000, fileRetentionDays: 7, fileMaxAgeDays: 30, allowedDomains: [], chatApproval: true };
+const SETTINGS = { requestTimeoutMs: 3_600_000, draftTtlMs: 900_000, fileRetentionDays: 7, fileMaxAgeDays: 30, allowedDomains: [], chatApproval: true, escalateAfterMs: 1_800_000 };
 
 async function setup(over: Record<string, unknown> = {}) {
   const updateSettings = vi.fn(async (b: object) => ({ ...SETTINGS, ...b }));
@@ -105,5 +105,11 @@ describe("ServerTab", () => {
     await fireEvent.click(box);
     expect(await findByText("fallo del servidor")).toBeTruthy();
     expect(box.checked).toBe(true);
+  });
+
+  test("incluye el ajuste de escalado con el plazo del servidor", async () => {
+    const { getByLabelText } = await setup();
+    expect((getByLabelText("Avisar si una solicitud sigue sin respuesta") as HTMLInputElement).checked).toBe(true);
+    expect((getByLabelText(/Plazo para avisar/) as HTMLInputElement).value).toBe("30");
   });
 });

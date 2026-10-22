@@ -7,7 +7,7 @@ import type { MascotState } from "./mascot";
 import { HAPPY_MS, deriveMood, overdueCount, quietSinceAfter } from "./mood";
 import { isWeekDue, weekKey } from "./week";
 import { type AppPrefs, type ClientConfig, type Native, type ServerStatus, prefsOf } from "./native";
-import { type Notice, noticeFor, noticeKey, shouldNotify, summaryNotice } from "./notify";
+import { type Notice, escalationNotice, noticeFor, noticeKey, shouldNotify, summaryNotice } from "./notify";
 import { ConnectionStore } from "./stores/connection.svelte";
 import { ComposerStore, DragState } from "./stores/composer.svelte";
 import { ConversationsStore } from "./stores/conversations.svelte";
@@ -250,6 +250,10 @@ export class DeviApp {
       this.thread.upsert(ev.request);
       this.scheduleConversations();
     }
+    if (ev.type === "request.escalated") {
+      this.onEscalated(ev.request);
+      return;
+    }
     const added = this.inbox.apply(ev, me);
     if (added) {
       if (this.replay) this.collectReplayed(added);
@@ -267,6 +271,14 @@ export class DeviApp {
     this.auditAlerts = [entry, ...this.auditAlerts];
     // Un cambio de seguridad avisa aunque Devi esté en pausa; solo lo silencia desactivar los avisos.
     if (this.prefs.notifications) void this.deps.notify(auditNotice(entry, (id) => this.team.nameOf(id)));
+  }
+
+  // Escalado: no abre tarjeta (la solicitud sigue pending); solo un aviso, una vez por solicitud.
+  private onEscalated(r: DeviRequest): void {
+    const key = `escalated:${r.id}`;
+    if (this.notified.has(key)) return;
+    this.notified.add(key);
+    if (shouldNotify(this.prefs, this.paused)) void this.deps.notify(escalationNotice(r, (id) => this.team.nameOf(id)));
   }
 
   clearAuditAlerts(): void {
@@ -447,6 +459,13 @@ export class DeviApp {
 
   async ignore(r: DeviRequest): Promise<void> {
     this.applyRequest(await this.need().ignoreRequest(r.id));
+  }
+
+  // Pedírselo a otra persona: solicitud nueva para `to` y la original cerrada.
+  async reassign(r: DeviRequest, to: string): Promise<void> {
+    const out = await this.need().reassignRequest(r.id, to);
+    this.applyRequest(out.original);
+    this.applyRequest(out.request);
   }
 
   // Descarga del servidor y guarda en <recibidos>/<id>/ o <recibidos>/<id>/respuesta/

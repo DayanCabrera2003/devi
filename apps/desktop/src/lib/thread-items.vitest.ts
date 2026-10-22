@@ -38,6 +38,15 @@ describe("hilo: elementos y estados", () => {
     expect(requestCaption(req({ ...mine, status: "timed_out" }), "m1").text).toMatch(/^Sin respuesta/);
   });
 
+  test("escalado: sin respuesta todavía (aviso) y la original reenviada a otra persona", () => {
+    const mine = { fromMemberId: "m1", toMemberId: "m2" };
+    expect(requestCaption(req({ ...mine, escalatedAt: 5 }), "m1")).toMatchObject({ tone: "warn" });
+    expect(requestCaption(req({ ...mine, escalatedAt: 5 }), "m1").text).toMatch(/^Sin respuesta todavía · /);
+    expect(requestCaption(req({ escalatedAt: 5 }), "m1").text).toMatch(/^Recibido · /); // al destinatario no
+    expect(requestCaption(req({ ...mine, status: "closed", closedNote: "Reenviada a Leo" }), "m1").text).toMatch(/^Reenviada a Leo · /);
+    expect(requestCaption(req({ ...mine, status: "closed" }), "m1").text).toMatch(/^Cerrada · /);
+  });
+
   test("las solicitudes enviadas desde la app dicen 'desde la app'", () => {
     expect(originLabel(req({ origin: "app", fromSessionName: "" }))).toBe("desde la app");
     expect(originLabel(req())).toBe("desde «backend»");
