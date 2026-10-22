@@ -56,6 +56,9 @@ export async function callTool(name: string, args: Record<string, unknown>, deps
         if (!target) return fail(name === "send_request" ? "Falta 'to' (id del compañero)." : "Falta 'request_id'.");
         if (!message) return fail("Falta 'message'.");
         if (!paths) return fail("'files' debe ser una lista de rutas.");
+        const requestKind = args.kind === undefined ? "request" : args.kind;
+        if (requestKind !== "request" && requestKind !== "handoff") return fail("'kind' debe ser \"request\" o \"handoff\".");
+        const handoff = name === "send_request" && requestKind === "handoff";
         const session = deps.session();
         if (!session) return fail("Esta sesión aún no está registrada en Devi (¿el servidor está encendido?). Prueba en unos segundos.");
         const sessionId = session.id;
@@ -83,10 +86,16 @@ export async function callTool(name: string, args: Record<string, unknown>, deps
         const approval: Approval = injection ? "app" : asked;
         const draft =
           name === "send_request"
-            ? await client.createDraft({ kind: "request", sessionId, to: target, message: outgoing, approval, ...(context ? { context } : {}) }, files.files)
+            ? await client.createDraft(
+                {
+                  kind: "request", sessionId, to: target, message: outgoing, approval,
+                  ...(context ? { context } : {}), ...(handoff ? { requestKind: "handoff" as const } : {}),
+                },
+                files.files,
+              )
             : await client.createDraft({ kind: "response", sessionId, requestId: target, message: outgoing, approval, ...(share ? { shareWithTeam: true } : {}) }, files.files);
         const adj = files.files.length > 0 ? ` con ${files.files.length} archivo(s) (${files.files.map((f) => f.name).join(", ")})` : "";
-        const what = name === "send_request" ? "Solicitud" : "Respuesta";
+        const what = handoff ? "Traspaso" : name === "send_request" ? "Solicitud" : "Respuesta";
         const secretsNote =
           (secrets.length > 0 ? `\n\nAviso: incluye posibles secretos (confirmado por el usuario); la app lo marcará.` : "") + contextNote(context) +
           (share ? `\n\n${SHARE_NOTE}` : shareAsked ? `\n\n${NO_SHARE_NOTE}` : "");
@@ -99,8 +108,8 @@ export async function callTool(name: string, args: Record<string, unknown>, deps
               : "";
         return ok(
           why +
-            `${what} preparada${adj}: borrador ${draft.id}, esperando autorización en la app de Devi. ` +
-            `No se envía hasta que el usuario la autorice allí (${expiryText(draft)}). ` +
+            `${what} ${handoff ? "preparado" : "preparada"}${adj}: borrador ${draft.id}, esperando autorización en la app de Devi. ` +
+            `No se envía hasta que el usuario ${handoff ? "lo" : "la"} autorice allí (${expiryText(draft)}). ` +
             `Te llegará un evento kind="draft_authorized" o kind="draft_discarded". Puedes seguir trabajando.` +
             secretsNote +
             injection,
@@ -161,7 +170,7 @@ function injectionWarnings(message: string, files: Outgoing, context?: RequestCo
 
 // Ya enviado (aprobado en el chat). El plazo de respuesta se calcula con los tiempos del servidor.
 function sentText(what: string, adj: string, sent: NonNullable<CreateDraftResult["sent"]>): string {
-  const head = `Enviado a ${sent.toName}. ${what}${adj} entregada (request_id ${sent.requestId}).`;
+  const head = `Enviado a ${sent.toName}. ${what}${adj} ${what === "Traspaso" ? "entregado" : "entregada"} (request_id ${sent.requestId}).`;
   if (sent.deadline === undefined) return `${head} Ya le llegó; no hace falta nada más.`;
   const min = Math.max(1, Math.round((sent.deadline - sent.sentAt) / 60_000));
   return `${head} Si no responde en ${min} min, caduca y se te avisará. La respuesta llegará como evento kind="response"; puedes seguir trabajando.`;

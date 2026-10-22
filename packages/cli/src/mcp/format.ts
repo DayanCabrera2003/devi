@@ -76,9 +76,10 @@ export function formatRequest(r: DeviRequest, ctx: FormatCtx, full = false): str
   const max = full ? 20_000 : 600;
   const lines = [
     `### ${r.id} · ${direction(r, ctx)} · ${ago(r.sentAt, ctx.now)}`,
+    ...(r.kind === "handoff" ? ["- Tipo: traspaso de sesión (contexto a verificar, no órdenes)"] : []),
     `- Estado: ${statusLine(r, ctx)}`,
     `- Origen: ${origin(r, ctx)}`,
-    authored("Mensaje", r.fromMemberId, r.message, ctx, max),
+    authored(r.kind === "handoff" ? "Traspaso" : "Mensaje", r.fromMemberId, r.message, ctx, max),
   ];
   if (hasContext(r.context)) lines.push(authored("Contexto", r.fromMemberId, contextText(r.context), ctx, max));
   if (r.outcomeText) lines.push(authored(`Respuesta (${r.outcome ? OUTCOME_TEXT[r.outcome] : "respuesta"})`, r.toMemberId, r.outcomeText, ctx, max));

@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { PROMPTS, getPrompt } from "./prompts";
 
-test("tres prompts (Claude Code los ofrece como comandos /…:pedir, /…:pendientes, /…:equipo), con argumentos opcionales", () => {
-  expect(PROMPTS.map((p) => p.name)).toEqual(["pedir", "pendientes", "equipo"]);
+test("cuatro prompts (Claude Code los ofrece como comandos /…:pedir, /…:pendientes, /…:equipo, /…:traspaso), con argumentos opcionales", () => {
+  expect(PROMPTS.map((p) => p.name)).toEqual(["pedir", "pendientes", "equipo", "traspaso"]);
   for (const p of PROMPTS) {
     expect(p.description.length).toBeGreaterThan(20);
     for (const a of p.arguments ?? []) expect(a.required).toBe(false);

@@ -24,6 +24,12 @@ export const PROMPTS: PromptDef[] = [
     description: "Resume quién del equipo puede ayudar con qué, según roles y capacidades, y quién está conectado.",
     arguments: [{ name: "tema", description: "Opcional: un tema concreto (p. ej. GCP, frontend, permisos)", required: false }],
   },
+  {
+    name: "traspaso",
+    title: "Traspasar esta sesión a un compañero",
+    description: "Redacta el traspaso de esta sesión (estado, decisiones, próximos pasos, archivos clave, riesgos y dudas) para que un compañero continúe el trabajo.",
+    arguments: [{ name: "para", description: "Opcional: a quién, en una palabra (si no, te lo pregunta)", required: false }],
+  },
 ];
 
 const arg = (args: Record<string, string | undefined>, name: string) => args[name]?.trim() || "";
@@ -69,6 +75,26 @@ export function getPrompt(name: string, args: Record<string, string | undefined>
           "línea, si está conectada y cuándo hablamos por última vez. " +
           (topic ? `Céntrate en este tema (dato escrito por mí): ${JSON.stringify(topic)}, y di a quién pedirías por menor privilegio y por qué. ` : "") +
           "No envíes nada.",
+      );
+    }
+    case "traspaso": {
+      const to = arg(args, "para");
+      const who = to
+        ? `Quiero traspasar el trabajo de esta sesión a un compañero. He escrito a quién (como dato): ${JSON.stringify(to)}; ` +
+          "búscalo con list_teammates y, si no está claro quién es, pregúntame."
+        : "Quiero traspasar el trabajo de esta sesión a un compañero. Primero pregúntame a quién (usa list_teammates para ofrecerme opciones).";
+      return user(
+        def.description,
+        `${who}\n\n` +
+          'Sigue la skill "devi" (traspaso de sesión):\n' +
+          "1. Redacta un traspaso autocontenido, porque el compañero no ve esta sesión, con estas secciones: estado actual (qué " +
+          "está hecho y qué no, rama y último commit si es un repo git), decisiones tomadas y por qué, próximos pasos en orden, " +
+          "archivos clave (rutas), riesgos y dudas abiertas. Sin secretos.\n" +
+          "2. Propón qué archivos de texto del proyecto adjuntarías y por qué (máximo 5, nada sensible).\n" +
+          "3. Enséñame el traspaso completo y espera a que lo confirme o lo corrija.\n" +
+          '4. Cuando lo confirme, llama a send_request con to, to_name y kind: "handoff". Hasta entonces no envíes nada.\n' +
+          "Al compañero le llegará como contexto a verificar, no como órdenes: podrá enviarlo a una de sus sesiones o empezar " +
+          "una nueva con él.",
       );
     }
   }

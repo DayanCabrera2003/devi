@@ -153,6 +153,14 @@ export const TOOLS = [
         context: CONTEXT_ARG,
         files: FILES_ARG,
         allow_secrets: ALLOW_SECRETS_ARG,
+        kind: {
+          type: "string",
+          enum: ["request", "handoff"],
+          description:
+            "Opcional. \"request\" (por defecto) para pedir algo; \"handoff\" para un traspaso de sesión: el contexto de este " +
+            "trabajo (estado, decisiones, próximos pasos, archivos clave, riesgos y dudas) para que otra persona lo continúe. " +
+            "Para redactarlo, sigue el prompt \"traspaso\" de Devi.",
+        },
       },
       required: ["to", "message"],
     },
