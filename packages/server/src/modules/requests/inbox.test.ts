@@ -11,7 +11,7 @@ const agent = { origin: null };
 const inbox = (login: string, parentPid: number, claudeSessionId = "cs-x") =>
   f.call(login, "GET", `/api/v1/sessions/inbox?parentPid=${parentPid}&claudeSessionId=${claudeSessionId}`, undefined, agent);
 // Al llegarle la solicitud, María también recibe el aviso request_notice en su sesión: aquí no interesa.
-const noNotices = <T extends { kind: string }>(items: T[]) => items.filter((i) => i.kind !== "request_notice");
+const noNotices = (items: any[]): any[] => items.filter((i) => i.kind !== "request_notice");
 const ack = (login: string, ids: string[]) => f.call(login, "POST", "/api/v1/sessions/inbox/ack", { ids }, agent);
 
 describe("bandeja de sesión (entregas sin canal)", () => {
