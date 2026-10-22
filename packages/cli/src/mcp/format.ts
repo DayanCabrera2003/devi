@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { type DeviRequest, type Draft, type FileMeta, type RequestStatus, neutralizeInline, wrapUntrusted } from "@devi/protocol";
+import { type DeviRequest, type Draft, type FileMeta, type RequestStatus, contextText, hasContext, neutralizeInline, wrapUntrusted } from "@devi/protocol";
 
 // Texto compacto para el agente (encabezados y listas, no JSON). Todo lo que escribió un compañero va
 // encuadrado (DEVI-UNTRUSTED) y los nombres, neutralizados: las herramientas de lectura no abren otra vía
@@ -80,6 +80,7 @@ export function formatRequest(r: DeviRequest, ctx: FormatCtx, full = false): str
     `- Origen: ${origin(r, ctx)}`,
     authored("Mensaje", r.fromMemberId, r.message, ctx, max),
   ];
+  if (hasContext(r.context)) lines.push(authored("Contexto", r.fromMemberId, contextText(r.context), ctx, max));
   if (r.outcomeText) lines.push(authored(`Respuesta (${r.outcome ? OUTCOME_TEXT[r.outcome] : "respuesta"})`, r.toMemberId, r.outcomeText, ctx, max));
   else if (r.outcome) lines.push(`- Resultado: ${OUTCOME_TEXT[r.outcome]}`);
   if (r.files.length > 0) {

@@ -1,7 +1,11 @@
 import type { DeviClient } from "@devi/client";
-import { type Approval, type CreateDraftResult, SECRETS_FLAG, type Session, scanForInjection, scanForSecrets } from "@devi/protocol";
+import {
+  type Approval, type CreateDraftResult, type GitContext, type RequestContext, SECRETS_FLAG, type Session, scanForInjection, scanForSecrets,
+} from "@devi/protocol";
 import { readLocalFiles } from "../files";
+import { type ContextResult, contextNote, contextScanText, outgoingContext } from "./context-arg";
 import { readableError } from "./errors";
+import { collectGitContext } from "./git-context";
 import { ToolInputError, getConversation, getRequest, listPending, listTeammates, whoami } from "./read-tools";
 
 export type ToolResult = { content: { type: "text"; text: string }[]; isError: boolean };
@@ -16,6 +20,7 @@ export type ToolDeps = {
   approval: () => Approval; // dónde aprueba el humano (según el cliente MCP; ver approval.ts)
   receivedDir?: string; // carpeta de archivos recibidos (para mostrar sus rutas locales)
   now?: () => number;
+  gitContext?: (cwd: string) => Promise<GitContext | undefined>; // rama, commit y diff --stat de la sesión (pruebas: falso)
 };
 
 const ok = (text: string): ToolResult => ({ content: [{ type: "text", text }], isError: false });
@@ -54,24 +59,30 @@ export async function callTool(name: string, args: Record<string, unknown>, deps
         if (name === "send_request" && target === session.memberId) return fail(SELF_SEND);
         const files = await readLocalFiles(paths, deps.cwd);
         if (!files.ok) return fail(files.error);
-        const secrets = secretsIn(message, files.files);
+        const ctx: ContextResult = name === "send_request"
+          ? await outgoingContext(args.context, () => (deps.gitContext ?? collectGitContext)(deps.cwd))
+          : { ok: true, context: undefined };
+        if (!ctx.ok) return fail(ctx.error);
+        const context = ctx.context;
+        const secrets = secretsIn(message, files.files, context);
         if (secrets.length > 0 && args.allow_secrets !== true) return fail(secretsRefusal(secrets));
         if (name === "send_request" && typeof args.to_name === "string" && args.to_name.trim()) {
           const mismatch = await nameMismatch(client, target, args.to_name);
           if (mismatch) return fail(mismatch);
         }
         const outgoing = secrets.length > 0 ? `${SECRETS_FLAG}\n\n${message}` : message;
-        const injection = injectionWarnings(message, files.files);
+        const injection = injectionWarnings(message, files.files, context);
         // Si lo que sale parece una inyección, no se envía directo aunque se aprobara en el chat: queda en la app.
         const asked = deps.approval();
         const approval: Approval = injection ? "app" : asked;
         const draft =
           name === "send_request"
-            ? await client.createDraft({ kind: "request", sessionId, to: target, message: outgoing, approval }, files.files)
+            ? await client.createDraft({ kind: "request", sessionId, to: target, message: outgoing, approval, ...(context ? { context } : {}) }, files.files)
             : await client.createDraft({ kind: "response", sessionId, requestId: target, message: outgoing, approval }, files.files);
         const adj = files.files.length > 0 ? ` con ${files.files.length} archivo(s) (${files.files.map((f) => f.name).join(", ")})` : "";
         const what = name === "send_request" ? "Solicitud" : "Respuesta";
-        const secretsNote = secrets.length > 0 ? `\n\nAviso: incluye posibles secretos (confirmado por el usuario); la app lo marcará.` : "";
+        const secretsNote =
+          (secrets.length > 0 ? `\n\nAviso: incluye posibles secretos (confirmado por el usuario); la app lo marcará.` : "") + contextNote(context);
         if (draft.approval === "chat" && draft.sent) return ok(sentText(what, adj, draft.sent) + secretsNote + injection);
         const why =
           asked === "chat" && injection
@@ -109,8 +120,9 @@ const SELF_SEND =
 type Outgoing = { name: string; content: string }[];
 
 // Secretos en el mensaje y en cada archivo, con dónde están.
-function secretsIn(message: string, files: Outgoing): string[] {
+function secretsIn(message: string, files: Outgoing, context?: RequestContext): string[] {
   const found = scanForSecrets(message).map((s) => `- en el mensaje: ${s.label} (${s.excerpt})`);
+  if (context) found.push(...scanForSecrets(contextScanText(context)).map((s) => `- en el contexto: ${s.label} (${s.excerpt})`));
   for (const f of files) found.push(...scanForSecrets(f.content).map((s) => `- en ${f.name}: ${s.label} (${s.excerpt})`));
   return found;
 }
@@ -124,8 +136,9 @@ function secretsRefusal(found: string[]): string {
 }
 
 // Lo que sale también se revisa: si parece una inyección, el remitente debe saberlo.
-function injectionWarnings(message: string, files: Outgoing): string {
+function injectionWarnings(message: string, files: Outgoing, context?: RequestContext): string {
   const parts = [{ where: "el mensaje", scan: scanForInjection(message) }, ...files.map((f) => ({ where: f.name, scan: scanForInjection(f.content) }))];
+  if (context) parts.push({ where: "el contexto", scan: scanForInjection(contextScanText(context)) });
   const hits = parts.filter((p) => p.scan.level !== "none");
   if (hits.length === 0) return "";
   return (

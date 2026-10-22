@@ -1,4 +1,4 @@
-import { FILE_LIMITS } from "@devi/protocol";
+import { CONTEXT_LIMITS, FILE_LIMITS } from "@devi/protocol";
 import { CONVERSATION_DEFAULT, CONVERSATION_MAX } from "./read-tools";
 
 // Definiciones de las herramientas del MCP (lo que ve el modelo en tools/list). Claude Code corta cada
@@ -25,6 +25,19 @@ const ALLOW_SECRETS_ARG = {
   description:
     "Solo si el usuario confirmó expresamente enviar algo que Devi detectó como posible secreto (tras enseñarle el aviso). " +
     "Saldrá marcado con una advertencia. Nunca lo pongas por tu cuenta.",
+};
+const CONTEXT_ARG = {
+  type: "object",
+  description:
+    "Opcional. Contexto que el compañero verá aparte del mensaje (plegado en la app). Devi añade solo la rama, el último " +
+    "commit y un `git diff --stat` acotado de la carpeta de esta sesión si es un repo git. El diff completo, solo como archivo " +
+    "en files. Sin secretos.",
+  properties: {
+    summary: { type: "string", maxLength: CONTEXT_LIMITS.textChars, description: "En qué estás y qué falla, en una o dos frases" },
+    tried: { type: "string", maxLength: CONTEXT_LIMITS.textChars, description: "Qué se ha probado ya y con qué resultado" },
+    error: { type: "string", maxLength: CONTEXT_LIMITS.errorChars, description: "El error exacto (las líneas que importan, sin secretos)" },
+    urgency: { type: "string", enum: ["baja", "normal", "alta"], description: "Urgencia según el usuario" },
+  },
 };
 const MESSAGE_RULES =
   "Escríbelo autocontenido, porque el compañero no ve esta sesión: qué hace falta y para qué; repo, rama, PR, entorno o " +
@@ -115,6 +128,7 @@ export const TOOLS = [
             "aviso, y Devi comprueba que corresponde a 'to' (si no, no envía nada).",
         },
         message: { type: "string", description: `Lo que se le pide. ${MESSAGE_RULES}` },
+        context: CONTEXT_ARG,
         files: FILES_ARG,
         allow_secrets: ALLOW_SECRETS_ARG,
       },
