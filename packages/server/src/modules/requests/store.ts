@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { DeviRequest, Draft } from "@devi/protocol";
+import { type DeviRequest, type Draft, type RequestContext, RequestContextSchema } from "@devi/protocol";
 import type { Migration } from "../../core/db";
 
 // Texto de la última actividad cuando la respuesta no trae texto (aceptada sin nota).
@@ -57,7 +57,26 @@ export const requestsMigrations: Migration[] = [
       CREATE INDEX requests_pair ON requests(from_member, to_member, created_at);
     `,
   },
+  {
+    // context: contexto opcional de la solicitud (JSON de RequestContext); el borrador lo guarda hasta enviarse.
+    version: 3,
+    sql: `
+      ALTER TABLE drafts ADD COLUMN context TEXT;
+      ALTER TABLE requests ADD COLUMN context TEXT;
+    `,
+  },
 ];
+
+// Lee el JSON guardado; si no es válido (corrupto o de otra versión), como si no hubiera contexto.
+function parseContext(row: { context: string | null } | null): RequestContext | undefined {
+  if (!row?.context) return undefined;
+  try {
+    const parsed = RequestContextSchema.safeParse(JSON.parse(row.context));
+    return parsed.success ? parsed.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export type DraftRecord = {
   id: string;
@@ -150,6 +169,25 @@ export class RequestsStore {
     return this.db
       .query(`SELECT ${DRAFT_COLS} FROM drafts WHERE kind = 'response' AND status = 'awaiting' AND request_id = $requestId`)
       .get({ requestId }) as DraftRecord | null;
+  }
+
+  // ---- contexto -------------------------------------------------------------
+  // Columna aparte de las de siempre: solo la leen las vistas (draftView/requestView) y las entregas.
+
+  setDraftContext(id: string, context: RequestContext | undefined): void {
+    this.db.query("UPDATE drafts SET context = $context WHERE id = $id").run({ id, context: context ? JSON.stringify(context) : null });
+  }
+
+  draftContext(id: string): RequestContext | undefined {
+    return parseContext(this.db.query("SELECT context FROM drafts WHERE id = $id").get({ id }) as { context: string | null } | null);
+  }
+
+  setRequestContext(id: string, context: RequestContext | undefined): void {
+    this.db.query("UPDATE requests SET context = $context WHERE id = $id").run({ id, context: context ? JSON.stringify(context) : null });
+  }
+
+  requestContext(id: string): RequestContext | undefined {
+    return parseContext(this.db.query("SELECT context FROM requests WHERE id = $id").get({ id }) as { context: string | null } | null);
   }
 
   // ---- solicitudes ----------------------------------------------------------

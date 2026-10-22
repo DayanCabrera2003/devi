@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import type {
-  API, AuditAction, AuditTarget, CreateDraftMeta, CreateDraftResult, DeviRequest, Draft, Perm, SendFromAppMeta, SessionDelivery, UserEvent,
+  API, AuditAction, AuditTarget, CreateDraftMeta, CreateDraftResult, DeviRequest, Draft, Perm, RequestContext, SendFromAppMeta, SessionDelivery, UserEvent,
 } from "@devi/protocol";
+import { hasContext } from "@devi/protocol";
 import type { z } from "zod";
 import type { Access } from "../../core/auth";
 import { HttpError } from "../../core/http";
@@ -22,6 +23,8 @@ const isResponseOpen = (s: RequestRecord["status"]) => (RESPONSE_OPEN as readonl
 // meta.files de las entregas: JSON de [{id, name}]. El MCP descarga los archivos y da rutas locales al agente.
 const filesMeta = (files: { id: string; name: string }[]) => JSON.stringify(files.map((f) => ({ id: f.id, name: f.name })));
 const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
+// Solo se añade la clave si hay contexto: las vistas sin él no cambian.
+const withContext = (context: RequestContext | undefined) => (context ? { context } : {});
 const conflict = (message: string) => new HttpError(409, message, { code: "conflict" });
 const sessionGone = () => new HttpError(409, "esa sesión ya no está abierta", { code: "session_gone" });
 
@@ -68,6 +71,7 @@ export class RequestsManager {
     // Tras el await, la solicitud pudo cambiar: se vuelve a comprobar.
     const request = meta.kind === "response" ? this.forwardedTo(access, meta.requestId) : null;
     const chat = meta.approval === "chat" && this.settings.chatApproval;
+    const context = meta.kind === "request" && hasContext(meta.context) ? meta.context : undefined;
 
     const previous = request ? this.store.awaitingResponseDraft(request.id) : null;
     const now = this.ctx.now();
@@ -99,10 +103,14 @@ export class RequestsManager {
           previousStaged = this.stageForAuthor(previous, this.discardedDelivery(previous, "replaced"));
         }
         this.store.insertDraft(d);
+        this.store.setDraftContext(d.id, context);
         this.files.record({ draftId: d.id, direction: d.kind, authorMemberId: access.memberId, peerMemberId: peer, written });
         if (sentRequest) {
           if (request) this.store.saveRequest(sentRequest);
-          else this.store.insertRequest(sentRequest);
+          else {
+            this.store.insertRequest(sentRequest);
+            this.store.setRequestContext(sentRequest.id, context);
+          }
           this.files.attachToRequest(d.id, sentRequest.id);
         }
       });
@@ -171,6 +179,7 @@ export class RequestsManager {
       let staged: SessionDelivery | null = null;
       this.store.transaction(() => {
         this.store.insertRequest(r);
+        this.store.setRequestContext(r.id, this.store.draftContext(d.id));
         this.store.setDraftStatus(d.id, "authorized");
         this.files.attachToRequest(d.id, r.id);
         staged = this.stageForAuthor(d, {
@@ -333,7 +342,7 @@ export class RequestsManager {
     const files = this.files.forRequest(r.id).files;
     const delivery: SessionDelivery = {
       kind: "request",
-      content: requestContent({ id: r.id, fromName: this.team.nameOf(r.fromMemberId), fromSessionName: r.fromSessionName, message: r.message, files, origin: r.origin }),
+      content: requestContent({ id: r.id, fromName: this.team.nameOf(r.fromMemberId), fromSessionName: r.fromSessionName, message: r.message, files, origin: r.origin, context: this.store.requestContext(r.id) }),
       meta: {
         request_id: r.id, from: r.fromMemberId, from_name: this.team.nameOf(r.fromMemberId),
         from_session: r.fromSessionName, files: filesMeta(files),
@@ -618,6 +627,7 @@ export class RequestsManager {
     const base = {
       id: d.id, authorMemberId: d.authorMemberId, authorSessionId: d.authorSessionId, message: d.message,
       status: d.status, files: this.files.forDraft(d.id), createdAt: d.createdAt, expiresAt: d.expiresAt,
+      ...withContext(d.kind === "request" ? this.store.draftContext(d.id) : undefined),
     };
     return d.kind === "request" ? { ...base, kind: "request", toMemberId: d.toMemberId! } : { ...base, kind: "response", requestId: d.requestId! };
   }
@@ -628,7 +638,7 @@ export class RequestsManager {
       id: r.id, origin: r.origin ?? "session", fromMemberId: r.fromMemberId, fromSessionId: r.fromSessionId, fromSessionName: r.fromSessionName,
       toMemberId: r.toMemberId, message: r.message, status: r.status, forwardedSessionId: r.forwardedSessionId ?? undefined,
       outcome: r.outcome ?? undefined, outcomeText: r.outcomeText ?? undefined, files, responseFiles,
-      createdAt: r.createdAt, sentAt: r.sentAt, deadline: r.deadline,
+      createdAt: r.createdAt, sentAt: r.sentAt, deadline: r.deadline, ...withContext(this.store.requestContext(r.id)),
     };
   }
 }
