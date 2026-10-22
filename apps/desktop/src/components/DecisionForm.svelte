@@ -9,8 +9,9 @@
     message: string;
     onConfirm: (text: string) => Promise<void>;
     onBack: () => void;
+    inline?: boolean;
   };
-  let { kind, fromName, message, onConfirm, onBack }: Props = $props();
+  let { kind, fromName, message, onConfirm, onBack, inline = false }: Props = $props();
 
   let text = $state("");
   let busy = $state(false);
@@ -31,7 +32,7 @@
   }
 </script>
 
-<Sheet title={accept ? "Lo hago yo" : `Rechazar la solicitud de ${fromName}`} onClose={onBack}>
+<Sheet title={accept ? "Lo hago yo" : `Rechazar la solicitud de ${fromName}`} onClose={onBack} {inline}>
   <p class="sheet-sub">
     {accept ? "Para lo que el agente no puede hacer (GCP, GitHub…)." : "El motivo es obligatorio: le llegará con el rechazo."}
   </p>

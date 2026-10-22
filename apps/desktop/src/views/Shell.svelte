@@ -1,11 +1,12 @@
 <script lang="ts">
-  // Ventana principal: crea DeviApp, la conecta con Tauri (eventos del tray, mascota, archivos
+  // Ventana principal: crea DeviApp, la conecta con Tauri (eventos del tray y del panel de avisos, mascota, archivos
   // arrastrados) y pinta ShellView.
   import { listen } from "@tauri-apps/api/event";
   import { onMount } from "svelte";
   import { createApp } from "../lib/boot";
   import { provideApp } from "../lib/context";
   import { MASCOT_READY } from "../lib/mascot";
+  import { NAVIGATE_EVENT, OPEN_CONVERSATION_EVENT, PAUSED_EVENT } from "../lib/popover";
   import ShellView from "./ShellView.svelte";
 
   const app = createApp();
@@ -13,10 +14,12 @@
 
   onMount(() => {
     const offs = [
-      listen<boolean>("devi://paused", (e) => app.setPaused(e.payload)),
-      listen<string>("devi://navigate", (e) => {
+      listen<boolean>(PAUSED_EVENT, (e) => app.setPaused(e.payload)),
+      listen<string>(NAVIGATE_EVENT, (e) => {
         if (e.payload === "ajustes") app.goto("ajustes");
       }),
+      // Desde el panel de avisos: "Abrir Devi" tras pulsar una tarjeta.
+      listen<string>(OPEN_CONVERSATION_EVENT, (e) => void app.openConversation(e.payload)),
       listen(MASCOT_READY, () => app.publishMascot()),
     ];
     const stopDrops = app.listenForDrops();

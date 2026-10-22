@@ -12,8 +12,9 @@
   import { combineScans } from "../lib/safety";
   import { requestCaption } from "../lib/thread-items";
 
-  type Props = { request: DeviRequest };
-  let { request }: Props = $props();
+  // compact: panel de avisos (formularios en línea y sin guardar en disco).
+  type Props = { request: DeviRequest; compact?: boolean };
+  let { request, compact = false }: Props = $props();
   const app = useApp();
 
   let mode = $state<"view" | "pick">("view");
@@ -78,7 +79,7 @@
   </div>
   <InjectionWarning scan={messageScan} />
   <FileList files={request.responseFiles} load={(id) => app.downloadFile(id)} onScan={(id, s) => (fileScans[id] = s)} />
-  {#if request.responseFiles.length > 0}
+  {#if !compact && request.responseFiles.length > 0}
     <SaveFilesButton save={() => app.saveFiles(request.id, "response", request.responseFiles)} />
   {/if}
   {#if scan.level === "high"}<SendConfirm bind:checked={reviewed} />{/if}
@@ -103,5 +104,6 @@
     preferredId={fromApp ? undefined : request.fromSessionId}
     onPick={pick}
     onBack={() => (mode = "view")}
+    inline={compact}
   />
 {/if}

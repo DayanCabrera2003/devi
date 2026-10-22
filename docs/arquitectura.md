@@ -58,7 +58,7 @@ La configuración del cliente (URL del servidor) vive en `devi/config.json` del 
 
 ### App de escritorio
 
-- **Tray** con menú y una **mascota flotante** opcional (Ajustes → Mostrar a Devi flotando; ventana transparente creada bajo demanda). Sin tray (GNOME sin extensión) cerrar la ventana la minimiza. Notificaciones nativas y arranque al iniciar sesión.
+- **Tray** con el icono de Devi (punto de acento si hay pendientes) y un **panel de avisos** (ventana `avisos`, 360 × 520, con las mismas acciones que la app y su propia conexión mientras se usa): clic izquierdo en macOS y Windows, "Ver avisos (N)" del menú en Linux. **Mascota flotante** opcional (Ajustes → Mostrar a Devi flotando; ventana transparente creada bajo demanda). Sin tray (GNOME sin extensión) cerrar la ventana la minimiza. Notificaciones nativas y arranque al iniciar sesión.
 - **Asistente de primer arranque**: comprueba Tailscale, pide la URL del servidor o activa «Este equipo es el servidor», prueba la conexión, instala la integración con Claude Code y ejecuta `devi doctor`.
 - **Modo servidor**: lanza `devi server` como sidecar y muestra el comando `tailscale serve` si falta.
 - **Vistas**: Bandeja (borradores por autorizar, solicitudes, respuestas, plazos vencidos), conversaciones por compañero (con envío directo desde la app), selector de sesiones, Ajustes y Admin (Personas · Roles · Servidor · Auditoría; solo con `team.admin`).

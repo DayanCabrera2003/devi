@@ -26,6 +26,8 @@
     "allow-stop-server",
     "allow-server-status",
     "allow-set-paused",
+    "allow-set-tray-attention",
+    "allow-tray-status",
     "allow-set-mascot-visible",
     "allow-quit-app"
   ]

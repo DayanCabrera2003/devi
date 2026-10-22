@@ -18,6 +18,8 @@ fn main() {
             "server_status",
             "show_main_window",
             "set_paused",
+            "set_tray_attention",
+            "tray_status",
             "set_mascot_visible",
             "quit_app",
         ])),

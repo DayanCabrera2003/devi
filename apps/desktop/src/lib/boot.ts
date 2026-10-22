@@ -14,5 +14,19 @@ export function createApp(): DeviApp {
     emitMascot: (s) => {
       void emitTo("mascota", MASCOT_EVENT, s).catch(() => {});
     },
+    trayAttention: (pending) => {
+      void native.setTrayAttention(pending).catch((e) => console.warn("[devi] icono de la bandeja", e));
+    },
+  });
+}
+
+// DeviApp del panel de avisos: su propia conexión (solo mientras se usa), sin notificaciones ni
+// mascota ni icono: de eso se encarga la ventana principal.
+export function createPopoverApp(): DeviApp {
+  return new DeviApp({
+    native,
+    makeApi: createDeviApi,
+    notify: () => {},
+    emitMascot: () => {},
   });
 }

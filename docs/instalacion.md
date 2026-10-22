@@ -70,7 +70,7 @@ La política por defecto de Tailscale permite todo (`{"src": ["*"], "dst": ["*"]
 - **Fedora / RHEL:** `sudo dnf install ./Devi-<versión>-1.x86_64.rpm`
 - **Cualquier distribución:** `chmod +x Devi_<versión>_amd64.AppImage && ./Devi_<versión>_amd64.AppImage`
 
-**Icono de la bandeja en GNOME.** GNOME no muestra iconos de bandeja sin una extensión:
+**Icono de la bandeja en GNOME.** En Linux los avisos se abren desde **Ver avisos (N)**, la primera entrada del menú del icono. GNOME no muestra iconos de bandeja sin una extensión:
 
 - **Ubuntu:** ya la trae.
 - **Fedora:** `sudo dnf install gnome-shell-extension-appindicator`, actívala en la app **Extensiones** y cierra sesión.

@@ -6,6 +6,7 @@
   import { errorMessage } from "../lib/api";
   import { useApp } from "../lib/context";
   import { normalizeServerUrl } from "../lib/format";
+  import { isLinux } from "../lib/popover";
   import { THEME_OPTIONS, type ThemePref } from "../lib/theme";
   import Page from "./Page.svelte";
   import FolderSetting from "./settings/FolderSetting.svelte";
@@ -19,9 +20,17 @@
   let prefsError = $state<string | null>(null);
   let themeError = $state<string | null>(null);
   let mascotError = $state<string | null>(null);
+  // Linux sin icono de bandeja: se explica cómo verlo en GNOME.
+  let trayMissing = $state(false);
   const theme = $derived<ThemePref>(app.prefs.theme ?? "system");
 
   onMount(() => {
+    if (isLinux(navigator.userAgent)) {
+      Promise.resolve()
+        .then(() => app.native.trayStatus())
+        .then((s) => (trayMissing = !s.available))
+        .catch(() => {});
+    }
     isEnabled()
       .then((v) => (autostart = v))
       .catch((e) => (prefsError = errorMessage(e)));
@@ -109,6 +118,12 @@
       </div>
     </div>
     {#if themeError}<div class="error">{themeError}</div>{/if}
+    {#if trayMissing}
+      <p class="group-foot">
+        Para ver a Devi en la barra superior de GNOME instala la extensión AppIndicator (Fedora:
+        <span class="mono selectable">sudo dnf install gnome-shell-extension-appindicator</span>) y actívala en Extensiones.
+      </p>
+    {/if}
     {#if mascotError}<div class="error">{mascotError}</div>{/if}
   </section>
 

@@ -4,6 +4,7 @@
 mod config;
 mod files;
 mod picked;
+mod popover;
 mod sidecar;
 mod tailscale;
 mod tray;
@@ -27,6 +28,7 @@ pub fn run() {
         .manage(sidecar::ServerState::default())
         .manage(picked::PickedFiles::default())
         .manage(windows::WindowState::default())
+        .manage(popover::PopoverState::default())
         .setup(|app| {
             let handle = app.handle();
             // Sin tray (p. ej. GNOME sin AppIndicator) cerrar la ventana la minimiza en vez de ocultarla.
@@ -51,6 +53,12 @@ pub fn run() {
             // Archivos soltados sobre la ventana principal: los lee y valida Rust (ver picked.rs).
             if let WindowEvent::DragDrop(drag) = event {
                 picked::on_drag_drop(window, drag);
+            }
+            // El panel de avisos se oculta en cuanto pierde el foco, como un popover del sistema.
+            if let WindowEvent::Focused(false) = event {
+                if window.label() == popover::POPOVER_LABEL {
+                    popover::hide_on_blur(window.app_handle());
+                }
             }
             // Cerrar no sale de Devi (se sale con "Salir de Devi"). La principal se oculta si hay tray
             // o mascota para volver; si no, se minimiza y queda en la barra de tareas.
@@ -81,6 +89,8 @@ pub fn run() {
             sidecar::server_status,
             tray::show_main_window,
             tray::set_paused,
+            tray::set_tray_attention,
+            tray::tray_status,
             windows::set_mascot_visible,
             tray::quit_app,
         ])

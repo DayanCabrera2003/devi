@@ -114,4 +114,31 @@ describe("Settings", () => {
     expect(box.checked).toBe(false);
     expect(app.prefs.showMascot).toBe(false);
   });
+
+  const GNOME_NOTE = /Para ver a Devi en la barra superior de GNOME instala la extensión AppIndicator/;
+
+  test("en Linux sin icono de bandeja explica cómo instalar AppIndicator", async () => {
+    const ua = vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15");
+    const trayStatus = vi.fn(async () => ({ available: false, paused: false }));
+    const { context } = await fakeApp({}, { trayStatus });
+    const { findByText } = render(Settings, { context });
+    const note = await findByText(GNOME_NOTE);
+    expect(note.textContent).toContain("sudo dnf install gnome-shell-extension-appindicator");
+    ua.mockRestore();
+  });
+
+  test("con icono de bandeja, o fuera de Linux, no hay nota", async () => {
+    const ua = vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (X11; Linux x86_64)");
+    const ok = await fakeApp({}, { trayStatus: vi.fn(async () => ({ available: true, paused: false })) });
+    const a = render(Settings, { context: ok.context });
+    await vi.waitFor(() => expect(ok.native.trayStatus).toHaveBeenCalled());
+    expect(a.queryByText(GNOME_NOTE)).toBeNull();
+    a.unmount();
+    ua.mockReturnValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)");
+    const mac = await fakeApp({}, { trayStatus: vi.fn(async () => ({ available: false, paused: false })) });
+    const b = render(Settings, { context: mac.context });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(b.queryByText(GNOME_NOTE)).toBeNull();
+    ua.mockRestore();
+  });
 });

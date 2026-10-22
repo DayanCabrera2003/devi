@@ -16,7 +16,7 @@ tauri-build = { version = "2.7", features = [] }
 [dependencies]
 # macos-private-api: la mascota transparente en macOS (exige app.macOSPrivateApi en tauri.conf.json).
 # Devi es una app interna sin firmar ni App Store, así que la API privada no es un problema.
-tauri = { version = "2.12", features = ["tray-icon", "macos-private-api"] }
+tauri = { version = "2.12", features = ["tray-icon", "image-png", "macos-private-api"] }
 tauri-plugin-autostart = "2.7"
 tauri-plugin-dialog = "2.8"
 tauri-plugin-notification = "2.7"

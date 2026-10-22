@@ -668,6 +668,46 @@ body.mascota .ambient { display: none; }
 .mascot-pill { font-size: 11px; min-height: 24px; padding: 0 10px; background: var(--fill); }
 .mascot-pill.offline { color: var(--label2); }
 
+/* ---- panel de avisos (ventana `avisos`, 360 × 520, transparente) ---- */
+
+html.avisos, html.avisos body { background: transparent; height: 100%; overflow: hidden; }
+html.avisos #app { height: 100%; }
+.popover {
+  height: 100%; display: flex; flex-direction: column; overflow: hidden; border-radius: 18px;
+  /* La ventana es transparente y el webview no difumina el escritorio: cristal casi opaco. */
+  background: color-mix(in srgb, var(--glass-solid) 94%, transparent);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .popover { background: var(--glass-solid); }
+}
+.pop-head { display: flex; align-items: center; gap: 10px; padding: 12px 10px 10px 14px; border-bottom: 0.5px solid var(--separator); }
+.pop-heading { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pop-heading strong { font-size: 15px; font-weight: 650; letter-spacing: -0.015em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pop-status { font-size: 11.5px; color: var(--label2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pop-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 8px 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.pop-card { border-radius: 14px; background: var(--fill); padding: 6px 4px 8px; min-width: 0; overflow-wrap: anywhere; }
+.pop-card.selected { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.pop-card-head {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 28px; padding: 2px 8px;
+  background: transparent; color: var(--label2); font-size: 12px; font-weight: 600; justify-content: flex-start; text-align: left;
+}
+.pop-card-head:hover:not(:disabled) { background: var(--hover); color: var(--label); }
+.pop-card-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pop-card .group { margin-top: 4px; }
+.pop-card .bubble, .pop-card .caption, .pop-card .files { max-width: 92%; }
+.pop-card .bubble.agent { max-width: 100%; }
+.pop-card .bubble .card-msg { font-size: 13px; }
+.pop-card .actions { margin: 6px 4px 0; gap: 6px; }
+.pop-card .actions button { min-height: 28px; font-size: 12.5px; padding: 0 10px; }
+.pop-card .sheet.inline { width: auto; max-height: none; margin: 8px 4px 0; padding: 10px; border-radius: 12px; background: var(--elevated); animation: none; }
+.pop-card .sheet.inline .sheet-head h2 { font-size: 13px; }
+.pop-card .injection, .pop-card .secrets, .pop-card .send-confirm { max-width: 100%; }
+.pop-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; padding: 24px; }
+.pop-empty-title { font-size: 15px; font-weight: 600; margin: 8px 0 0; }
+.pop-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px 12px; border-top: 0.5px solid var(--separator); }
+.pop-foot .check { min-height: 28px; font-size: 12.5px; }
+.pop-error { margin: 0 14px 10px; }
+
 /* ---- tamaños: una columna por debajo de 760 px ---- */
 
 @media (max-width: 1000px) {

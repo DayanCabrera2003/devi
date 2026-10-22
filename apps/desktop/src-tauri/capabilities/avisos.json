@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "avisos",
+  "description": "Panel de avisos del icono de la bandeja: lee la configuración para hablar con el servidor por HTTP, muestra la ventana principal, pausa avisos y se oculta. Sin disco ni shell.",
+  "windows": ["avisos"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-hide",
+    "allow-read-client-config",
+    "allow-show-main-window",
+    "allow-set-paused",
+    "allow-tray-status"
+  ]
+}

@@ -24,6 +24,8 @@ export type ClientConfig = {
 
 export type TailscaleSelf = { login: string; dnsName: string };
 export type DeviOutput = { code: number | null; stdout: string; stderr: string };
+// available: false si no se pudo crear el icono de la bandeja (p. ej. GNOME sin AppIndicator).
+export type TrayStatus = { available: boolean; paused: boolean };
 export type ServerStatus = { running: boolean; pid: number | null; exitCode: number | null; log: string[] };
 
 // Archivos para adjuntar al enviar desde la app. Rust los lee y valida (texto UTF-8 sin NUL, ≤ 1 MB) y los
@@ -64,6 +66,9 @@ export const native = {
   showMainWindow: () => invoke<void>("show_main_window"),
   // Crea la ventana mascota si hace falta y la muestra u oculta (la preferencia la guarda la UI).
   setMascotVisible: (visible: boolean) => invoke<void>("set_mascot_visible", { visible }),
+  // Cuántas cosas me esperan: punto en el icono, "Ver avisos (N)" y tooltip del tray.
+  setTrayAttention: (pending: number) => invoke<void>("set_tray_attention", { pending }),
+  trayStatus: () => invoke<TrayStatus>("tray_status"),
   setPaused: (paused: boolean) => invoke<void>("set_paused", { paused }),
   // Mata el servidor sidecar (si lo hay) y cierra Devi: la salida sin icono de bandeja.
   quitApp: () => invoke<void>("quit_app"),

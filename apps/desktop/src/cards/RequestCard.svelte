@@ -12,8 +12,9 @@
   import { combineScans } from "../lib/safety";
   import { originLabel, requestCaption } from "../lib/thread-items";
 
-  type Props = { request: DeviRequest };
-  let { request }: Props = $props();
+  // compact: panel de avisos (formularios en línea y sin guardar en disco).
+  type Props = { request: DeviRequest; compact?: boolean };
+  let { request, compact = false }: Props = $props();
   const app = useApp();
 
   let mode = $state<"view" | "pick" | "accept" | "reject">("view");
@@ -56,7 +57,7 @@
   </div>
   <InjectionWarning scan={messageScan} />
   <FileList files={request.files} load={(id) => app.downloadFile(id)} onScan={(id, s) => (fileScans[id] = s)} />
-  {#if request.files.length > 0}
+  {#if !compact && request.files.length > 0}
     <SaveFilesButton save={() => app.saveFiles(request.id, "request", request.files)} />
   {/if}
   <div class="caption">{caption.text}</div>
@@ -77,9 +78,10 @@
     {hint}
     onPick={pick}
     onBack={() => (mode = "view")}
+    inline={compact}
   />
 {:else if mode === "accept"}
-  <DecisionForm kind="accept" fromName={from} message={request.message} onConfirm={(t) => app.accept(request, t)} onBack={() => (mode = "view")} />
+  <DecisionForm kind="accept" fromName={from} message={request.message} onConfirm={(t) => app.accept(request, t)} onBack={() => (mode = "view")} inline={compact} />
 {:else if mode === "reject"}
-  <DecisionForm kind="reject" fromName={from} message={request.message} onConfirm={(t) => app.reject(request, t)} onBack={() => (mode = "view")} />
+  <DecisionForm kind="reject" fromName={from} message={request.message} onConfirm={(t) => app.reject(request, t)} onBack={() => (mode = "view")} inline={compact} />
 {/if}

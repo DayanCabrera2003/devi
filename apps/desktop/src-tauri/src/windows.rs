@@ -12,11 +12,12 @@ use crate::config::ClientConfig;
 pub const MAIN_LABEL: &str = "main";
 pub const MASCOT_LABEL: &str = "mascota";
 
-/// Estado nativo de las ventanas: si el icono de la bandeja existe y si se quiere la mascota.
+/// Estado nativo: si el icono de la bandeja existe, si se quiere la mascota y si los avisos están en pausa.
 #[derive(Default)]
 pub struct WindowState {
     tray: AtomicBool,
     mascot: AtomicBool,
+    paused: AtomicBool,
 }
 
 impl WindowState {
@@ -34,6 +35,14 @@ impl WindowState {
 
     pub fn mascot_wanted(&self) -> bool {
         self.mascot.load(Ordering::SeqCst)
+    }
+
+    pub fn set_paused(&self, paused: bool) {
+        self.paused.store(paused, Ordering::SeqCst);
+    }
+
+    pub fn paused(&self) -> bool {
+        self.paused.load(Ordering::SeqCst)
     }
 }
 

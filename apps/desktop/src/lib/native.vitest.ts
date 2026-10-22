@@ -42,6 +42,15 @@ describe("native", () => {
     expect(invoke).toHaveBeenLastCalledWith("set_mascot_visible", { visible: true });
   });
 
+  test("comandos de la bandeja: contador de avisos y estado", async () => {
+    invoke.mockResolvedValue(undefined);
+    await native.setTrayAttention(3);
+    expect(invoke).toHaveBeenLastCalledWith("set_tray_attention", { pending: 3 });
+    invoke.mockResolvedValue({ available: false, paused: true });
+    expect(await native.trayStatus()).toEqual({ available: false, paused: true });
+    expect(invoke).toHaveBeenLastCalledWith("tray_status");
+  });
+
   test("prefsOf completa con los valores por defecto", () => {
     expect(prefsOf(null)).toEqual(DEFAULT_PREFS);
     // Una config anterior sin showMascot: la mascota queda apagada.

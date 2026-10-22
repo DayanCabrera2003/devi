@@ -14,8 +14,9 @@
     preferredId?: string;
     onPick: (s: Session) => Promise<void>;
     onBack: () => void;
+    inline?: boolean;
   };
-  let { sessions, loading, error, title, hint, preferredId, onPick, onBack }: Props = $props();
+  let { sessions, loading, error, title, hint, preferredId, onPick, onBack, inline = false }: Props = $props();
 
   const sorted = $derived(sortSessions(sessions, preferredId));
   let busy = $state(false);
@@ -34,7 +35,7 @@
   }
 </script>
 
-<Sheet {title} onClose={onBack}>
+<Sheet {title} onClose={onBack} {inline}>
   <p class="sheet-sub">{hint}</p>
   <div class="sessions">
     {#if loading}

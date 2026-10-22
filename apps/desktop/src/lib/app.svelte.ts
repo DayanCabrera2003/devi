@@ -23,6 +23,8 @@ export type AppDeps = {
   makeApi: (config: ClientConfig) => DeviApi;
   notify: (n: Notice) => void | Promise<void>;
   emitMascot: (s: MascotState) => void;
+  // Solo la ventana principal: lleva el número de pendientes al icono de la bandeja.
+  trayAttention?: (pending: number) => void;
   // Conversaciones y archivos nativos; por defecto, los reales.
   conversations?: (api: DeviApi) => ConversationsHttp;
   files?: NativeFiles;
@@ -79,6 +81,7 @@ export class DeviApp {
   private readonly notified = new Set<string>();
   private readonly alerted = new Set<number>();
   private replay: Replay | null = null;
+  private trayPending = -1;
 
   constructor(deps: AppDeps) {
     this.deps = deps;
@@ -293,6 +296,11 @@ export class DeviApp {
       label: this.conn.label,
       pokeKey: this.pokeKey,
     });
+    // Al icono de la bandeja solo cuando cambia el número.
+    if (this.deps.trayAttention && this.inbox.pending !== this.trayPending) {
+      this.trayPending = this.inbox.pending;
+      this.deps.trayAttention(this.trayPending);
+    }
   }
 
   // ---- modo servidor ----------------------------------------------------------------

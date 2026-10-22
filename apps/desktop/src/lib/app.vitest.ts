@@ -7,7 +7,7 @@ import { ME, TEAM, draft, req } from "./test-fixtures";
 
 const CONFIG: ClientConfig = { serverUrl: "https://pc.t.ts.net", app: { notifications: true, setupDone: true } };
 
-function setup(config: ClientConfig | null = CONFIG) {
+function setup(config: ClientConfig | null = CONFIG, extra: { trayAttention?: (pending: number) => void } = {}) {
   let onEvent: (e: UserEvent) => void = () => {};
   let onStatus: (s: string, err?: unknown) => void = () => {};
   const live = { subs: 0, unsubscribes: 0 };
@@ -48,6 +48,7 @@ function setup(config: ClientConfig | null = CONFIG) {
     makeApi: () => api as unknown as DeviApi,
     notify,
     emitMascot,
+    ...extra,
   });
   return {
     app, api, native, notify, emitMascot,
@@ -488,5 +489,24 @@ describe("DeviApp", () => {
       expect(t.app.auditAlerts).toHaveLength(0);
       expect(t.app.inbox.cards).toHaveLength(0);
     });
+  });
+
+  test("el icono de la bandeja sigue lo que me espera, sin repetir el mismo número", async () => {
+    vi.useFakeTimers();
+    const trayAttention = vi.fn();
+    const t = setup(CONFIG, { trayAttention });
+    await t.app.boot();
+    t.status("open");
+    await settle();
+    expect(trayAttention).toHaveBeenLastCalledWith(0);
+    const calls = trayAttention.mock.calls.length;
+    t.event(incoming);
+    expect(trayAttention).toHaveBeenLastCalledWith(1);
+    t.event({ type: "draft.awaiting", draft: draft() });
+    expect(trayAttention).toHaveBeenLastCalledWith(2);
+    t.app.publishMascot(); // mismo número: no se vuelve a llamar a Rust
+    expect(trayAttention).toHaveBeenCalledTimes(calls + 2);
+    await t.app.discardDraft(draft());
+    expect(trayAttention).toHaveBeenLastCalledWith(1);
   });
 });
