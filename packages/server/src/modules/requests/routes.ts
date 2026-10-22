@@ -46,8 +46,8 @@ export function registerRequestRoutes(r: Router, ctx: ModuleContext, requests: R
     return json(requests.forward(access, params.id!, sessionId));
   });
   r.on(API.acceptRequest, async ({ request, params, access }) => {
-    const { note } = await readBody(request, API.acceptRequest.body);
-    return json(requests.accept(access, params.id!, note));
+    const { note, shareWithTeam } = await readBody(request, API.acceptRequest.body);
+    return json(requests.accept(access, params.id!, note, shareWithTeam));
   });
   r.on(API.rejectRequest, async ({ request, params, access }) => {
     const { reason } = await readBody(request, API.rejectRequest.body);

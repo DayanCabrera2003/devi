@@ -65,6 +65,11 @@ export const requestsMigrations: Migration[] = [
       ALTER TABLE requests ADD COLUMN context TEXT;
     `,
   },
+  {
+    // share_with_team: el borrador de respuesta se guarda en la base del equipo al enviarse.
+    version: 4,
+    sql: `ALTER TABLE drafts ADD COLUMN share_with_team INTEGER NOT NULL DEFAULT 0;`,
+  },
 ];
 
 // Lee el JSON guardado; si no es válido (corrupto o de otra versión), como si no hubiera contexto.
@@ -90,7 +95,13 @@ export type DraftRecord = {
   status: Draft["status"];
   createdAt: number;
   expiresAt: number;
+  shareWithTeam?: boolean; // kind=response: guardar en la base del equipo al enviarse (solo si es true)
 };
+
+// share_with_team es 0/1 en SQLite: en el registro solo aparece si está activo.
+type DraftRow = Omit<DraftRecord, "shareWithTeam"> & { shareWithTeam: number };
+const toDraft = ({ shareWithTeam, ...d }: DraftRow): DraftRecord => (shareWithTeam ? { ...d, shareWithTeam: true } : d);
+const toDraftOrNull = (row: unknown): DraftRecord | null => (row ? toDraft(row as DraftRow) : null);
 
 export type RequestRecord = {
   id: string;
@@ -111,7 +122,7 @@ export type RequestRecord = {
 
 const DRAFT_COLS = `id, kind, author_member AS authorMemberId, author_session AS authorSessionId,
   author_session_name AS authorSessionName, to_member AS toMemberId, request_id AS requestId, message, status,
-  created_at AS createdAt, expires_at AS expiresAt`;
+  created_at AS createdAt, expires_at AS expiresAt, share_with_team AS shareWithTeam`;
 
 const REQUEST_COLS = `id, from_member AS fromMemberId, from_session AS fromSessionId, from_session_name AS fromSessionName,
   to_member AS toMemberId, message, status, forwarded_session AS forwardedSessionId, outcome, outcome_text AS outcomeText,
@@ -138,15 +149,15 @@ export class RequestsStore {
     this.db
       .query(
         `INSERT INTO drafts (id, kind, author_member, author_session, author_session_name, to_member, request_id, message,
-                             status, created_at, expires_at)
+                             status, created_at, expires_at, share_with_team)
          VALUES ($id, $kind, $authorMemberId, $authorSessionId, $authorSessionName, $toMemberId, $requestId, $message,
-                 $status, $createdAt, $expiresAt)`,
+                 $status, $createdAt, $expiresAt, $shareWithTeam)`,
       )
-      .run(d);
+      .run({ ...d, shareWithTeam: d.shareWithTeam ? 1 : 0 });
   }
 
   getDraft(id: string): DraftRecord | null {
-    return this.db.query(`SELECT ${DRAFT_COLS} FROM drafts WHERE id = $id`).get({ id }) as DraftRecord | null;
+    return toDraftOrNull(this.db.query(`SELECT ${DRAFT_COLS} FROM drafts WHERE id = $id`).get({ id }));
   }
 
   setDraftStatus(id: string, status: DraftRecord["status"]): void {
@@ -154,21 +165,21 @@ export class RequestsStore {
   }
 
   awaitingDrafts(): DraftRecord[] {
-    return this.db
+    return (this.db
       .query(`SELECT ${DRAFT_COLS} FROM drafts WHERE status = 'awaiting' ORDER BY created_at`)
-      .all() as DraftRecord[];
+      .all() as DraftRow[]).map(toDraft);
   }
 
   awaitingDraftsBy(memberId: string): DraftRecord[] {
-    return this.db
+    return (this.db
       .query(`SELECT ${DRAFT_COLS} FROM drafts WHERE status = 'awaiting' AND author_member = $memberId ORDER BY created_at`)
-      .all({ memberId }) as DraftRecord[];
+      .all({ memberId }) as DraftRow[]).map(toDraft);
   }
 
   awaitingResponseDraft(requestId: string): DraftRecord | null {
-    return this.db
+    return toDraftOrNull(this.db
       .query(`SELECT ${DRAFT_COLS} FROM drafts WHERE kind = 'response' AND status = 'awaiting' AND request_id = $requestId`)
-      .get({ requestId }) as DraftRecord | null;
+      .get({ requestId }));
   }
 
   // ---- contexto -------------------------------------------------------------

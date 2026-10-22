@@ -6,12 +6,14 @@ import { registerRequestRoutes } from "./routes";
 import { RequestsManager } from "./service";
 import { RequestsStore, requestsMigrations } from "./store";
 
-// Eventos internos que emite este módulo (files los escucha para la retención).
+// Eventos internos que emite este módulo (files los escucha para la retención; knowledge, request.shared).
 declare module "../../core/bus" {
   interface BusEvents {
     "draft.discarded": { draftId: string };
     "request.closed": { requestId: string };
     "session.closed": { sessionId: string };
+    // Respondida con "Guardar en la base del equipo" (knowledge lo indexa). answeredAt: cuándo se respondió.
+    "request.shared": { requestId: string; question: string; answer: string; askedBy: string; answeredBy: string; answeredAt: number };
   }
 }
 

@@ -79,6 +79,7 @@ export class RequestsManager {
       id: crypto.randomUUID(), kind: meta.kind, authorMemberId: access.memberId, authorSessionId: session.id,
       authorSessionName: session.name, toMemberId: meta.kind === "request" ? peer : null, requestId: request?.id ?? null,
       message: meta.message.trim(), status: chat ? "authorized" : "awaiting", createdAt: now, expiresAt: now + this.settings.draftTtlMs,
+      shareWithTeam: meta.kind === "response" && meta.shareWithTeam,
     };
     // Aprobado en el chat: la solicitud nueva o la respuesta aplicada, preparadas para la misma transacción.
     const sentRequest: RequestRecord | null = !chat
@@ -131,7 +132,7 @@ export class RequestsManager {
       this.audit("draft.approved_in_chat", access.memberId, "draft", d.id, {
         ...details, from: access.memberId, fromName: this.team.nameOf(access.memberId),
       });
-      return { ...this.draftView(d), approval: "chat", sent: this.afterSent(access, sentRequest, d.id) };
+      return { ...this.draftView(d), approval: "chat", sent: this.afterSent(access, sentRequest, d) };
     }
     this.audit("draft.created", access.memberId, "draft", d.id, details);
     if (request) this.timers.cancel(requestKey(request.id)); // el plazo se pausa mientras haya borrador de respuesta
@@ -143,7 +144,7 @@ export class RequestsManager {
 
   // Efectos tras el commit de algo aprobado en el chat (los mismos que authorize): plazos y avisos a las apps.
   // A la sesión autora no se le manda draft_authorized: el resultado de la herramienta ya se lo dice.
-  private afterSent(access: Access, r: RequestRecord, draftId: string): NonNullable<CreateDraftResult["sent"]> {
+  private afterSent(access: Access, r: RequestRecord, d: DraftRecord): NonNullable<CreateDraftResult["sent"]> {
     const view = this.requestView(r);
     if (r.status === "pending") {
       this.schedule(r);
@@ -152,10 +153,11 @@ export class RequestsManager {
       return { requestId: r.id, toName: this.team.nameOf(r.toMemberId), sentAt: r.sentAt, deadline: r.deadline };
     }
     this.timers.cancel(requestKey(r.id));
-    this.audit("request.answered", access.memberId, "request", r.id, { draftId, to: r.fromMemberId });
+    this.audit("request.answered", access.memberId, "request", r.id, { draftId: d.id, to: r.fromMemberId });
     this.push(r.fromMemberId, { type: "response.incoming", request: view });
     this.push(r.fromMemberId, { type: "request.updated", request: view });
     this.push(r.toMemberId, { type: "request.updated", request: view });
+    if (d.shareWithTeam) this.share(r);
     return { requestId: r.id, toName: this.team.nameOf(r.fromMemberId), sentAt: this.ctx.now() };
   }
 
@@ -221,6 +223,7 @@ export class RequestsManager {
       this.push(r.fromMemberId, { type: "request.updated", request: view });
       this.push(r.toMemberId, { type: "request.updated", request: view });
       this.sendStaged(d, staged);
+      if (d.shareWithTeam) this.share(r);
     }
     return this.draftView(this.store.getDraft(d.id)!);
   }
@@ -361,13 +364,15 @@ export class RequestsManager {
     return this.pushBoth(r, "request.updated");
   }
 
-  accept(access: Access, id: string, note: string | undefined): DeviRequest {
+  accept(access: Access, id: string, note: string | undefined, shareWithTeam = false): DeviRequest {
     const r = this.received(access, id);
     if (r.status !== "pending") throw conflict(`la solicitud ya está ${r.status}`);
     r.status = r.outcome = "accepted";
     r.outcomeText = note?.trim() || null;
     this.audit("request.accepted", access.memberId, "request", r.id, { from: r.fromMemberId });
-    return this.answer(r);
+    const view = this.answer(r);
+    if (shareWithTeam) this.share(r);
+    return view;
   }
 
   reject(access: Access, id: string, reason: string): DeviRequest {
@@ -514,6 +519,15 @@ export class RequestsManager {
     return this.pushBoth(r, "request.updated");
   }
 
+  // "Guardar en la base del equipo": se publica en el bus (knowledge lo indexa si no hay secretos).
+  // Sin texto de respuesta (aceptada sin nota) no hay nada que guardar.
+  private share(r: RequestRecord): void {
+    if (!r.outcomeText) return;
+    this.ctx.bus.emit("request.shared", {
+      requestId: r.id, question: r.message, answer: r.outcomeText, askedBy: r.fromMemberId, answeredBy: r.toMemberId, answeredAt: this.ctx.now(),
+    });
+  }
+
   private close(r: RequestRecord): DeviRequest {
     r.status = "closed";
     this.store.saveRequest(r);
@@ -629,7 +643,8 @@ export class RequestsManager {
       status: d.status, files: this.files.forDraft(d.id), createdAt: d.createdAt, expiresAt: d.expiresAt,
       ...withContext(d.kind === "request" ? this.store.draftContext(d.id) : undefined),
     };
-    return d.kind === "request" ? { ...base, kind: "request", toMemberId: d.toMemberId! } : { ...base, kind: "response", requestId: d.requestId! };
+    if (d.kind === "request") return { ...base, kind: "request", toMemberId: d.toMemberId! };
+    return { ...base, kind: "response", requestId: d.requestId!, ...(d.shareWithTeam ? { shareWithTeam: true } : {}) };
   }
 
   private requestView(r: RequestRecord): DeviRequest {
