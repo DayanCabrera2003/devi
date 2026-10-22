@@ -11,6 +11,8 @@ import { ConversationPageSchema, ConversationsResponseSchema, SendFromAppMeta } 
 import { PendingSchema } from "./pending";
 import { KnowledgeResultSchema } from "./knowledge";
 import { WeekSchema } from "./week";
+import { MemberPrefsSchema } from "./notices";
+import { SessionDeliverySchema } from "./events";
 
 // Quién puede llamar una ruta además del permiso (lo comprueba el módulo, no el núcleo):
 // any = cualquier miembro; admin = team.admin; author = autor del borrador;
@@ -105,6 +107,17 @@ export const CreateDraftResult = z.intersection(
 );
 export type CreateDraftResult = z.infer<typeof CreateDraftResult>;
 
+// Atender una solicitud desde Claude Code (take_request / decline_request del MCP). No son rutas humanas: las
+// aprueba el humano en el aviso de permisos de Claude Code, con el mismo mecanismo que los envíos (approval "chat"
+// y el ajuste chatApproval). Con approval "app" o chatApproval desactivado, el servidor las rechaza: se hace en la app.
+// sessionId: la sesión que llama (de quien recibe la solicitud y viva).
+export const TakeRequestBody = z.object({ sessionId: z.string(), approval: ApprovalSchema });
+export const DeclineRequestBody = z.object({ sessionId: z.string(), reason: NonEmpty, approval: ApprovalSchema });
+// La solicitud queda forwarded a esa sesión; delivery es la misma entrega que el reenvío desde la app (el MCP la
+// devuelve como resultado de la herramienta y confirma su entrada de la bandeja).
+export const TakeRequestResult = z.object({ request: DeviRequestSchema, delivery: SessionDeliverySchema });
+export type TakeRequestResult = z.infer<typeof TakeRequestResult>;
+
 export const ReassignResult = z.object({ request: DeviRequestSchema, original: DeviRequestSchema });
 export type ReassignResult = z.infer<typeof ReassignResult>;
 
@@ -154,6 +167,10 @@ export const API = {
   reassignRequest: route({ human: true, method: "POST", path: "/api/v1/requests/:id/reassign", perm: "requests.send", actor: "sender",
     body: z.object({ to: NonEmpty }), response: ReassignResult }),
 
+  // Traer a mi sesión o rechazar desde Claude Code (ver TakeRequestBody).
+  takeRequest: route({ method: "POST", path: "/api/v1/requests/:id/take", perm: null, actor: "recipient", body: TakeRequestBody, response: TakeRequestResult }),
+  declineRequest: route({ method: "POST", path: "/api/v1/requests/:id/decline", perm: null, actor: "recipient", body: DeclineRequestBody, response: DeviRequestSchema }),
+
   // Enviar desde la app (multipart: "meta" = SendFromAppMeta + 0..5 "files"; con archivos pide además files.send).
   // La escribe una persona: sale directamente como pending, sin borrador.
   sendFromApp: route({ human: true, method: "POST", path: "/api/v1/requests", perm: "requests.send", actor: "any", body: SendFromAppMeta, response: DeviRequestSchema }),
@@ -169,6 +186,9 @@ export const API = {
   searchKnowledge: route({ method: "GET", path: "/api/v1/knowledge", perm: null, actor: "any", body: Empty /* query: KnowledgeQuery */, response: KnowledgeResultSchema }),
   withdrawKnowledge: route({ human: true, method: "DELETE", path: "/api/v1/knowledge/:id", perm: null, actor: "answerer", body: Empty, response: Ok }),
   // «Tu semana» en la app: resumen de los últimos 7 días de quien llama (solo sus datos).
+  // Preferencias de quien llama (avisos en sus sesiones). Cambiarlas, solo desde la app.
+  myPrefs: route({ method: "GET", path: "/api/v1/me/prefs", perm: null, actor: "any", body: Empty, response: MemberPrefsSchema }),
+  updateMyPrefs: route({ human: true, method: "PATCH", path: "/api/v1/me/prefs", perm: null, actor: "any", body: MemberPrefsSchema.partial(), response: MemberPrefsSchema }),
   myWeek: route({ method: "GET", path: "/api/v1/me/week", perm: null, actor: "any", body: Empty, response: WeekSchema }),
 
   downloadFile: route({ method: "GET", path: "/api/v1/files/:id", perm: null, actor: "party", body: Empty, response: z.any() /* text/plain */ }),

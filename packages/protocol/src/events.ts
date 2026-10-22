@@ -29,7 +29,8 @@ export type UserEventType = UserEvent["type"];
 // SSE de sesión (MCP → canal de Claude Code). En el cable: `event: deliver` + `data: <JSON>`.
 export const SESSION_EVENT = "deliver";
 export const SessionDeliverySchema = z.object({
-  kind: z.enum(["request", "response", "draft_authorized", "draft_discarded", "escalation", "debug"]),
+  // request_notice: aviso de que llegó una solicitud (resumen); se trae a la sesión con take_request.
+  kind: z.enum(["request", "response", "draft_authorized", "draft_discarded", "escalation", "request_notice", "debug"]),
   content: z.string(), // texto que verá el agente
   meta: z.record(z.string(), z.string()), // atributos del <channel>: request_id, draft_id, files…
 });

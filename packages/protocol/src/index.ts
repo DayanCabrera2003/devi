@@ -10,6 +10,7 @@ export * from "./conversations";
 export * from "./pending";
 export * from "./knowledge";
 export * from "./week";
+export * from "./notices";
 export * from "./api";
 export * from "./events";
 export * from "./safety";

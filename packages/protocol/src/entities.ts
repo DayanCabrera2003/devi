@@ -38,7 +38,7 @@ export type Session = z.infer<typeof SessionSchema>;
 // Entrega guardada en la bandeja de una sesión hasta que se confirma (ack).
 export const InboxItemSchema = z.object({
   id: z.string(),
-  kind: z.enum(["request", "response", "draft_authorized", "draft_discarded", "escalation"]),
+  kind: z.enum(["request", "response", "draft_authorized", "draft_discarded", "escalation", "request_notice"]),
   content: z.string(),
   meta: z.record(z.string(), z.string()),
   createdAt: z.number(),

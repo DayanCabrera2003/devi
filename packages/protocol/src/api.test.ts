@@ -18,7 +18,7 @@ describe("catálogo de la API", () => {
       "acceptRequest", "acceptResponse", "authorizeDraft", "createMember", "createRole", "deleteMember", "deleteRole",
       "discardDraft", "exportDb", "forwardRequest", "forwardResponse", "ignoreRequest", "reassignRequest", "rejectRequest", "resendRequest",
       "sendFromApp",
-      "updateMember", "updateRole", "updateSettings",
+      "updateMember", "updateMyPrefs", "updateRole", "updateSettings",
       "withdrawKnowledge",
     ]);
   });
@@ -128,5 +128,47 @@ describe("aprobación en el chat", () => {
     expect(SettingsSchema.parse(DEFAULT_SETTINGS).chatApproval).toBe(true);
     expect(SettingsSchema.safeParse({ ...DEFAULT_SETTINGS, chatApproval: "sí" }).success).toBe(false);
     expect(SettingsSchema.safeParse({ ...DEFAULT_SETTINGS, chatApproval: undefined }).success).toBe(false);
+  });
+});
+
+describe("atender solicitudes desde Claude Code", () => {
+  test("traer y rechazar desde el chat: rutas del destinatario, no humanas, con approval obligatorio", () => {
+    expect(API.takeRequest).toMatchObject({ method: "POST", path: "/api/v1/requests/:id/take", perm: null, actor: "recipient" });
+    expect(API.declineRequest).toMatchObject({ method: "POST", path: "/api/v1/requests/:id/decline", perm: null, actor: "recipient" });
+    expect("human" in API.takeRequest).toBe(false);
+    expect("human" in API.declineRequest).toBe(false);
+    expect(API.takeRequest.body.safeParse({ sessionId: "s1", approval: "chat" }).success).toBe(true);
+    expect(API.takeRequest.body.safeParse({ sessionId: "s1" }).success).toBe(false);
+    expect(API.declineRequest.body.safeParse({ sessionId: "s1", reason: "no puedo", approval: "chat" }).success).toBe(true);
+    expect(API.declineRequest.body.safeParse({ sessionId: "s1", reason: " ", approval: "chat" }).success).toBe(false);
+  });
+
+  test("traer devuelve la solicitud y la entrega para la sesión", () => {
+    const request = {
+      id: "q1", fromMemberId: "m1", fromSessionId: "s0", fromSessionName: "api", toMemberId: "m2", message: "hola",
+      status: "forwarded", files: [], responseFiles: [], createdAt: 1, sentAt: 1, deadline: 2,
+    };
+    const delivery = { kind: "request", content: "texto", meta: { request_id: "q1" } };
+    expect(API.takeRequest.response.parse({ request, delivery })).toMatchObject({ request: { id: "q1" }, delivery: { kind: "request" } });
+  });
+
+  test("preferencias del miembro: leerlas no es humano, cambiarlas sí; avisos activados por defecto", async () => {
+    const { DEFAULT_MEMBER_PREFS, MemberPrefsSchema } = await import("./notices");
+    expect(API.myPrefs).toMatchObject({ method: "GET", path: "/api/v1/me/prefs", perm: null, actor: "any" });
+    expect(API.updateMyPrefs).toMatchObject({ method: "PATCH", path: "/api/v1/me/prefs", perm: null, actor: "any", human: true });
+    expect(DEFAULT_MEMBER_PREFS.sessionNotices).toBe(true);
+    expect(MemberPrefsSchema.parse(DEFAULT_MEMBER_PREFS)).toEqual({ sessionNotices: true });
+    expect(API.updateMyPrefs.body.parse({})).toEqual({});
+    expect(API.updateMyPrefs.body.safeParse({ sessionNotices: "no" }).success).toBe(false);
+  });
+
+  test("aviso request_notice en entregas y bandeja; auditoría de lo hecho en el chat", async () => {
+    const { SessionDeliverySchema } = await import("./events");
+    const { InboxItemSchema } = await import("./entities");
+    const { AUDIT_ACTIONS } = await import("./audit");
+    expect(SessionDeliverySchema.safeParse({ kind: "request_notice", content: "x", meta: {} }).success).toBe(true);
+    expect(InboxItemSchema.safeParse({ id: "i", kind: "request_notice", content: "x", meta: {}, createdAt: 1 }).success).toBe(true);
+    expect(AUDIT_ACTIONS).toContain("request.taken_in_chat");
+    expect(AUDIT_ACTIONS).toContain("request.declined_in_chat");
   });
 });

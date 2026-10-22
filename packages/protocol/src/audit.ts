@@ -18,6 +18,8 @@ export const AUDIT_ACTIONS = [
   "request.timed_out",
   "request.escalated",
   "request.reassigned", // el remitente se la pidió a otra persona: solicitud nueva y la original cerrada
+  "request.taken_in_chat", // el destinatario la trajo a su sesión (aprobado en el aviso de Claude Code)
+  "request.declined_in_chat", // el destinatario la rechazó desde su sesión (aprobado en el aviso de Claude Code)
   "response.accepted",
   "response.forwarded",
   "file.downloaded",
