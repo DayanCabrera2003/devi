@@ -1,6 +1,8 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import {
+  CallToolRequestSchema, GetPromptRequestSchema, ListPromptsRequestSchema, ListToolsRequestSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 import { createClient, type DeviClient } from "@devi/client";
 import type { Session } from "@devi/protocol";
 import { sessionNameFor } from "../commands/claude";
@@ -11,6 +13,7 @@ import { CLI_VERSION } from "../version";
 import { approvalFor } from "./approval";
 import { instructions } from "./instructions";
 import { onShutdown } from "./lifecycle";
+import { PROMPTS, getPrompt } from "./prompts";
 import { relayDelivery } from "./relay";
 import { startSessionLoop } from "./session";
 import { TOOLS, callTool } from "./tools";
@@ -41,9 +44,12 @@ export async function runMcp(sys: Sys): Promise<void> {
   let session: Session | null = null;
   const mcp = new Server(
     { name: "devi", version: CLI_VERSION },
-    { capabilities: { experimental: { "claude/channel": {} }, tools: {} }, instructions: instructions(sessionName) },
+    { capabilities: { experimental: { "claude/channel": {} }, tools: {}, prompts: {} }, instructions: instructions(sessionName) },
   );
   mcp.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
+  // Prompts: Claude Code los ofrece como comandos (ver prompts.ts).
+  mcp.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts: PROMPTS }));
+  mcp.setRequestHandler(GetPromptRequestSchema, async (req) => getPrompt(req.params.name, req.params.arguments ?? {}));
   // Dónde aprueba el humano los envíos: se decide con el clientInfo del initialize (o DEVI_APPROVAL).
   const approval = () => approvalFor(mcp.getClientVersion(), sys.env.DEVI_APPROVAL);
   mcp.oninitialized = () => {

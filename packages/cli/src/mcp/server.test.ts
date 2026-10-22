@@ -37,6 +37,10 @@ test("devi mcp por stdio: instrucciones, herramientas y error legible sin config
   const r = await call("list_teammates");
   expect(r.isError).toBe(true);
   expect(r.content[0]!.text).toContain("Devi no está configurado");
+  // Prompts (comandos de Claude Code): no necesitan servidor.
+  expect((await client.listPrompts()).prompts.map((p) => p.name)).toEqual(["pedir", "pendientes", "equipo"]);
+  const p = await client.getPrompt({ name: "pedir", arguments: { necesidad: "acceso" } });
+  expect((p.messages[0]!.content as { text: string }).text).toContain("list_teammates");
   await client.close();
 }, 15_000);
 
