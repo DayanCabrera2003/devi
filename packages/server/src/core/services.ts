@@ -1,4 +1,4 @@
-import type { AuditAction, AuditTarget, FileMeta, Session, SessionDelivery, Settings } from "@devi/protocol";
+import type { AuditAction, AuditTarget, FileMeta, MemberPrefs, Session, SessionDelivery, Settings } from "@devi/protocol";
 
 // Servicios que un módulo ofrece a los demás a través de ModuleContext.services.
 // Así ningún módulo importa a otro: solo dependen de estas interfaces del núcleo.
@@ -80,12 +80,18 @@ export interface AuditService {
   loginRejected(login: string, reason: "unknown_login" | "domain"): void;
 }
 
+// Preferencias de cada persona (las de Ajustes de la app que necesita el servidor).
+export interface PrefsService {
+  of(memberId: string): MemberPrefs;
+}
+
 export interface ServiceMap {
   team: TeamService;
   settings: SettingsService;
   sessions: SessionsService;
   files: FilesService;
   audit: AuditService;
+  prefs: PrefsService;
 }
 
 export class ServiceRegistry {

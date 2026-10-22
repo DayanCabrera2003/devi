@@ -18,7 +18,7 @@ export function uniqueSessionName(name: string, taken: ReadonlySet<string>): str
   return candidate;
 }
 
-const INBOX_KINDS: ReadonlySet<string> = new Set(["request", "response", "draft_authorized", "draft_discarded", "escalation"]);
+const INBOX_KINDS: ReadonlySet<string> = new Set(["request", "response", "draft_authorized", "draft_discarded", "escalation", "request_notice"]);
 
 export class SessionManager implements SessionsService {
   // instanceId de MCP sustituidos por otro del mismo Claude Code: no pueden volver a registrarse.

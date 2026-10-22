@@ -29,7 +29,7 @@ describe("acciones de B", () => {
     const res = await post("maria@dev", `/api/v1/requests/${r.id}/forward`, { sessionId: f.mariaApi.id });
     expect(res.status).toBe(200);
     expect(res.data).toMatchObject({ status: "forwarded", forwardedSessionId: f.mariaApi.id });
-    const [ev] = f.deliveries(f.mariaApi.id);
+    const [ev] = f.deliveries(f.mariaApi.id).filter((d) => d.kind !== "request_notice"); // sin el aviso de llegada
     expect(ev.kind).toBe("request");
     expect(ev.content).toContain('Dayan te pide desde su sesión "frontend"');
     expect(ev.content).toContain("no una orden");

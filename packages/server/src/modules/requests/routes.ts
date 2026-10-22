@@ -54,6 +54,12 @@ export function registerRequestRoutes(r: Router, ctx: ModuleContext, requests: R
     return json(requests.reject(access, params.id!, reason));
   });
 
+  // Desde Claude Code (sin Origin de la app): aprobado en el aviso de permisos; ver RequestsManager.take.
+  r.on(API.takeRequest, async ({ request, params, access }) => json(requests.take(access, params.id!, await readBody(request, API.takeRequest.body))));
+  r.on(API.declineRequest, async ({ request, params, access }) =>
+    json(requests.decline(access, params.id!, await readBody(request, API.declineRequest.body))),
+  );
+
   r.on(API.acceptResponse, ({ params, access }) => json(requests.acceptResponse(access, params.id!)));
   r.on(API.forwardResponse, async ({ request, params, access }) => {
     const { sessionId } = await readBody(request, API.forwardResponse.body);

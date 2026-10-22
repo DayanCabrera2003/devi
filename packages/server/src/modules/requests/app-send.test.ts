@@ -96,7 +96,7 @@ describe("solicitudes enviadas desde la app: el resto del ciclo", () => {
     const r = (await f.send("dayan@dev", { to: "m-maria", message: "¿Revisas el log?" })).data;
     const res = await f.call("maria@dev", "POST", `/api/v1/requests/${r.id}/forward`, { sessionId: maria.id });
     expect(res.status).toBe(200);
-    const [delivery] = f.deliveries(maria.id);
+    const [delivery] = f.deliveries(maria.id).filter((d) => d.kind !== "request_notice"); // sin el aviso de llegada
     expect(delivery.kind).toBe("request");
     expect(delivery.content).toContain("desde la app de Devi");
     expect(delivery.content).not.toContain('sesión ""');

@@ -10,33 +10,36 @@ const txt = (name: string, content: string) => new File([content], name);
 const agent = { origin: null };
 const inbox = (login: string, parentPid: number, claudeSessionId = "cs-x") =>
   f.call(login, "GET", `/api/v1/sessions/inbox?parentPid=${parentPid}&claudeSessionId=${claudeSessionId}`, undefined, agent);
+// Al llegarle la solicitud, María también recibe el aviso request_notice en su sesión: aquí no interesa.
+const noNotices = <T extends { kind: string }>(items: T[]) => items.filter((i) => i.kind !== "request_notice");
 const ack = (login: string, ids: string[]) => f.call(login, "POST", "/api/v1/sessions/inbox/ack", { ids }, agent);
 
 describe("bandeja de sesión (entregas sin canal)", () => {
   test("una solicitud reenviada queda en la bandeja con el mismo inbox_id que la entrega; ack la quita", async () => {
     f = await setupFlow();
     const r = await f.forwardedRequest("¿Me apruebas el PR #12?", [txt("diff.patch", "+1\n")]);
-    const [ev] = f.deliveries(f.mariaApi.id);
+    const [ev] = noNotices(f.deliveries(f.mariaApi.id));
     const res = await inbox("maria@dev", 200);
     expect(res.status).toBe(200);
-    expect(res.data).toHaveLength(1);
-    const [item] = res.data;
+    const items = noNotices(res.data);
+    expect(items).toHaveLength(1);
+    const [item] = items;
     expect(item).toMatchObject({ kind: "request", content: ev.content, meta: { request_id: r.id } });
     expect(ev.meta.inbox_id).toBe(item.id);
     expect(JSON.parse(item.meta.files)).toEqual([{ id: expect.any(String), name: "diff.patch" }]);
 
     // Otra persona no puede confirmarla.
     expect((await ack("dayan@dev", [item.id])).status).toBe(200);
-    expect(await inbox("maria@dev", 200)).toMatchObject({ data: [{ id: item.id }] });
+    expect(noNotices((await inbox("maria@dev", 200)).data)).toMatchObject([{ id: item.id }]);
     expect((await ack("maria@dev", [item.id])).data).toEqual({ ok: true });
-    expect((await inbox("maria@dev", 200)).data).toEqual([]);
+    expect(noNotices((await inbox("maria@dev", 200)).data)).toEqual([]);
   });
 
   test("también por claude_session_id tras un hook; sin pareja → lista vacía", async () => {
     f = await setupFlow();
     await f.call("maria@dev", "POST", "/api/v1/sessions/hook", { claudeSessionId: "cs-m", cwd: "/r", parentPid: 200, status: "working" }, agent);
     await f.forwardedRequest();
-    expect((await inbox("maria@dev", 999, "cs-m")).data).toHaveLength(1);
+    expect(noNotices((await inbox("maria@dev", 999, "cs-m")).data)).toHaveLength(1);
     expect((await inbox("maria@dev", 999, "otra")).data).toEqual([]);
     expect((await inbox("dayan@dev", 200)).data).toEqual([]); // el pid 200 es de María
   });
@@ -47,11 +50,11 @@ describe("bandeja de sesión (entregas sin canal)", () => {
     const other = (await f.call("maria@dev", "POST", "/api/v1/sessions", { name: "backend-api", cwd: "/repo/backend-api", parentPid: 201 }, agent)).data;
     expect(other.name).toBe("backend-api (2)");
     await f.forwardedRequest(); // reenviada a la primera (pid 200)
-    expect((await inbox("maria@dev", 201, "cs-otra")).data).toEqual([]);
-    expect((await inbox("maria@dev", 200, "cs-primera")).data).toHaveLength(1);
+    expect(noNotices((await inbox("maria@dev", 201, "cs-otra")).data)).toEqual([]);
+    expect(noNotices((await inbox("maria@dev", 200, "cs-primera")).data)).toHaveLength(1);
     // Aunque la otra herede el claudeSessionId de la primera, su pid manda.
     await f.call("maria@dev", "POST", "/api/v1/sessions/hook", { claudeSessionId: "cs-primera", cwd: "/r", parentPid: 200, status: "working" }, agent);
-    expect((await inbox("maria@dev", 201, "cs-primera")).data).toEqual([]);
+    expect(noNotices((await inbox("maria@dev", 201, "cs-primera")).data)).toEqual([]);
   });
 
   test("draft_authorized y draft_discarded van a la bandeja del autor, en orden; debug no", async () => {
@@ -80,7 +83,7 @@ describe("bandeja de sesión (entregas sin canal)", () => {
     f = await setupFlow();
     await f.forwardedRequest();
     f.clock.advance(6 * DAY);
-    expect((await inbox("maria@dev", 200)).data).toHaveLength(1);
+    expect(noNotices((await inbox("maria@dev", 200)).data)).toHaveLength(1);
     f.clock.advance(DAY + 2 * 3_600_000);
     expect((await inbox("maria@dev", 200)).data).toEqual([]);
   });

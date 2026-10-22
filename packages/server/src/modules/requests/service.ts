@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type {
-  API, AuditAction, AuditTarget, CreateDraftMeta, CreateDraftResult, DeviRequest, Draft, Perm, RequestContext, SendFromAppMeta, SessionDelivery, UserEvent,
+  API, Approval, AuditAction, AuditTarget, CreateDraftMeta, CreateDraftResult, DeviRequest, Draft, Perm, RequestContext, SendFromAppMeta, Session,
+  SessionDelivery, TakeRequestResult, UserEvent,
 } from "@devi/protocol";
 import { hasContext } from "@devi/protocol";
 import type { z } from "zod";
@@ -9,7 +10,10 @@ import { HttpError } from "../../core/http";
 import type { ModuleContext } from "../../core/module";
 import { deliverToSession, pushUser } from "../../core/push";
 import type { AuditDetails } from "../../core/services";
-import { authorizedContent, type DiscardReason, discardedContent, escalationContent, handoffContent, requestContent, responseContent } from "./content";
+import {
+  authorizedContent, type DiscardReason, discardedContent, escalationContent, handoffContent, noticeContent, requestContent, responseContent,
+} from "./content";
+import { injectionIn } from "./injection";
 import type { DraftRecord, RequestRecord, RequestsStore } from "./store";
 import { KeyedTimers } from "./timers";
 
@@ -28,6 +32,10 @@ const sha256 = (text: string) => createHash("sha256").update(text).digest("hex")
 const withContext = (context: RequestContext | undefined) => (context ? { context } : {});
 const conflict = (message: string) => new HttpError(409, message, { code: "conflict" });
 const sessionGone = () => new HttpError(409, "esa sesión ya no está abierta", { code: "session_gone" });
+const chatUnavailable = () =>
+  new HttpError(403, "La aprobación en el chat no está disponible (desactivada en el equipo o Claude Code no apto): hazlo desde la app de Devi", {
+    code: "chat_approval_unavailable",
+  });
 
 // Ciclo de vida de borradores y solicitudes (diagrama de estados en docs/arquitectura.md).
 // Todo se persiste en SQLite; los temporizadores viven en memoria y se reprograman en restore().
@@ -151,7 +159,7 @@ export class RequestsManager {
     const view = this.requestView(r);
     if (r.status === "pending") {
       this.schedule(r);
-      this.push(r.toMemberId, { type: "request.incoming", request: view });
+      this.incoming(r, view);
       this.push(r.fromMemberId, { type: "request.updated", request: view });
       return { requestId: r.id, toName: this.team.nameOf(r.toMemberId), sentAt: r.sentAt, deadline: r.deadline };
     }
@@ -197,7 +205,7 @@ export class RequestsManager {
       this.audit("draft.authorized", access.memberId, "draft", d.id, { kind: "request", to: to.id, requestId: r.id });
       this.schedule(r);
       const view = this.requestView(r);
-      this.push(r.toMemberId, { type: "request.incoming", request: view });
+      this.incoming(r, view);
       this.push(r.fromMemberId, { type: "request.updated", request: view });
       this.sendStaged(d, staged);
     } else {
@@ -324,7 +332,7 @@ export class RequestsManager {
     });
     this.schedule(r);
     const view = this.requestView(r);
-    this.push(r.toMemberId, { type: "request.incoming", request: view });
+    this.incoming(r, view);
     this.push(r.fromMemberId, { type: "request.updated", request: view });
     return view;
   }
@@ -345,18 +353,7 @@ export class RequestsManager {
     if (r.status !== "pending") throw conflict(`la solicitud ya está ${r.status}`);
     const s = this.sessions.get(sessionId);
     if (!s || s.memberId !== r.toMemberId || !this.sessions.isAlive(s.id)) throw sessionGone();
-    const files = this.files.forRequest(r.id).files;
-    const handoff = r.kind === "handoff";
-    const what = { id: r.id, fromName: this.team.nameOf(r.fromMemberId), fromSessionName: r.fromSessionName, message: r.message, files };
-    const delivery: SessionDelivery = {
-      kind: "request",
-      content: handoff ? handoffContent(what) : requestContent({ ...what, origin: r.origin, context: this.store.requestContext(r.id) }),
-      meta: {
-        request_id: r.id, from: r.fromMemberId, from_name: this.team.nameOf(r.fromMemberId),
-        from_session: r.fromSessionName, files: filesMeta(files),
-        ...(handoff ? { request_kind: "handoff" } : {}),
-      },
-    };
+    const delivery = this.requestDelivery(r);
     // Bandeja + estado en una transacción. Si la sesión se cerró justo ahora (no hay stream), se deshace todo:
     // la solicitud sigue pendiente y la app avisa.
     this.store.transaction(() => {
@@ -368,6 +365,22 @@ export class RequestsManager {
     });
     this.audit("request.forwarded", access.memberId, "request", r.id, { sessionId: s.id, sessionName: s.name });
     return this.pushBoth(r, "request.updated");
+  }
+
+  // La entrega de una solicitud a una sesión (reenvío desde la app o traída desde el chat).
+  private requestDelivery(r: RequestRecord): SessionDelivery {
+    const files = this.files.forRequest(r.id).files;
+    const handoff = r.kind === "handoff";
+    const what = { id: r.id, fromName: this.team.nameOf(r.fromMemberId), fromSessionName: r.fromSessionName, message: r.message, files };
+    return {
+      kind: "request",
+      content: handoff ? handoffContent(what) : requestContent({ ...what, origin: r.origin, context: this.store.requestContext(r.id) }),
+      meta: {
+        request_id: r.id, from: r.fromMemberId, from_name: this.team.nameOf(r.fromMemberId),
+        from_session: r.fromSessionName, files: filesMeta(files),
+        ...(handoff ? { request_kind: "handoff" } : {}),
+      },
+    };
   }
 
   accept(access: Access, id: string, note: string | undefined, shareWithTeam = false): DeviRequest {
@@ -388,6 +401,54 @@ export class RequestsManager {
     r.status = r.outcome = "rejected";
     r.outcomeText = reason.trim();
     this.audit("request.rejected", access.memberId, "request", r.id, { from: r.fromMemberId, reasonSha256: sha256(r.outcomeText) });
+    return this.answer(r);
+  }
+
+  // ---- B atiende desde Claude Code (take_request / decline_request) ----------
+
+  // Mismo mecanismo que los envíos aprobados en el chat: el MCP manda approval "chat" solo si su cliente es un
+  // Claude Code que muestra el aviso de permisos en cada llamada, y el equipo tiene activado chatApproval.
+  // Además, la sesión que llama tiene que ser de quien recibe la solicitud y estar viva.
+  private chatSession(access: Access, sessionId: string, approval: Approval): Session {
+    if (approval !== "chat" || !this.settings.chatApproval) throw chatUnavailable();
+    const s = this.sessions.get(sessionId);
+    if (!s || s.memberId !== access.memberId || !this.sessions.isAlive(s.id)) throw sessionGone();
+    return s;
+  }
+
+  // Como «Enviar a mi sesión» en la app, con destino la sesión que llama. La entrega va en la respuesta (el MCP la
+  // devuelve como resultado de la herramienta y confirma su entrada de la bandeja); no se empuja por el canal para
+  // no repetirla. Con una posible prompt injection no se trae: hay que revisarla en la app.
+  take(access: Access, id: string, body: { sessionId: string; approval: Approval }): TakeRequestResult {
+    const r = this.received(access, id);
+    const s = this.chatSession(access, body.sessionId, body.approval);
+    if (r.status !== "pending") throw conflict(`la solicitud ya está ${r.status}`);
+    const scan = injectionIn(r.message, this.store.requestContext(r.id), this.files.readForCopy(r.id));
+    if (scan.level !== "none") {
+      throw new HttpError(409, `Posible prompt injection (${scan.reasons.join("; ")}): revísala en la app de Devi`, { code: "injection" });
+    }
+    let delivery: SessionDelivery | null = null;
+    this.store.transaction(() => {
+      delivery = this.sessions.enqueue(s.id, this.requestDelivery(r));
+      r.status = "forwarded";
+      r.forwardedSessionId = s.id;
+      this.store.saveRequest(r);
+    });
+    this.audit("request.taken_in_chat", access.memberId, "request", r.id, { sessionId: s.id, sessionName: s.name, from: r.fromMemberId });
+    return { request: this.pushBoth(r, "request.updated"), delivery: delivery! };
+  }
+
+  // Como Rechazar en la app (motivo obligatorio), con las mismas condiciones que take.
+  decline(access: Access, id: string, body: { sessionId: string; reason: string; approval: Approval }): DeviRequest {
+    const r = this.received(access, id);
+    const s = this.chatSession(access, body.sessionId, body.approval);
+    if (!body.reason.trim()) throw new HttpError(400, "el rechazo necesita un motivo", { code: "invalid" });
+    if (r.status !== "pending") throw conflict(`la solicitud ya está ${r.status}`);
+    r.status = r.outcome = "rejected";
+    r.outcomeText = body.reason.trim();
+    this.audit("request.declined_in_chat", access.memberId, "request", r.id, {
+      from: r.fromMemberId, reasonSha256: sha256(r.outcomeText), sessionId: s.id, sessionName: s.name,
+    });
     return this.answer(r);
   }
 
@@ -435,8 +496,7 @@ export class RequestsManager {
     this.store.saveRequest(r);
     this.schedule(r);
     this.audit("request.resent", access.memberId, "request", r.id, { to: r.toMemberId });
-    const view = this.requestView(r);
-    this.push(r.toMemberId, { type: "request.incoming", request: view });
+    this.incoming(r, this.requestView(r));
     return this.pushBoth(r, "request.updated");
   }
 
@@ -484,7 +544,7 @@ export class RequestsManager {
     this.audit("request.reassigned", access.memberId, "request", r.id, { from: r.toMemberId, to: toId, toName, requestId: next.id });
     this.schedule(next);
     const view = this.requestView(next);
-    this.push(toId, { type: "request.incoming", request: view });
+    this.incoming(next, view);
     this.push(r.fromMemberId, { type: "request.updated", request: view });
     return { request: view, original: this.close(r) };
   }
@@ -607,6 +667,28 @@ export class RequestsManager {
   }
 
   // ---- utilidades -----------------------------------------------------------
+
+  // Le llega una solicitud nueva a B: tarjeta en su app y, si lo tiene activado (Ajustes), aviso en su sesión viva
+  // más reciente (una sola, para no repetirlo). Sin canal, el aviso espera en la bandeja y lo inyecta el hook.
+  private incoming(r: RequestRecord, view: DeviRequest): void {
+    this.push(r.toMemberId, { type: "request.incoming", request: view });
+    if (this.ctx.services.find("prefs")?.of(r.toMemberId).sessionNotices === false) return;
+    const target = this.sessions.liveOf(r.toMemberId).sort((a, b) => b.lastSeen - a.lastSeen)[0];
+    if (!target) return;
+    const context = this.store.requestContext(r.id);
+    const delivery: SessionDelivery = {
+      kind: "request_notice",
+      content: noticeContent({
+        id: r.id, fromName: this.team.nameOf(r.fromMemberId), fromSessionName: r.fromSessionName, message: r.message,
+        files: view.files.length, origin: r.origin, handoff: r.kind === "handoff", injection: injectionIn(r.message, context).level !== "none",
+      }),
+      meta: {
+        request_id: r.id, from: r.fromMemberId, from_name: this.team.nameOf(r.fromMemberId), from_session: r.fromSessionName,
+        ...(r.kind === "handoff" ? { request_kind: "handoff" } : {}),
+      },
+    };
+    this.deliver(target.id, this.sessions.enqueue(target.id, delivery));
+  }
 
   private answer(r: RequestRecord): DeviRequest {
     this.store.saveRequest(r);
