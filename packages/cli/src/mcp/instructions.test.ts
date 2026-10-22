@@ -45,3 +45,19 @@ test("envíos: se confirman en el aviso de Claude Code (o en la app si queda en 
   expect(before).toMatch(/Nunca vuelvas a intentar un envío que el usuario denegó/);
   expect(before).toContain("to_name");
 });
+
+test("cabe entera en el contexto: Claude Code corta las instrucciones del servidor a 4.096 caracteres", () => {
+  expect(instructions("una-sesion-con-un-nombre-bastante-largo").length).toBeLessThan(4096);
+});
+
+test("núcleo: identidad, herramientas, menor privilegio y la skill con la guía completa", () => {
+  const text = instructions("ana");
+  for (const t of ["whoami", "list_teammates", "get_conversation", "list_pending", "get_request", "send_request", "respond_to_request"]) {
+    expect(text).toContain(t);
+  }
+  expect(text).toMatch(/mismo miembro/);
+  expect(text).toMatch(/no puedes enviarte/i);
+  expect(text).toMatch(/MENOR PRIVILEGIO/);
+  expect(text).toMatch(/skill "devi"/);
+  for (const k of ["request", "response", "draft_authorized", "draft_discarded"]) expect(text).toContain(`kind="${k}"`);
+});
