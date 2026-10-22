@@ -3,7 +3,7 @@ import { hasUntrustedFrame } from "@devi/protocol";
 import { formatRequest } from "./format";
 
 const base = {
-  id: "q1", origin: "session" as const, fromMemberId: "m2", fromSessionId: "s2", fromSessionName: "api", toMemberId: "m1",
+  id: "q1", origin: "session" as const, kind: "request" as const, fromMemberId: "m2", fromSessionId: "s2", fromSessionName: "api", toMemberId: "m1",
   message: "¿Lo miras?", status: "pending" as const, files: [], responseFiles: [], createdAt: 1, sentAt: 1, deadline: 10_000_000,
 };
 const ctx = { meId: "m1", names: new Map([["m2", "María"]]), now: 2, sessionId: null, receivedDir: "/r" };
