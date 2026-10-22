@@ -9,7 +9,7 @@ import { HttpError } from "../../core/http";
 import type { ModuleContext } from "../../core/module";
 import { deliverToSession, pushUser } from "../../core/push";
 import type { AuditDetails } from "../../core/services";
-import { authorizedContent, type DiscardReason, discardedContent, requestContent, responseContent } from "./content";
+import { authorizedContent, type DiscardReason, discardedContent, handoffContent, requestContent, responseContent } from "./content";
 import type { DraftRecord, RequestRecord, RequestsStore } from "./store";
 import { KeyedTimers } from "./timers";
 
@@ -80,6 +80,7 @@ export class RequestsManager {
       authorSessionName: session.name, toMemberId: meta.kind === "request" ? peer : null, requestId: request?.id ?? null,
       message: meta.message.trim(), status: chat ? "authorized" : "awaiting", createdAt: now, expiresAt: now + this.settings.draftTtlMs,
       shareWithTeam: meta.kind === "response" && meta.shareWithTeam,
+      requestKind: meta.kind === "request" ? meta.requestKind : "request",
     };
     // Aprobado en el chat: la solicitud nueva o la respuesta aplicada, preparadas para la misma transacción.
     const sentRequest: RequestRecord | null = !chat
@@ -90,7 +91,7 @@ export class RequestsManager {
             id: this.newRequestId(), fromMemberId: d.authorMemberId, fromSessionId: d.authorSessionId,
             fromSessionName: d.authorSessionName, toMemberId: peer, message: d.message, status: "pending",
             forwardedSessionId: null, outcome: null, outcomeText: null, createdAt: now, sentAt: now,
-            deadline: now + this.settings.requestTimeoutMs,
+            deadline: now + this.settings.requestTimeoutMs, kind: d.requestKind,
           };
     // Atómico: primero los bytes a disco; luego, en una sola transacción, se descarta el borrador anterior y se
     // insertan el borrador y sus archivos (y, aprobado en el chat, la solicitud o la respuesta); solo tras el
@@ -127,6 +128,7 @@ export class RequestsManager {
       kind: d.kind, to: peer, toName: this.team.nameOf(peer), requestId: sentRequest?.id ?? d.requestId, sessionId: session.id,
       sessionName: session.name, messageSha256: sha256(d.message),
       files: JSON.stringify(valid.map((f) => ({ name: f.name, size: f.size }))),
+      ...(d.requestKind === "handoff" ? { requestKind: "handoff" } : {}),
     };
     if (sentRequest) {
       this.audit("draft.approved_in_chat", access.memberId, "draft", d.id, {
@@ -176,7 +178,7 @@ export class RequestsManager {
         id: this.newRequestId(), fromMemberId: d.authorMemberId, fromSessionId: d.authorSessionId,
         fromSessionName: d.authorSessionName, toMemberId: to.id, message: d.message, status: "pending",
         forwardedSessionId: null, outcome: null, outcomeText: null, createdAt: now, sentAt: now,
-        deadline: now + this.settings.requestTimeoutMs,
+        deadline: now + this.settings.requestTimeoutMs, kind: d.requestKind ?? "request",
       };
       let staged: SessionDelivery | null = null;
       this.store.transaction(() => {
@@ -343,12 +345,15 @@ export class RequestsManager {
     const s = this.sessions.get(sessionId);
     if (!s || s.memberId !== r.toMemberId || !this.sessions.isAlive(s.id)) throw sessionGone();
     const files = this.files.forRequest(r.id).files;
+    const handoff = r.kind === "handoff";
+    const what = { id: r.id, fromName: this.team.nameOf(r.fromMemberId), fromSessionName: r.fromSessionName, message: r.message, files };
     const delivery: SessionDelivery = {
       kind: "request",
-      content: requestContent({ id: r.id, fromName: this.team.nameOf(r.fromMemberId), fromSessionName: r.fromSessionName, message: r.message, files, origin: r.origin, context: this.store.requestContext(r.id) }),
+      content: handoff ? handoffContent(what) : requestContent({ ...what, origin: r.origin, context: this.store.requestContext(r.id) }),
       meta: {
         request_id: r.id, from: r.fromMemberId, from_name: this.team.nameOf(r.fromMemberId),
         from_session: r.fromSessionName, files: filesMeta(files),
+        ...(handoff ? { request_kind: "handoff" } : {}),
       },
     };
     // Bandeja + estado en una transacción. Si la sesión se cerró justo ahora (no hay stream), se deshace todo:
@@ -643,14 +648,15 @@ export class RequestsManager {
       status: d.status, files: this.files.forDraft(d.id), createdAt: d.createdAt, expiresAt: d.expiresAt,
       ...withContext(d.kind === "request" ? this.store.draftContext(d.id) : undefined),
     };
-    if (d.kind === "request") return { ...base, kind: "request", toMemberId: d.toMemberId! };
-    return { ...base, kind: "response", requestId: d.requestId!, ...(d.shareWithTeam ? { shareWithTeam: true } : {}) };
+    return d.kind === "request"
+      ? { ...base, kind: "request", toMemberId: d.toMemberId!, requestKind: d.requestKind ?? "request" }
+      : { ...base, kind: "response", requestId: d.requestId!, ...(d.shareWithTeam ? { shareWithTeam: true } : {}) };
   }
 
   private requestView(r: RequestRecord): DeviRequest {
     const { files, responseFiles } = this.files.forRequest(r.id);
     return {
-      id: r.id, origin: r.origin ?? "session", fromMemberId: r.fromMemberId, fromSessionId: r.fromSessionId, fromSessionName: r.fromSessionName,
+      id: r.id, origin: r.origin ?? "session", kind: r.kind ?? "request", fromMemberId: r.fromMemberId, fromSessionId: r.fromSessionId, fromSessionName: r.fromSessionName,
       toMemberId: r.toMemberId, message: r.message, status: r.status, forwardedSessionId: r.forwardedSessionId ?? undefined,
       outcome: r.outcome ?? undefined, outcomeText: r.outcomeText ?? undefined, files, responseFiles,
       createdAt: r.createdAt, sentAt: r.sentAt, deadline: r.deadline, ...withContext(this.store.requestContext(r.id)),

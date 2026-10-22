@@ -10,7 +10,7 @@ function setup() {
 
 const draft = (over: Partial<DraftRecord> = {}): DraftRecord => ({
   id: "d1", kind: "request", authorMemberId: "a", authorSessionId: "s1", authorSessionName: "frontend",
-  toMemberId: "b", requestId: null, message: "hola", status: "awaiting", createdAt: 1, expiresAt: 2, ...over,
+  toMemberId: "b", requestId: null, message: "hola", status: "awaiting", createdAt: 1, expiresAt: 2, requestKind: "request", ...over,
 });
 
 const request = (over: Partial<RequestRecord> = {}): RequestRecord => ({

@@ -70,6 +70,14 @@ export const requestsMigrations: Migration[] = [
     version: 4,
     sql: `ALTER TABLE drafts ADD COLUMN share_with_team INTEGER NOT NULL DEFAULT 0;`,
   },
+  {
+    // kind: request = pedir algo; handoff = traspaso de sesión. El borrador lo guarda hasta autorizarse.
+    version: 5,
+    sql: `
+      ALTER TABLE requests ADD COLUMN kind TEXT NOT NULL DEFAULT 'request' CHECK (kind IN ('request', 'handoff'));
+      ALTER TABLE drafts ADD COLUMN request_kind TEXT NOT NULL DEFAULT 'request' CHECK (request_kind IN ('request', 'handoff'));
+    `,
+  },
 ];
 
 // Lee el JSON guardado; si no es válido (corrupto o de otra versión), como si no hubiera contexto.
@@ -96,6 +104,7 @@ export type DraftRecord = {
   createdAt: number;
   expiresAt: number;
   shareWithTeam?: boolean; // kind=response: guardar en la base del equipo al enviarse (solo si es true)
+  requestKind?: DeviRequest["kind"]; // al insertar, request si falta; al leer, siempre está
 };
 
 // share_with_team es 0/1 en SQLite: en el registro solo aparece si está activo.
@@ -106,6 +115,7 @@ const toDraftOrNull = (row: unknown): DraftRecord | null => (row ? toDraft(row a
 export type RequestRecord = {
   id: string;
   origin?: DeviRequest["origin"]; // al insertar, session si falta; al leer, siempre está
+  kind?: DeviRequest["kind"]; // al insertar, request si falta; al leer, siempre está
   fromMemberId: string;
   fromSessionId: string;
   fromSessionName: string;
@@ -122,11 +132,11 @@ export type RequestRecord = {
 
 const DRAFT_COLS = `id, kind, author_member AS authorMemberId, author_session AS authorSessionId,
   author_session_name AS authorSessionName, to_member AS toMemberId, request_id AS requestId, message, status,
-  created_at AS createdAt, expires_at AS expiresAt, share_with_team AS shareWithTeam`;
+  created_at AS createdAt, expires_at AS expiresAt, share_with_team AS shareWithTeam, request_kind AS requestKind`;
 
 const REQUEST_COLS = `id, from_member AS fromMemberId, from_session AS fromSessionId, from_session_name AS fromSessionName,
   to_member AS toMemberId, message, status, forwarded_session AS forwardedSessionId, outcome, outcome_text AS outcomeText,
-  created_at AS createdAt, sent_at AS sentAt, deadline, origin`;
+  created_at AS createdAt, sent_at AS sentAt, deadline, origin, kind`;
 
 // Solicitudes entre $a y $b, en cualquier sentido.
 const PAIR = `((from_member = $a AND to_member = $b) OR (from_member = $b AND to_member = $a))`;
@@ -149,11 +159,11 @@ export class RequestsStore {
     this.db
       .query(
         `INSERT INTO drafts (id, kind, author_member, author_session, author_session_name, to_member, request_id, message,
-                             status, created_at, expires_at, share_with_team)
+                             status, created_at, expires_at, share_with_team, request_kind)
          VALUES ($id, $kind, $authorMemberId, $authorSessionId, $authorSessionName, $toMemberId, $requestId, $message,
-                 $status, $createdAt, $expiresAt, $shareWithTeam)`,
+                 $status, $createdAt, $expiresAt, $shareWithTeam, $requestKind)`,
       )
-      .run({ ...d, shareWithTeam: d.shareWithTeam ? 1 : 0 });
+      .run({ ...d, shareWithTeam: d.shareWithTeam ? 1 : 0, requestKind: d.requestKind ?? "request" });
   }
 
   getDraft(id: string): DraftRecord | null {
@@ -207,11 +217,11 @@ export class RequestsStore {
     this.db
       .query(
         `INSERT INTO requests (id, from_member, from_session, from_session_name, to_member, message, status,
-                               forwarded_session, outcome, outcome_text, created_at, sent_at, deadline, origin)
+                               forwarded_session, outcome, outcome_text, created_at, sent_at, deadline, origin, kind)
          VALUES ($id, $fromMemberId, $fromSessionId, $fromSessionName, $toMemberId, $message, $status,
-                 $forwardedSessionId, $outcome, $outcomeText, $createdAt, $sentAt, $deadline, $origin)`,
+                 $forwardedSessionId, $outcome, $outcomeText, $createdAt, $sentAt, $deadline, $origin, $kind)`,
       )
-      .run({ ...r, origin: r.origin ?? "session" });
+      .run({ ...r, origin: r.origin ?? "session", kind: r.kind ?? "request" });
   }
 
   getRequest(id: string): RequestRecord | null {
