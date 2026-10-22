@@ -57,8 +57,8 @@ describe("catálogo de la API", () => {
   });
 
   test("identidad de la sesión: máquina, instancia del MCP y claudeSessionId (opcionales, compatibles con MCP antiguos)", () => {
-    expect(RegisterSessionBody.parse({ name: "a", cwd: "/", parentPid: 1 })).toEqual({ name: "a", cwd: "/", parentPid: 1, channel: false, machine: "" });
-    const full = { name: "a", cwd: "/", parentPid: 1, channel: true, machine: "M1", instanceId: "i1", claudeSessionId: "cs" };
+    expect(RegisterSessionBody.parse({ name: "a", cwd: "/", parentPid: 1 })).toEqual({ name: "a", cwd: "/", parentPid: 1, channel: false, machine: "", features: [] });
+    const full = { name: "a", cwd: "/", parentPid: 1, channel: true, machine: "M1", instanceId: "i1", claudeSessionId: "cs", features: ["request_notice"] };
     expect(RegisterSessionBody.parse(full)).toEqual(full);
     expect(RegisterSessionBody.safeParse({ ...full, instanceId: "" }).success).toBe(false);
     expect(API.sessionHook.body.parse({ claudeSessionId: "c", cwd: "/", parentPid: 1, status: "idle" }).machine).toBe("");
@@ -86,8 +86,8 @@ describe("auditoría", () => {
     const { AuditQuery, AUDIT_ACTIONS } = await import("./audit");
     expect(API.audit).toMatchObject({ method: "GET", path: "/api/v1/audit", perm: "team.admin", actor: "admin" });
     expect("human" in API.audit).toBe(false);
-    expect(AuditQuery.parse({})).toEqual({ limit: 50 });
-    expect(AuditQuery.parse({ limit: "10", before: "99" })).toEqual({ limit: 10, before: 99 });
+    expect(AuditQuery.parse({})).toEqual({ limit: 50, features: [] });
+    expect(AuditQuery.parse({ limit: "10", before: "99" })).toEqual({ limit: 10, before: 99, features: [] });
     expect(AuditQuery.safeParse({ limit: "500" }).success).toBe(false);
     expect(AUDIT_ACTIONS).toContain("login.rejected");
   });
@@ -170,5 +170,25 @@ describe("atender solicitudes desde Claude Code", () => {
     expect(InboxItemSchema.safeParse({ id: "i", kind: "request_notice", content: "x", meta: {}, createdAt: 1 }).success).toBe(true);
     expect(AUDIT_ACTIONS).toContain("request.taken_in_chat");
     expect(AUDIT_ACTIONS).toContain("request.declined_in_chat");
+  });
+});
+
+describe("compatibilidad con clientes anteriores", () => {
+  test("registrar sesión: features opcional (MCP antiguos no la mandan) y acotada", async () => {
+    const { SESSION_FEATURES } = await import("./notices");
+    expect(SESSION_FEATURES).toContain("request_notice");
+    expect(RegisterSessionBody.parse({ name: "a", cwd: "/", parentPid: 1 }).features).toEqual([]);
+    expect(RegisterSessionBody.parse({ name: "a", cwd: "/", parentPid: 1, features: ["request_notice"] }).features).toEqual(["request_notice"]);
+    expect(RegisterSessionBody.safeParse({ name: "a", cwd: "/", parentPid: 1, features: Array(40).fill("x") }).success).toBe(false);
+  });
+
+  test("auditoría: las acciones nuevas solo para quien declara entenderlas; si no, su equivalente antiguo", async () => {
+    const { AuditQuery, AUDIT_FEATURES, legacyAuditAction } = await import("./audit");
+    expect(AuditQuery.parse({}).features).toEqual([]);
+    expect(AuditQuery.parse({ features: "audit_in_chat,otra" }).features).toEqual(["audit_in_chat", "otra"]);
+    expect(AUDIT_FEATURES.inChat).toBe("audit_in_chat");
+    expect(legacyAuditAction("request.taken_in_chat")).toBe("request.forwarded");
+    expect(legacyAuditAction("request.declined_in_chat")).toBe("request.rejected");
+    expect(legacyAuditAction("request.forwarded")).toBe("request.forwarded");
   });
 });

@@ -46,6 +46,20 @@ describe("sesiones", () => {
     expect((await sessionsOf("m-dayan"))[0]).toMatchObject({ id: b.id, channel: true });
   });
 
+  test("features: lo que declara el MCP se guarda (MCP antiguo = nada) y una reconexión lo actualiza", async () => {
+    await setup();
+    const sessions = t.app.ctx.services.get("sessions");
+    const old = (await register("dayan@dev", "antigua", 100)).data;
+    expect(sessions.supports(old.id, "request_notice")).toBe(false);
+    const body = { name: "nueva", cwd: "/repo/nueva", parentPid: 101, instanceId: "i-1", features: ["request_notice"] };
+    const s = (await t.call("dayan@dev", "POST", "/api/v1/sessions", body)).data;
+    expect(sessions.supports(s.id, "request_notice")).toBe(true);
+    expect(s).not.toHaveProperty("features"); // la vista pública de la sesión no cambia
+    const again = (await t.call("dayan@dev", "POST", "/api/v1/sessions", { ...body, features: [] })).data;
+    expect(again.id).toBe(s.id);
+    expect(sessions.supports(s.id, "request_notice")).toBe(false);
+  });
+
   test("el SSE de una sesión ajena → 403; desconocida → 404", async () => {
     await setup();
     const s = (await register("dayan@dev", "frontend", 100)).data;

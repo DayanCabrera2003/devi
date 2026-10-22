@@ -74,7 +74,7 @@ describe("solicitudes con contexto", () => {
     const incoming = f.userEvents("m-maria").find((e) => e.type === "request.incoming");
     expect(incoming.request.context).toEqual(context);
     await f.call("maria@dev", "POST", `/api/v1/requests/${incoming.request.id}/forward`, { sessionId: f.mariaApi.id });
-    const [delivery] = f.deliveries(f.mariaApi.id).filter((d) => d.kind !== "request_notice"); // sin el aviso de llegada
+    const [delivery] = f.deliveries(f.mariaApi.id);
     expect(delivery.content).toContain("Qué se intentó: Reiniciar el pod");
     expect(delivery.content).toContain("Último commit: a1b2c3d Arregla el login");
   });

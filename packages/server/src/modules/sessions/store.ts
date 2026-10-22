@@ -47,6 +47,11 @@ export const sessionsMigrations: Migration[] = [
       CREATE INDEX sessions_instance ON sessions(member_id, instance_id);
     `,
   },
+  {
+    // features: JSON de lo que declaró entender el MCP (SESSION_FEATURES); las sesiones de antes, nada.
+    version: 4,
+    sql: "ALTER TABLE sessions ADD COLUMN features TEXT NOT NULL DEFAULT '[]'",
+  },
 ];
 
 export type InboxRecord = { id: string; sessionId: string; kind: InboxItem["kind"]; content: string; meta: string; createdAt: number };
@@ -63,12 +68,21 @@ export type SessionRecord = {
   channel: boolean;
   machine: string;
   instanceId: string | null;
+  features: string[];
 };
 
-type Row = Omit<SessionRecord, "channel"> & { channel: number };
+type Row = Omit<SessionRecord, "channel" | "features"> & { channel: number; features: string };
 const COLS = `id, member_id AS memberId, name, cwd, parent_pid AS parentPid, status,
-  claude_session_id AS claudeSessionId, last_seen AS lastSeen, channel, machine, instance_id AS instanceId`;
-const rec = (r: Row | null): SessionRecord | null => (r ? { ...r, channel: r.channel === 1 } : null);
+  claude_session_id AS claudeSessionId, last_seen AS lastSeen, channel, machine, instance_id AS instanceId, features`;
+const parseFeatures = (raw: string): string[] => {
+  try {
+    const v: unknown = JSON.parse(raw);
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+};
+const rec = (r: Row | null): SessionRecord | null => (r ? { ...r, channel: r.channel === 1, features: parseFeatures(r.features) } : null);
 
 export class SessionsStore {
   constructor(private db: Database) {}
@@ -76,10 +90,10 @@ export class SessionsStore {
   insert(s: SessionRecord): void {
     this.db
       .query(
-        `INSERT INTO sessions (id, member_id, name, cwd, parent_pid, status, claude_session_id, last_seen, channel, machine, instance_id)
-         VALUES ($id, $memberId, $name, $cwd, $parentPid, $status, $claudeSessionId, $lastSeen, $channel, $machine, $instanceId)`,
+        `INSERT INTO sessions (id, member_id, name, cwd, parent_pid, status, claude_session_id, last_seen, channel, machine, instance_id, features)
+         VALUES ($id, $memberId, $name, $cwd, $parentPid, $status, $claudeSessionId, $lastSeen, $channel, $machine, $instanceId, $features)`,
       )
-      .run({ ...s, channel: s.channel ? 1 : 0 });
+      .run({ ...s, channel: s.channel ? 1 : 0, features: JSON.stringify(s.features) });
   }
 
   get(id: string): SessionRecord | null {
@@ -111,11 +125,11 @@ export class SessionsStore {
     this.db.query("UPDATE sessions SET name = $name WHERE id = $id").run({ id, name });
   }
 
-  updateOnReregister(id: string, r: { cwd: string; channel: boolean; lastSeen: number; claudeSessionId: string | null }): void {
+  updateOnReregister(id: string, r: { cwd: string; channel: boolean; lastSeen: number; claudeSessionId: string | null; features: string[] }): void {
     this.db
-      .query(`UPDATE sessions SET cwd = $cwd, channel = $channel, last_seen = $lastSeen,
+      .query(`UPDATE sessions SET cwd = $cwd, channel = $channel, last_seen = $lastSeen, features = $features,
               claude_session_id = COALESCE($claudeSessionId, claude_session_id) WHERE id = $id`)
-      .run({ id, cwd: r.cwd, channel: r.channel ? 1 : 0, lastSeen: r.lastSeen, claudeSessionId: r.claudeSessionId });
+      .run({ id, cwd: r.cwd, channel: r.channel ? 1 : 0, lastSeen: r.lastSeen, claudeSessionId: r.claudeSessionId, features: JSON.stringify(r.features) });
   }
 
   // Sesiones del mismo Claude Code (misma persona, máquina y pid): un registro nuevo las sustituye.

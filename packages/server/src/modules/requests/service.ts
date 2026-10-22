@@ -669,11 +669,15 @@ export class RequestsManager {
   // ---- utilidades -----------------------------------------------------------
 
   // Le llega una solicitud nueva a B: tarjeta en su app y, si lo tiene activado (Ajustes), aviso en su sesión viva
-  // más reciente (una sola, para no repetirlo). Sin canal, el aviso espera en la bandeja y lo inyecta el hook.
+  // más reciente (una sola, para no repetirlo) de las que declararon entender request_notice: un MCP antiguo
+  // rechazaría la bandeja entera. Si ninguna lo entiende, basta la tarjeta. Sin canal, lo inyecta el hook.
   private incoming(r: RequestRecord, view: DeviRequest): void {
     this.push(r.toMemberId, { type: "request.incoming", request: view });
     if (this.ctx.services.find("prefs")?.of(r.toMemberId).sessionNotices === false) return;
-    const target = this.sessions.liveOf(r.toMemberId).sort((a, b) => b.lastSeen - a.lastSeen)[0];
+    const target = this.sessions
+      .liveOf(r.toMemberId)
+      .filter((s) => this.sessions.supports(s.id, "request_notice"))
+      .sort((a, b) => b.lastSeen - a.lastSeen)[0];
     if (!target) return;
     const context = this.store.requestContext(r.id);
     const delivery: SessionDelivery = {

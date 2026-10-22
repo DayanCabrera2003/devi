@@ -11,7 +11,8 @@ let f: Flow;
 afterEach(() => f.cleanup());
 
 const txt = (name: string, content: string) => new File([content], name);
-const setup = () => setupFlow({ extraModules: [prefsModule, auditModule] });
+// Las sesiones del escenario declaran entender el aviso (como el MCP actual).
+const setup = () => setupFlow({ extraModules: [prefsModule, auditModule], features: ["request_notice"] });
 const notices = (sessionId: string) => f.deliveries(sessionId).filter((d) => d.kind === "request_notice");
 const NO_ORIGIN = { origin: null } as const; // como el MCP: sin el Origin de la app
 
@@ -20,8 +21,9 @@ const take = (id: string, body: object = {}) =>
 const decline = (id: string, body: object = {}) =>
   f.call("maria@dev", "POST", `/api/v1/requests/${id}/decline`, { sessionId: f.mariaApi.id, reason: "No tengo acceso", approval: "chat", ...body }, NO_ORIGIN);
 
-async function audit(): Promise<AuditEntry[]> {
-  const res = await f.call("dayan@dev", "GET", "/api/v1/audit?limit=200");
+// La app actual declara entender las acciones nuevas de auditoría; una anterior no (ver el último test).
+async function audit(features = "audit_in_chat"): Promise<AuditEntry[]> {
+  const res = await f.call("dayan@dev", "GET", `/api/v1/audit?limit=200&features=${features}`);
   return [...res.data.entries].reverse();
 }
 
@@ -50,6 +52,25 @@ describe("aviso en la sesión al llegar una solicitud", () => {
     const r = await f.pendingRequest();
     expect(notices(web.id).map((n) => n.meta.request_id)).toEqual([r.id]);
     expect(notices(f.mariaApi.id)).toEqual([]);
+  });
+
+  test("solo a sesiones que declararon entender request_notice (un MCP antiguo nunca lo ve, ni en la bandeja)", async () => {
+    f = await setup();
+    f.clock.advance(1_000);
+    const old = await f.session("maria@dev", "antigua", 202, []); // la más reciente, pero sin la feature
+    const r = await f.pendingRequest();
+    expect(notices(old.id)).toEqual([]);
+    const inbox = await f.call("maria@dev", "GET", "/api/v1/sessions/inbox?parentPid=202&claudeSessionId=x", undefined, NO_ORIGIN);
+    expect(inbox.data.map((i: { kind: string }) => i.kind)).not.toContain("request_notice");
+    // Va a la más reciente de las que sí lo entienden.
+    expect(notices(f.mariaApi.id).map((n) => n.meta.request_id)).toEqual([r.id]);
+  });
+
+  test("si ninguna sesión viva lo entiende, no hay aviso (basta la tarjeta de la app)", async () => {
+    f = await setupFlow({ extraModules: [prefsModule, auditModule] });
+    await f.pendingRequest();
+    expect(f.sent.some((s) => s.data?.kind === "request_notice")).toBe(false);
+    expect(f.userEvents("m-maria").some((e) => e.type === "request.incoming")).toBe(true);
   });
 
   test("también al enviarla desde la app y al aprobarla en el chat", async () => {
@@ -183,5 +204,21 @@ describe("decline: rechazar desde Claude Code", () => {
     await f.call("dayan@dev", "PATCH", "/api/v1/settings", { chatApproval: false });
     expect((await decline(r.id)).status).toBe(403);
     expect((await f.call("maria@dev", "GET", `/api/v1/requests/${r.id}`)).data.status).toBe("pending");
+  });
+});
+
+describe("auditoría para una app anterior", () => {
+  test("sin declarar audit_in_chat, traer y rechazar desde el chat salen como forwarded / rejected con via=chat", async () => {
+    f = await setup();
+    const a = await f.pendingRequest("una");
+    const b = await f.pendingRequest("otra");
+    await take(a.id);
+    await decline(b.id);
+    const old = await audit("");
+    expect(old.some((e) => e.action === "request.taken_in_chat" || e.action === "request.declined_in_chat")).toBe(false);
+    expect(old.find((e) => e.targetId === a.id && e.action === "request.forwarded")?.details.via).toBe("chat");
+    expect(old.find((e) => e.targetId === b.id && e.action === "request.rejected")?.details.via).toBe("chat");
+    const now = await audit();
+    expect(now.map((e) => e.action)).toEqual(expect.arrayContaining(["request.taken_in_chat", "request.declined_in_chat"]));
   });
 });

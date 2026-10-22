@@ -19,13 +19,14 @@ export type Flow = Awaited<ReturnType<typeof setupFlow>>;
 
 export const MODULES_UNDER_TEST = [team, settingsModule, sessionsModule, filesModule, requestsModule];
 
-export async function setupFlow(opts: { dev?: boolean; extraModules?: DeviModule[]; rateLimits?: Partial<RateLimits> } = {}) {
+// features: lo que declaran entender las sesiones del escenario al registrarse (por defecto nada, como un MCP antiguo).
+export async function setupFlow(opts: { dev?: boolean; extraModules?: DeviModule[]; rateLimits?: Partial<RateLimits>; features?: string[] } = {}) {
   const t = createTestApp({ modules: [...MODULES_UNDER_TEST, ...(opts.extraModules ?? [])], dev: opts.dev, rateLimits: opts.rateLimits });
   await t.app.start();
 
   // Registra una sesión y abre su SSE (queda viva).
-  async function session(login: string, name: string, parentPid: number) {
-    const s = (await t.call(login, "POST", "/api/v1/sessions", { name, cwd: `/repo/${name}`, parentPid })).data;
+  async function session(login: string, name: string, parentPid: number, features = opts.features ?? []) {
+    const s = (await t.call(login, "POST", "/api/v1/sessions", { name, cwd: `/repo/${name}`, parentPid, features })).data;
     const stream = await t.openStream(login, `/api/v1/events/session/${s.id}`);
     // Latidos como los del MCP: sin ellos, una espera larga dejaría la sesión obsoleta.
     const key = `session:${s.id}`;

@@ -1,4 +1,6 @@
-import { type HookBody, type InboxItem, type InboxQuery, PRESENCE, type RegisterSessionBody, type Session, type SessionDelivery } from "@devi/protocol";
+import {
+  type HookBody, type InboxItem, type InboxQuery, PRESENCE, type RegisterSessionBody, type Session, type SessionDelivery, type SessionFeature,
+} from "@devi/protocol";
 import type { z } from "zod";
 import { HttpError } from "../../core/http";
 import type { Presence } from "../../core/presence";
@@ -54,7 +56,9 @@ export class SessionManager implements SessionsService {
       // Si estuvo caída y entretanto otra sesión activa tomó su nombre, se le da otro libre.
       const others = this.activeNames(memberId, existing.id);
       if (others.has(existing.name.toLocaleLowerCase("es"))) this.store.rename(existing.id, uniqueSessionName(body.name, others));
-      this.store.updateOnReregister(existing.id, { cwd: body.cwd, channel: body.channel, lastSeen: now, claudeSessionId: body.claudeSessionId ?? null });
+      this.store.updateOnReregister(existing.id, {
+        cwd: body.cwd, channel: body.channel, lastSeen: now, claudeSessionId: body.claudeSessionId ?? null, features: body.features,
+      });
       return this.toSession(this.store.get(existing.id)!);
     }
     for (const old of this.store.sameClaudeCode(memberId, body.machine, body.parentPid)) {
@@ -65,7 +69,7 @@ export class SessionManager implements SessionsService {
     const rec: SessionRecord = {
       id: crypto.randomUUID(), memberId, name: uniqueSessionName(body.name, taken), cwd: body.cwd, parentPid: body.parentPid,
       status: "idle", claudeSessionId: body.claudeSessionId ?? null, lastSeen: now, channel: body.channel,
-      machine: body.machine, instanceId: body.instanceId ?? null,
+      machine: body.machine, instanceId: body.instanceId ?? null, features: body.features,
     };
     this.store.insert(rec);
     this.changed(memberId);
@@ -194,6 +198,11 @@ export class SessionManager implements SessionsService {
 
   liveOf(memberId: string): Session[] {
     return this.store.ofMember(memberId).filter((s) => this.isAlive(s.id)).map((s) => this.toSession(s));
+  }
+
+  // ¿El MCP de esta sesión declaró entender esta entrega nueva al registrarse? (ver SESSION_FEATURES)
+  supports(id: string, feature: SessionFeature): boolean {
+    return this.store.get(id)?.features.includes(feature) ?? false;
   }
 
   hasLive(memberId: string): boolean {

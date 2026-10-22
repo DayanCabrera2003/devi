@@ -60,9 +60,21 @@ export const AuditEntrySchema = z.object({
 export type AuditEntry = z.infer<typeof AuditEntrySchema>;
 
 // GET /audit?limit=&before=: de la más nueva a la más vieja. nextBefore = id para pedir la página siguiente.
+// features: lista separada por comas de lo que entiende el cliente (AUDIT_FEATURES). Sin ella (app antigua), las
+// acciones nuevas se devuelven como su equivalente antiguo (legacyAuditAction), que su esquema sí acepta.
 export const AuditQuery = z.object({
   limit: z.coerce.number().int().min(1).max(AUDIT_LIMITS.maxPage).default(AUDIT_LIMITS.defaultPage),
   before: z.coerce.number().int().positive().optional(),
+  features: z.string().max(500).default("").transform((v) => v.split(",").map((x) => x.trim()).filter((x) => x.length > 0)),
 });
+
+export const AUDIT_FEATURES = { inChat: "audit_in_chat" } as const;
+
+// Acciones que una app anterior no conoce → la que sí conoce (con details.via = "chat" para distinguirlas).
+const LEGACY_ACTIONS: Partial<Record<AuditAction, AuditAction>> = {
+  "request.taken_in_chat": "request.forwarded",
+  "request.declined_in_chat": "request.rejected",
+};
+export const legacyAuditAction = (action: AuditAction): AuditAction => LEGACY_ACTIONS[action] ?? action;
 export const AuditPageSchema = z.object({ entries: z.array(AuditEntrySchema), nextBefore: z.number().int().optional() });
 export type AuditPage = z.infer<typeof AuditPageSchema>;

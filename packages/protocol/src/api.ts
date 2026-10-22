@@ -63,6 +63,8 @@ const Machine = z.string().max(200).default("");
 export const RegisterSessionBody = z.object({
   name: NonEmpty, cwd: z.string(), parentPid: z.number().int(), channel: z.boolean().default(false),
   machine: Machine, instanceId: z.string().min(1).max(200).optional(), claudeSessionId: z.string().min(1).max(200).optional(),
+  // Entregas nuevas que entiende este MCP (ver SESSION_FEATURES). Sin campo (MCP antiguo) = ninguna.
+  features: z.array(z.string().min(1).max(64)).max(32).default([]),
 });
 export const HookBody = z.object({
   claudeSessionId: z.string(), cwd: z.string(), parentPid: z.number().int(), status: SessionStatusSchema, machine: Machine,
