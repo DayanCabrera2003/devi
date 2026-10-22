@@ -6,6 +6,10 @@
 // cuando el usuario escribe, por `devi hook working` (additionalContext con la ruta local del archivo).
 // Tercer test: un cliente MCP que se presenta como Claude Code aprueba en el chat: send_request llega al
 // destinatario sin pasar por la app; con chatApproval desactivado, queda en borrador como siempre.
+// Cuarto test (identidad): dos sesiones de la MISMA persona en la misma carpeta y máquina, con distinto Claude
+// Code, más otras personas: nombres únicos, list_teammates sin uno mismo, whoami, enviarse a uno mismo,
+// get_conversation y list_pending con lo intercambiado antes, sin entregas cruzadas por el hook, y la sesión
+// se cierra en el servidor al salir el MCP.
 // Todo vive en carpetas temporales; el servidor y los MCP se matan en afterAll.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -54,7 +58,7 @@ afterAll(async () => {
 // "Claude Code falso": lanza `devi mcp` con su propia config, carpeta de proyecto y carpeta de recibidos.
 async function fakeClaude(
   login: string, session: string, home: string,
-  opts: { channel?: boolean; clientInfo?: { name: string; version: string } } = {},
+  opts: { channel?: boolean; clientInfo?: { name: string; version: string }; ownParent?: boolean } = {},
 ) {
   const project = join(home, "proyecto");
   mkdirSync(project, { recursive: true });
@@ -66,9 +70,11 @@ async function fakeClaude(
   client.setNotificationHandler(ChannelEvent, async (n) => {
     events.push(n.params);
   });
+  // ownParent: el MCP cuelga de un `sh` intermedio, así su pid padre es otro "Claude Code" distinto de este
+  // proceso (el `; exit` evita que sh haga exec y desaparezca).
   const transport = new StdioClientTransport({
-    command: process.execPath,
-    args: [MAIN, "mcp"],
+    command: opts.ownParent ? "/bin/sh" : process.execPath,
+    args: opts.ownParent ? ["-c", '"$0" "$1" mcp; exit $?', process.execPath, MAIN] : [MAIN, "mcp"],
     cwd: project,
     env: fakeEnv(home, config, session, project, opts.channel ?? true),
     stderr: "pipe",
@@ -80,7 +86,7 @@ async function fakeClaude(
     return { text: r.content.map((c) => c.text).join("\n"), isError: !!r.isError };
   };
   const nextEvent = (kind: string) => waitFor(() => events.find((e) => e.meta.kind === kind), `evento ${kind} en ${session}`);
-  return { project, receivedDir, config, home, events, callTool, nextEvent };
+  return { project, receivedDir, config, home, events, callTool, nextEvent, parentPid: () => transport.pid, close: () => client.close() };
 }
 
 // Entorno de un "Claude Code falso": DEVI_CHANNEL=1 solo si se lanzó con canal (como hace `devi claude`).
@@ -173,7 +179,7 @@ test("devi mcp: de list_teammates a la respuesta en el canal, con archivos", asy
     return t.text.includes("María") ? t : undefined;
   }, "maria en list_teammates");
   expect(team.text).toContain("Aprobar PRs backend");
-  expect(team.text).not.toContain('"Dayan"');
+  expect(team.text).not.toContain("Dayan (id");
 
   writeFileSync(join(dayan.project, "nota.txt"), "el PR es el #12");
   const sent = await dayan.callTool("send_request", { to: maria.id, message: "¿me apruebas el PR?", files: ["nota.txt"] });
@@ -281,4 +287,68 @@ test("Claude Code aprueba en el chat: la solicitud llega sin pasar por la app; c
   expect(draft.draft.status).toBe("awaiting");
   expect(dayanUi.events.some((e) => e.type === "request.incoming" && e.request.message === "¿Y el de logout?")).toBe(false);
   await dayanApp.call("updateSettings", { body: { chatApproval: true } });
+}, 60_000);
+
+test("identidad: dos sesiones mías en la misma carpeta y otra persona; nada se cruza", async () => {
+  expect(shared).not.toBeNull();
+  const { dayanApp, dayan } = shared!;
+  const me = await dayanApp.call("me");
+  // Otro Claude Code de Dayan en la MISMA carpeta y máquina, sin canal.
+  const dayan2 = await fakeClaude("dayan@dev", "frontend", join(tmp, "dayan"), { channel: false, ownParent: true });
+  const mine = await waitFor(async () => {
+    const ss = await dayanApp.call("memberSessions", { params: { id: me.member.id } });
+    return ss.length === 2 ? ss : undefined;
+  }, "dos sesiones de dayan");
+  expect(mine.map((s) => s.name).sort()).toEqual(["frontend", "frontend (2)"]);
+  const second = mine.find((s) => s.name === "frontend (2)")!;
+  expect(second.channel).toBe(false);
+  heartbeats.add(() => dayanApp.call("heartbeat", { body: { sessionId: second.id } }));
+  await dayanApp.call("heartbeat", { body: { sessionId: second.id } });
+
+  // list_teammates nunca me lista, desde ninguna de mis sesiones.
+  for (const cc of [dayan, dayan2]) {
+    const t = await cc.callTool("list_teammates");
+    expect(t.isError).toBe(false);
+    expect(t.text).not.toContain("Dayan (id");
+    for (const n of ["María (id", "Leo (id", "Ana (id"]) expect(t.text).toContain(n);
+  }
+
+  // whoami: el nombre definitivo, sin canal, y la otra sesión.
+  const who = await dayan2.callTool("whoami");
+  expect(who.text).toContain('Esta sesión: "frontend (2)"');
+  expect(who.text).toContain("Canal en tiempo real: no");
+  expect(who.text).toContain('"frontend" (');
+
+  // A mí mismo: error claro, sin borrador.
+  const self = await dayan2.callTool("send_request", { to: me.member.id, to_name: me.member.name, message: "hola yo" });
+  expect(self.isError).toBe(true);
+  expect(self.text).toContain("eres tú");
+
+  // get_conversation y list_pending reflejan lo intercambiado en los tests anteriores.
+  const conv = await dayan2.callTool("get_conversation", { member: "María" });
+  expect(conv.text).toContain("¿me apruebas el PR?");
+  expect(conv.text).toContain("Aprobado");
+  expect(conv.text).toContain("Tú → María");
+  const pending = await dayan.callTool("list_pending");
+  expect(pending.text).toContain("Solicitudes para ti");
+  expect(pending.text).toContain("¿Miras el fallo de login?");
+  const fromAna = (await dayanApp.call("pending")).incoming.find((r) => r.message === "¿Miras el fallo de login?")!;
+  const one = await dayan.callTool("get_request", { request_id: fromAna.id });
+  expect(one.text).toContain("Ana → tú");
+
+  // Reenviada a la segunda sesión (sin canal): la primera no la recibe ni por el canal ni por el hook.
+  await dayanApp.call("forwardRequest", { params: { id: fromAna.id }, body: { sessionId: second.id } });
+  const hookInput = { session_id: "cc-dayan-1", cwd: dayan.project, hook_event_name: "UserPromptSubmit", prompt: "hola" };
+  // El hook cuelga de este proceso, como el MCP de la primera sesión: se empareja con ella, no con la segunda.
+  expect((await runHookProc(dayan, "working", hookInput)).trim()).toBe("");
+  expect(dayan.events.some((e) => e.meta.request_id === fromAna.id)).toBe(false);
+  const inbox2 = await dayanApp.call("sessionInbox", {
+    query: { parentPid: String(dayan2.parentPid()), claudeSessionId: "cc-dayan-2", machine: "maquina-test" },
+  });
+  expect(inbox2.map((i) => i.meta.request_id)).toEqual([fromAna.id]);
+
+  // Al salir el MCP, su sesión se cierra en el servidor y la solicitud vuelve a pending.
+  await dayan2.close();
+  await waitFor(async () => ((await dayanApp.call("memberSessions", { params: { id: me.member.id } })).length === 1 ? true : undefined), "sesión cerrada");
+  expect((await dayanApp.call("getRequest", { params: { id: fromAna.id } })).status).toBe("pending");
 }, 60_000);
