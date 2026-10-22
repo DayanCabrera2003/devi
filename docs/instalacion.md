@@ -183,6 +183,18 @@ Cuando tu agente envía algo a un compañero (`send_request`) o le responde (`re
 
 **Ajuste del equipo.** Un admin puede desactivarlo en **Admin → Servidor → «Aprobar envíos en el chat de Claude Code»** (está activado por defecto). Desactivado, todo lo que sale queda en borrador para la app, aunque lo hayas aprobado en el chat, y el agente te dice que lo autorices allí. Cada envío aprobado en el chat queda en **Admin → Auditoría** como `draft.approved_in_chat`: quién lo envió, a quién, los nombres y tamaños de los archivos y el SHA-256 del mensaje (nunca el texto). Los permisos, los límites de ritmo, la validación de archivos y el aviso de secretos se aplican igual que con la app.
 
+### Atender solicitudes desde Claude Code (Remote Control)
+
+Si estás lejos del portátil y usas Claude Code desde el móvil con **Remote Control**, puedes atender lo que te pidan sin abrir la app de Devi:
+
+- **Aviso.** Cuando te llega una solicitud, además de la tarjeta en la app, tu sesión de Claude Code viva más reciente recibe un aviso con quién te la pide, desde qué sesión y un resumen. El agente te lo cuenta en una línea y te ofrece traerla o rechazarla; nunca hace nada sin que decidas. Lo desactivas en **Ajustes → Solicitudes en Claude Code → «Avisar en mis sesiones de Claude Code»** (activado por defecto).
+- **Traerla** (`take_request`) es lo mismo que «Enviar a mi sesión» en la app: la solicitud entera entra en esa sesión, con los archivos ya descargados, y sigues como siempre (`respond_to_request`). Para aceptarla con una nota, tráela y responde.
+- **Rechazarla** (`decline_request`) es lo mismo que Rechazar en la app: con un motivo, que le llega a quien la pidió.
+- Las dos piden permiso en el aviso de Claude Code en **cada** llamada, como los envíos, y quedan en Admin → Auditoría (`request.taken_in_chat`, `request.declined_in_chat`). Solo funcionan con la aprobación en el chat disponible (Claude Code 2.1.246 o posterior y el ajuste del equipo activado, ver [Aprobar envíos en el chat](#aprobar-envíos-en-el-chat)); si no, el agente te dice que lo hagas desde la app.
+- Si Devi ve una posible prompt injection en el mensaje o en los archivos, **no la trae**: revísala en la app, con los avisos de la tarjeta.
+
+**Avisos en el móvil.** Remote Control lleva al móvil los avisos de permisos de Claude Code, que esperan hasta que respondas. Para que el móvil te avise también con una notificación, activa en Claude Code `/config` → **«Push when actions required»**.
+
 ### Si nadie responde: escalado
 
 Si tu solicitud sigue sin respuesta (nadie la acepta, rechaza ni la envía a una sesión) al cabo de un plazo, Devi te avisa una vez: en la app y en la sesión de Claude Code desde la que la pediste. Tu agente te lo dice y, si quieres, te propone a otra persona según sus capacidades y si está conectada; decides tú. Lo más directo es el botón **«Pedírselo a otra persona»** de la tarjeta de la solicitud enviada (también sale cuando venció el plazo): eliges a alguien, le llega el mismo mensaje con los mismos archivos y la solicitud original se cierra con la nota «Reenviada a <nombre>».
@@ -221,7 +233,7 @@ Si el servidor exige una versión más nueva, la app muestra **Actualiza Devi**:
 
 Las acciones que debe decidir una persona (autorizar o descartar un borrador, enviar una solicitud escrita en la app, responder una solicitud, administrar el equipo, roles y ajustes, exportar la base de datos) **solo se aceptan desde la app de Devi**: el servidor exige la cabecera `Origin` de la app. Si un agente intenta hacerlas llamando a la API directamente, recibe «Esta acción solo se puede hacer desde la app de Devi».
 
-La excepción son los envíos aprobados en el chat (ver [Aprobar envíos en el chat](#aprobar-envíos-en-el-chat)): ahí la aprobación es el aviso de permisos de Claude Code, que sale en cada llamada a `send_request` o `respond_to_request` y no se puede desactivar con reglas, hooks ni modos de permisos. Si el equipo prefiere que todo pase por la app, el admin desactiva «Aprobar envíos en el chat de Claude Code» en Admin → Servidor.
+La excepción son los envíos aprobados en el chat (ver [Aprobar envíos en el chat](#aprobar-envíos-en-el-chat)) y traer o rechazar una solicitud desde Claude Code: ahí la aprobación es el aviso de permisos de Claude Code, que sale en cada llamada a `send_request`, `respond_to_request`, `take_request` o `decline_request` y no se puede desactivar con reglas, hooks ni modos de permisos. Si el equipo prefiere que todo pase por la app, el admin desactiva «Aprobar envíos en el chat de Claude Code» en Admin → Servidor.
 
 Es una barrera, no una garantía: un proceso que corra con tu mismo usuario del sistema podría falsificar esa cabecera o llamar a la API sin pasar por Claude Code. La protección real es que Claude Code te pide permiso antes de ejecutar comandos de red, que cada envío de Devi pasa por su aviso o por la app, y que la auditoría registra cada envío.
 
@@ -257,6 +269,7 @@ Una solicitud, una respuesta o un archivo adjunto pueden intentar manipular la s
 | «Te falta el permiso…» | El admin debe darte un rol con ese permiso (Admin → Roles). |
 | «Esta acción solo se puede hacer desde la app de Devi» | Autoriza, responde o administra desde la app, no desde la terminal ni desde Claude. |
 | «La aprobación en el chat está desactivada en este equipo» | El admin la desactivó en Admin → Servidor: autoriza el borrador en la app. |
+| «hazlo desde la app de Devi» al traer o rechazar una solicitud | La aprobación en el chat no está disponible (ajuste del equipo desactivado o Claude Code anterior a 2.1.246): atiéndela en la app. |
 | El envío se deniega solo con `claude -p` | Es lo esperado: el aviso necesita a una persona. Usa una sesión interactiva o `DEVI_APPROVAL=app` y autoriza en la app. |
 | «No encuentro Claude Code» | Las apps abiertas desde el menú no heredan el PATH de tu shell. Devi busca `claude` en el PATH, en sitios habituales (`~/.local/bin`, `~/.claude/local`, `~/.bun/bin`, Homebrew…) y en tu shell de login. Si está en otro sitio, indica su ruta con la variable `DEVI_CLAUDE_BIN` (p. ej. `export DEVI_CLAUDE_BIN=/ruta/a/claude`; `CLAUDE_BIN` también vale). |
 

@@ -79,6 +79,7 @@ Todas las rutas están declaradas en `API` (`packages/protocol/src/api.ts`) con 
 |---|---|---|
 | `GET /health` | cualquiera | Salud y versión (sin identidad). |
 | `GET /me` · `GET /team` | miembro | Persona, permisos efectivos; equipo con roles, capacidades y presencia. |
+| `GET /me/prefs` · `PATCH /me/prefs` | miembro (solo lo suyo; PATCH humana) | Preferencias de la persona: `sessionNotices` (aviso en sus sesiones al llegarle una solicitud, activado por defecto). |
 | `GET /me/week` | miembro (solo lo suyo) | «Tu semana»: enviadas y recibidas (por creación), respondidas y tiempo medio de respuesta (por fecha de respuesta) y las 3 personas a las que más ayudó (sin contar rechazos), en los últimos 7 días. |
 | `POST/PATCH/DELETE /team/members[/:id]` · `/team/roles[/:id]` | admin, humana | Personas y roles. |
 | `GET/PATCH /settings` · `GET /settings/export` | admin (PATCH y export humanas) | Ajustes del servidor y copia de `devi.db`. |
@@ -95,6 +96,7 @@ Todas las rutas están declaradas en `API` (`packages/protocol/src/api.ts`) con 
 | `GET /requests/:id` | remitente o destinatario | Una solicitud (404 para cualquier otro). Lo usa `get_request`. |
 | `GET /conversations/:memberId?before=&limit=` | miembro (solo las suyas) | Solicitudes entre quien llama y esa persona, en los dos sentidos, de la más nueva a la más vieja (30 por defecto, hasta 100). |
 | `POST /requests/:id/forward` · `/accept` · `/reject` | destinatario, humana | Decisiones de quien recibe. |
+| `POST /requests/:id/take` · `/decline` | destinatario (no humana) | Traer a la sesión que llama (`{ sessionId, approval }`) o rechazar con motivo (`{ sessionId, reason, approval }`) desde Claude Code (`take_request` / `decline_request`). Solo con `approval: "chat"` y el ajuste `chatApproval` activo; si no, `403 chat_approval_unavailable`. Ver «Atender desde Claude Code». |
 | `POST /requests/:id/response/accept` · `/response/forward` | remitente, humana | Decisiones sobre la respuesta. |
 | `POST /requests/:id/resend` · `/ignore` | remitente, humana | Tras un plazo vencido. |
 | `GET /knowledge?q=&limit=` | miembro | Base del equipo: búsqueda de texto completo (sin `q`, las más recientes; 10 por defecto, hasta 50). Lo usa `search_knowledge`. |
@@ -108,7 +110,7 @@ Todas las rutas están declaradas en `API` (`packages/protocol/src/api.ts`) con 
 
 **SSE de usuario** (app): `draft.awaiting`, `draft.discarded`, `request.incoming`, `request.updated`, `response.incoming`, `request.timed_out`, `request.escalated` (solo al autor: sigue sin respuesta al cumplirse el plazo de escalado), `conversation.updated` (`{ memberId }`: cambió una solicitud o borrador con esa persona; llega a las dos partes), `team.updated`, `sessions.updated`, `knowledge.saved` / `knowledge.refused` (a quien respondió: su respuesta entró en la base del equipo o no se publicó por posibles secretos) y, solo a admins, `audit.alert`. Al conectar, el servidor reenvía las tarjetas abiertas.
 
-**SSE de sesión** (MCP → canal): un único evento `deliver` con `kind` = `request`, `response`, `draft_authorized`, `draft_discarded`, `escalation` (una solicitud tuya sigue sin respuesta) o `debug`, el texto para el agente y los atributos del canal (`request_id`, `draft_id`, rutas de archivos…).
+**SSE de sesión** (MCP → canal): un único evento `deliver` con `kind` = `request`, `response`, `draft_authorized`, `draft_discarded`, `escalation` (una solicitud tuya sigue sin respuesta), `request_notice` (te llegó una solicitud: resumen para atenderla desde la sesión) o `debug`, el texto para el agente y los atributos del canal (`request_id`, `draft_id`, rutas de archivos…).
 
 ### Núcleo y módulos del servidor
 
@@ -131,13 +133,14 @@ Módulos, en el orden en que se registran (`MODULES` en `packages/server/src/mai
 |---|---|
 | `team` | Personas, logins, roles, capacidades y permisos. Resuelve login → persona y permisos. Bootstrap del admin e importación de `team.json`. |
 | `settings` | Ajustes del servidor (plazos, retención, dominios permitidos) y exportación de la base. |
+| `prefs` | Preferencias de cada persona (`member_prefs`), p. ej. el aviso en sus sesiones. |
 | `audit` | Registro de auditoría y avisos `audit.alert`. |
 | `sessions` | Sesiones de Claude Code, estado trabajando/libre, presencia y bandeja de entregas. |
 | `files` | Validación, almacenamiento, descarga y retención de archivos. |
 | `requests` | Borradores, solicitudes, respuestas y plazos. |
 | `knowledge` | Base de conocimiento del equipo: indexa con FTS5 las respuestas compartidas, búsqueda y retirada. |
 
-Los módulos no se importan entre sí: se comunican por el **bus** (`draft.discarded`, `request.closed`, `session.closed`, `request.shared`) y por **servicios** que se ofrecen en `ctx.services` (`team`, `settings`, `sessions`, `files`, `audit`).
+Los módulos no se importan entre sí: se comunican por el **bus** (`draft.discarded`, `request.closed`, `session.closed`, `request.shared`) y por **servicios** que se ofrecen en `ctx.services` (`team`, `settings`, `sessions`, `files`, `audit`, `prefs`).
 
 ## Modelo de datos
 
@@ -189,9 +192,9 @@ Al autorizar, la sesión autora recibe `draft_authorized`: así el agente sabe q
 ### Solicitudes
 
 ```
-pending ──forward──▶ forwarded ──(borrador de respuesta autorizado)──▶ answered
+pending ──forward | take──▶ forwarded ──(borrador de respuesta autorizado)──▶ answered
    ├─accept─▶ accepted
-   └─reject─▶ rejected
+   └─reject | decline─▶ rejected
 pending|forwarded ──plazo──▶ timed_out ─resend─▶ pending
                                         └─ignore─▶ closed
 pending|timed_out ──reassign──▶ closed   (y una solicitud nueva en pending para otra persona)
@@ -203,6 +206,15 @@ accepted|rejected|answered ──el remitente acepta o la envía a una sesión�
 - Aceptar y Rechazar desde la tarjeta son acciones humanas directas.
 - Plazos y caducidades se guardan en SQLite y se reprograman al arrancar (`onStart`), así que sobreviven a reinicios.
 - **Escalado.** Si la solicitud sigue en `pending` a los `escalateAfterMs` de `sent_at` (y eso cae antes del plazo), el servidor avisa al autor: `kind="escalation"` a su sesión de origen (a su bandeja, como el resto de entregas; las escritas en la app no tienen sesión) y `request.escalated` a su app. `escalated_at` hace que sea una sola vez por solicitud, también tras un reenvío o un reinicio (si venció con el servidor apagado, avisa al arrancar). Bajar el timeout por debajo del escalado no se rechaza: entonces no avisa. El servidor no elige a nadie: el agente propone (con `list_teammates`) y la persona decide, normalmente con «Pedírselo a otra persona» (`reassign`, auditoría `request.reassigned`).
+
+### Atender desde Claude Code
+
+Para atender una solicitud sin la app delante (p. ej. Claude Code en el móvil con Remote Control):
+
+- **Aviso.** Cada vez que a B le llega una solicitud nueva en `pending` (autorizada, aprobada en el chat, escrita en la app, reenviada tras un plazo o pedida a otra persona), además de `request.incoming` a su app, el servidor entrega `kind="request_notice"` a **una** sesión: la viva de B con el latido más reciente. Lleva quién, desde qué sesión, el `request_id`, cuántos archivos y un resumen del mensaje recortado a `NOTICE_LIMITS.summaryChars`, dentro de un bloque `DEVI-UNTRUSTED`; si el mensaje o el contexto dan aviso de inyección, lo dice. Va a la bandeja como el resto (sin canal lo inyecta el hook). B lo desactiva en Ajustes («Avisar en mis sesiones de Claude Code»), que se guarda en el módulo `prefs`.
+- **take.** Igual que «Enviar a mi sesión», con destino la sesión que llama: la solicitud pasa a `forwarded` y la entrega (`requestContent`/`handoffContent`) se guarda en la bandeja y vuelve en la respuesta; el MCP la devuelve como resultado de `take_request`, descarga los archivos a la carpeta de recibidos y confirma la entrada. No se empuja por el SSE para no repetirla por el canal. Auditoría `request.taken_in_chat`.
+- **decline.** Igual que Rechazar (motivo obligatorio). Auditoría `request.declined_in_chat` (con el SHA-256 del motivo).
+- **Condiciones.** Las mismas que la aprobación en el chat de los envíos: el MCP solo manda `approval: "chat"` si su cliente es un Claude Code ≥ `MIN_CLAUDE_CODE_VERSION` (las dos herramientas llevan `anthropic/requiresUserInteraction`, así que el aviso de permisos sale en cada llamada), y el servidor exige además `chatApproval`. La sesión tiene que ser de B y estar viva, y la solicitud, `pending` (como el reenvío desde la app). `take` analiza mensaje, contexto y archivos con el mismo detector que las tarjetas de la app: con cualquier aviso (`409 injection`) no se trae y hay que revisarla en la app.
 
 Una solicitud escrita en la app entra directamente en `pending` (auditoría `request.sent_from_app`) y sigue el mismo ciclo; nada supone que el remitente tenga una sesión: su respuesta se acepta o se envía a cualquiera de sus sesiones.
 
@@ -263,6 +275,7 @@ Un SSE abierto no basta para saber que alguien está conectado: si el cliente se
 - **Socket Unix en producción.** Con un puerto TCP, cualquier proceso de la PC servidor podría conectarse a `127.0.0.1` y falsificar esa cabecera. En producción el servidor escucha en un socket `0600` dentro de un directorio `0700` del usuario `devi`; solo `devi` y root (`tailscaled`) llegan a él. El servidor avisa en el log si arranca en TCP fuera del modo dev.
 - **Dos barreras de acceso.** La política de Tailscale (grants) decide quién llega a la PC; `--allowed-domain` y la lista del equipo deciden quién entra en Devi.
 - **Acciones humanas solo desde la app.** Las rutas `human` exigen un `Origin` permitido, que el webview manda solo y la CLI y el MCP no. Así un agente no puede autorizar, responder ni administrar por su cuenta llamando a la API.
+- **Aprobación en el chat.** Los envíos (`approval: "chat"` en `POST /drafts`) y atender una solicitud desde Claude Code (`take` / `decline`) no son rutas humanas: los aprueba la persona en el aviso de permisos de Claude Code, que sale en cada llamada. El admin lo puede desactivar para todo el equipo con `chatApproval`; entonces solo queda la app.
 - **Encuadre del contenido ajeno.** Lo que escribe otra persona llega al agente dentro de un marco con un nonce aleatorio (`DEVI-UNTRUSTED`); lo que imite el marco, etiquetas del canal o cabeceras de rol se neutraliza y los caracteres invisibles se hacen visibles. Los archivos se dan solo como rutas, marcados como no verificados. Las instrucciones del MCP dicen al agente que es contenido de datos, nunca órdenes.
 - **Avisos en la app.** Las tarjetas analizan mensajes y archivos y avisan de posibles inyecciones; con riesgo alto, «Enviar a sesión» exige confirmar que se revisó. Lo que sale se revisa en busca de secretos (claves, tokens, contraseñas) y no se envía sin confirmación expresa.
 - **Límites de ritmo** por persona: 20 borradores cada 10 min (5 con archivos) y 120 acciones por minuto.
