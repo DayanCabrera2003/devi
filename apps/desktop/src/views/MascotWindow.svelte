@@ -1,10 +1,10 @@
 <script lang="ts">
-  // Ventana pequeña siempre encima: conectado / reconectando (gris) / pendientes.
-  // Funciona sin tray (GNOME sin extensión). Se arrastra por el fondo; el botón abre la principal.
+  // Burbuja opcional siempre encima (Ajustes → Mostrar a Devi flotando), sin fondo de ventana:
+  // conectado / reconectando (gris) / pendientes. Se arrastra por el fondo; el botón abre la principal.
   import { emitTo, listen } from "@tauri-apps/api/event";
   import { onMount } from "svelte";
   import Devi from "../components/Devi.svelte";
-  import { MASCOT_EVENT, MASCOT_READY, type MascotState } from "../lib/mascot";
+  import { MASCOT_EVENT, MASCOT_READY, markMascotDocument, type MascotState } from "../lib/mascot";
   import { native } from "../lib/native";
   import { followStoredTheme } from "../lib/theme";
 
@@ -14,7 +14,7 @@
   let s = $state<MascotState>(initial ?? { online: false, pending: 0, label: "conectando…", pokeKey: 0 });
 
   onMount(() => {
-    document.body.classList.add("mascota");
+    markMascotDocument(document);
     const stopTheme = followStoredTheme();
     const off = listen<MascotState>(MASCOT_EVENT, (e) => (s = e.payload));
     void emitTo("main", MASCOT_READY).catch(() => {});

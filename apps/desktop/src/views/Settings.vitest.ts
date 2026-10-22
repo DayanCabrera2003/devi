@@ -82,4 +82,36 @@ describe("Settings", () => {
     await vi.waitFor(() => expect(app.prefs.theme).toBe("dark"));
     expect(writeConfig).toHaveBeenCalledWith(expect.objectContaining({ app: expect.objectContaining({ theme: "dark" }) }));
   });
+
+  test("Mostrar a Devi flotando abre la mascota y guarda la preferencia", async () => {
+    const writeConfig = vi.fn(async () => {});
+    const setMascotVisible = vi.fn(async () => {});
+    const { app, context } = await fakeApp({}, { writeConfig, setMascotVisible });
+    const { getByRole, getByText } = render(Settings, { context });
+    expect(getByText("Una burbuja con Devi siempre visible, para volver a la app de un clic")).toBeTruthy();
+    const box = getByRole("checkbox", { name: /Mostrar a Devi flotando/ }) as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    await fireEvent.click(box);
+    await vi.waitFor(() => expect(app.prefs.showMascot).toBe(true));
+    expect(setMascotVisible).toHaveBeenCalledWith(true);
+    expect(writeConfig).toHaveBeenCalledWith(expect.objectContaining({ app: expect.objectContaining({ showMascot: true }) }));
+    await fireEvent.click(box);
+    await vi.waitFor(() => expect(app.prefs.showMascot).toBe(false));
+    expect(setMascotVisible).toHaveBeenLastCalledWith(false);
+  });
+
+  test("si no se puede guardar la preferencia de la mascota, la vuelve a ocultar y lo dice", async () => {
+    const writeConfig = vi.fn(async () => {
+      throw "No se pudo escribir config.json";
+    });
+    const setMascotVisible = vi.fn(async () => {});
+    const { app, context } = await fakeApp({}, { writeConfig, setMascotVisible });
+    const { getByRole, findByText } = render(Settings, { context });
+    const box = getByRole("checkbox", { name: /Mostrar a Devi flotando/ }) as HTMLInputElement;
+    await fireEvent.click(box);
+    expect(await findByText("No se pudo escribir config.json")).toBeTruthy();
+    expect(setMascotVisible.mock.calls).toEqual([[true], [false]]);
+    expect(box.checked).toBe(false);
+    expect(app.prefs.showMascot).toBe(false);
+  });
 });

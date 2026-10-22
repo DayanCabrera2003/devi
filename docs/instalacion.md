@@ -75,7 +75,7 @@ La política por defecto de Tailscale permite todo (`{"src": ["*"], "dst": ["*"]
 - **Ubuntu:** ya la trae.
 - **Fedora:** `sudo dnf install gnome-shell-extension-appindicator`, actívala en la app **Extensiones** y cierra sesión.
 
-Sin la extensión, Devi funciona igual: la **ventanita de la mascota** muestra el estado y abre la ventana principal.
+Sin la extensión, Devi funciona igual: cerrar la ventana la minimiza (sigue en la barra de tareas) y se sale con **Salir de Devi** en la barra lateral. Si quieres, activa **Ajustes → Mostrar a Devi flotando**: una burbuja con Devi siempre visible que muestra el estado y abre la ventana principal.
 
 ## 3. Primer arranque (asistente)
 

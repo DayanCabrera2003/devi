@@ -18,6 +18,7 @@
   let autostart = $state(false);
   let prefsError = $state<string | null>(null);
   let themeError = $state<string | null>(null);
+  let mascotError = $state<string | null>(null);
   const theme = $derived<ThemePref>(app.prefs.theme ?? "system");
 
   onMount(() => {
@@ -45,6 +46,16 @@
     } catch (e) {
       themeError = errorMessage(e);
     }
+  }
+
+  async function toggleMascot(box: HTMLInputElement) {
+    mascotError = null;
+    try {
+      await app.setShowMascot(box.checked);
+    } catch (e) {
+      mascotError = errorMessage(e);
+    }
+    box.checked = app.prefs.showMascot ?? false;
   }
 
   async function saveUrl() {
@@ -87,8 +98,18 @@
           {/each}
         </div>
       </div>
+      <div class="cell">
+        <label class="check">
+          <input class="switch" type="checkbox" checked={app.prefs.showMascot ?? false} onchange={(e) => toggleMascot(e.currentTarget)} />
+          <span>
+            Mostrar a Devi flotando
+            <span class="sub">Una burbuja con Devi siempre visible, para volver a la app de un clic</span>
+          </span>
+        </label>
+      </div>
     </div>
     {#if themeError}<div class="error">{themeError}</div>{/if}
+    {#if mascotError}<div class="error">{mascotError}</div>{/if}
   </section>
 
   <section class="group-box">

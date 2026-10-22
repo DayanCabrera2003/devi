@@ -1,9 +1,12 @@
 //! Icono de la bandeja del sistema: Abrir, Pausar avisos, Ajustes y Salir (y `quit_app` para la UI).
-//! En GNOME sin la extensión AppIndicator no se ve; por eso existe la ventana mascota.
+//! En GNOME sin la extensión AppIndicator no se ve: entonces cerrar la ventana la minimiza
+//! (ver windows.rs) y se puede activar la mascota flotante en Ajustes.
 
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, Wry};
+
+use crate::windows::WindowState;
 
 /// Eventos hacia la ventana principal.
 pub const EVT_PAUSED: &str = "devi://paused";
@@ -13,10 +16,11 @@ pub struct TrayState {
     pause: CheckMenuItem<Wry>,
 }
 
-/// Muestra la ventana principal y, si se había cerrado (oculta), también la mascota.
+/// Muestra, desminimiza y enfoca la ventana principal. La mascota solo vuelve si está activada
+/// en Ajustes (y alguien la había cerrado).
 pub fn show_main(app: &AppHandle) {
-    if let Some(m) = app.get_webview_window("mascota") {
-        let _ = m.show();
+    if app.state::<WindowState>().mascot_wanted() {
+        let _ = crate::windows::apply_mascot(app, true);
     }
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.unminimize();

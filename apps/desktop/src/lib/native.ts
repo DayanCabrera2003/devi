@@ -9,9 +9,10 @@ export type AppPrefs = {
   setupDone: boolean;
   serverAdminLogin?: string; // presente = este equipo es el servidor
   theme?: ThemePref; // sin valor = sigue al sistema
+  showMascot?: boolean; // burbuja flotante con Devi; sin valor (instalaciones anteriores) = apagada
 };
 
-export const DEFAULT_PREFS: AppPrefs = { notifications: true, setupDone: false };
+export const DEFAULT_PREFS: AppPrefs = { notifications: true, setupDone: false, showMascot: false };
 
 // Misma forma que <config del SO>/devi/config.json del CLI, más receivedDir y app.
 export type ClientConfig = {
@@ -61,6 +62,8 @@ export const native = {
   stopServer: () => invoke<ServerStatus>("stop_server"),
   serverStatus: () => invoke<ServerStatus>("server_status"),
   showMainWindow: () => invoke<void>("show_main_window"),
+  // Crea la ventana mascota si hace falta y la muestra u oculta (la preferencia la guarda la UI).
+  setMascotVisible: (visible: boolean) => invoke<void>("set_mascot_visible", { visible }),
   setPaused: (paused: boolean) => invoke<void>("set_paused", { paused }),
   // Mata el servidor sidecar (si lo hay) y cierra Devi: la salida sin icono de bandeja.
   quitApp: () => invoke<void>("quit_app"),

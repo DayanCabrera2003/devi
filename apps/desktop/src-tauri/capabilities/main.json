@@ -26,6 +26,7 @@
     "allow-stop-server",
     "allow-server-status",
     "allow-set-paused",
+    "allow-set-mascot-visible",
     "allow-quit-app"
   ]
 }

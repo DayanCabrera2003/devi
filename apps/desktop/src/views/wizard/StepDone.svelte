@@ -24,7 +24,7 @@
   <div class="card-kicker">Paso 5 de 5 · Listo</div>
   <div class="card-title">Devi ya está configurado</div>
   <p>
-    Devi vive en la bandeja del sistema y en la ventanita de la mascota. Cuando un compañero te pida algo, o tu Claude
+    Devi vive en la bandeja del sistema (y, si lo activas en Ajustes, flotando en una burbuja). Cuando un compañero te pida algo, o tu Claude
     quiera enviar algo, te aviso aquí.
   </p>
   {#if serverMode}

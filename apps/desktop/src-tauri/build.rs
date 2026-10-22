@@ -18,6 +18,7 @@ fn main() {
             "server_status",
             "show_main_window",
             "set_paused",
+            "set_mascot_visible",
             "quit_app",
         ])),
     )

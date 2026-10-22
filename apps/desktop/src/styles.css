@@ -657,6 +657,8 @@ details summary { cursor: pointer; min-height: 32px; display: flex; align-items:
 
 /* ---- ventana mascota ---- */
 
+/* La ventana es transparente: ni html ni body pintan fondo, solo se ve la burbuja de Devi. */
+html.mascota, html.mascota body { background: transparent; }
 body.mascota { overflow: hidden; background: transparent; }
 body.mascota .ambient { display: none; }
 .mascot { height: 100vh; display: grid; place-items: center; }

@@ -36,11 +36,19 @@ describe("native", () => {
     expect(invoke).toHaveBeenLastCalledWith("quit_app");
   });
 
+  test("setMascotVisible pasa visible a set_mascot_visible", async () => {
+    invoke.mockResolvedValue(undefined);
+    await native.setMascotVisible(true);
+    expect(invoke).toHaveBeenLastCalledWith("set_mascot_visible", { visible: true });
+  });
+
   test("prefsOf completa con los valores por defecto", () => {
     expect(prefsOf(null)).toEqual(DEFAULT_PREFS);
+    // Una config anterior sin showMascot: la mascota queda apagada.
     expect(prefsOf({ serverUrl: "x", app: { notifications: false, setupDone: true } })).toEqual({
       notifications: false,
       setupDone: true,
+      showMascot: false,
     });
   });
 });

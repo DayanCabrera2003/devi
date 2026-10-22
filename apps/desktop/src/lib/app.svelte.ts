@@ -486,6 +486,18 @@ export class DeviApp {
     await this.saveConfig({ ...this.config, app: { ...this.prefs, ...patch } });
   }
 
+  // Ajustes → "Mostrar a Devi flotando": primero la ventana y luego la preferencia; si no se puede
+  // guardar, se deshace para que lo que se ve coincida con lo guardado.
+  async setShowMascot(on: boolean): Promise<void> {
+    await this.deps.native.setMascotVisible(on);
+    try {
+      await this.updatePrefs({ showMascot: on });
+    } catch (e) {
+      await this.deps.native.setMascotVisible(!on).catch(() => {});
+      throw e;
+    }
+  }
+
   // La carpeta de recibidos la elige Rust con el diálogo nativo; el webview nunca da la ruta.
   async chooseReceivedDir(): Promise<void> {
     const cfg = await this.deps.native.chooseReceivedDir();
