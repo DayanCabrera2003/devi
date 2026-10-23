@@ -40,6 +40,19 @@ describe("archivos", () => {
     expect(files.forRequest("q1").files).toEqual(metas);
   });
 
+  test("adjuntos de un mensaje del chat: las dos partes los descargan y la retención corre desde que se envían", async () => {
+    const { files } = await setup();
+    const valid = await files.validate([new File(["uno"], "a.md")]);
+    const written = files.write(valid);
+    const metas = files.recordForMessage({ messageId: "c1", authorMemberId: "m-a", peerMemberId: "m-b", written });
+    expect(files.forMessage("c1")).toEqual(metas);
+    expect(files.forMessage("c2")).toEqual([]);
+    expect((await download("b@dev", metas[0]!.id)).status).toBe(200);
+    expect((await download("c@dev", metas[0]!.id)).status).toBe(403);
+    t.clock.advance(DEFAULT_SETTINGS.fileRetentionDays * DAY + 3_600_000); // el barrido horario lo borra
+    expect((await download("b@dev", metas[0]!.id)).status).toBe(410);
+  });
+
   test("descarga: autor siempre; destinatario solo tras autorizar; nadie más", async () => {
     const { files, metas } = await setup();
     const id = metas[0]!.id;

@@ -74,6 +74,25 @@ export class FileManager implements FilesService {
     });
   }
 
+  // Adjuntos de un mensaje del chat. Van en la misma tabla, con request_id = id del mensaje (la columna nombra al
+  // dueño) y dirección "request". Un mensaje no se cierra nunca, así que quedan liberados al enviarse: la retención
+  // (fileRetentionDays) cuenta desde ahí. Las dos partes pueden descargarlos.
+  recordForMessage(input: { messageId: string; authorMemberId: string; peerMemberId: string; written: WrittenFile[] }): FileMeta[] {
+    const now = this.now();
+    return input.written.map(({ id, path, file: f }) => {
+      this.repo.insert({
+        id, draftId: "", requestId: input.messageId, direction: "request", name: f.name, size: f.size,
+        sha256: f.sha256, path, authorMemberId: input.authorMemberId, peerMemberId: input.peerMemberId,
+        createdAt: now, releasedAt: now, deletedAt: null,
+      });
+      return { id, name: f.name, size: f.size, direction: "request" as const };
+    });
+  }
+
+  forMessage(messageId: string): FileMeta[] {
+    return this.repo.metasOfRequest(messageId);
+  }
+
   // Atajo: write + record (sin atomicidad con otras tablas).
   store(input: { draftId: string; direction: "request" | "response"; authorMemberId: string; peerMemberId: string; files: ValidFile[] }): FileMeta[] {
     const written = this.write(input.files);

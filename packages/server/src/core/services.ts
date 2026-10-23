@@ -54,6 +54,9 @@ export interface FilesService {
     peerMemberId: string;
     written: WrittenFile[];
   }): FileMeta[];
+  // Adjuntos de un mensaje del chat: unidos al mensaje y descargables por las dos partes desde el principio.
+  recordForMessage(input: { messageId: string; authorMemberId: string; peerMemberId: string; written: WrittenFile[] }): FileMeta[];
+  forMessage(messageId: string): FileMeta[];
   removeWritten(written: WrittenFile[]): void;
   forDraft(draftId: string): FileMeta[];
   forRequest(requestId: string): { files: FileMeta[]; responseFiles: FileMeta[] };
@@ -87,6 +90,11 @@ export interface PrefsService {
   of(memberId: string): MemberPrefs;
 }
 
+// Chat entre personas: el último mensaje de una conversación (para la barra lateral de la app).
+export interface ChatService {
+  last(a: string, b: string): { at: number; text: string; byMemberId: string } | null;
+}
+
 export interface ServiceMap {
   team: TeamService;
   settings: SettingsService;
@@ -94,6 +102,7 @@ export interface ServiceMap {
   files: FilesService;
   audit: AuditService;
   prefs: PrefsService;
+  chat: ChatService;
 }
 
 export class ServiceRegistry {
