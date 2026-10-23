@@ -78,3 +78,10 @@ test("claude --handoff ID: empieza la sesión con un traspaso (id validado)", ()
   expect(() => parseCliArgs(["claude", "--handoff"])).toThrow(/necesita un valor/);
   expect(() => parseCliArgs(["claude", "--handoff", "../x"])).toThrow(CliArgError);
 });
+
+test("devi claude --deliver", () => {
+  expect(parseCliArgs(["claude", "--deliver", "k7q-4mx"])).toMatchObject({ cmd: "claude", deliver: "K7Q4MX" });
+  expect("deliver" in parseCliArgs(["claude"])).toBe(false);
+  expect(() => parseCliArgs(["claude", "--deliver", "nope"])).toThrow(/código/);
+  expect(() => parseCliArgs(["claude", "--deliver", "K7Q4MX", "--handoff", "abc"])).toThrow(/a la vez/);
+});
