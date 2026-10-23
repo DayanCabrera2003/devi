@@ -13,13 +13,14 @@ import { knowledgeModule } from "./modules/knowledge/index";
 import { prefsModule } from "./modules/prefs/index";
 import { requestsModule } from "./modules/requests/index";
 import { chatModule } from "./modules/chat/index";
+import { claimsModule } from "./modules/claims/index";
 import { sessionsModule } from "./modules/sessions/index";
 import { settingsModule } from "./modules/settings/index";
 import { teamModule } from "./modules/team/index";
 
 // Módulos de features, en orden de arranque. team va primero: si no hay admin, el servidor no arranca
 // antes de que nada programe temporizadores.
-export const MODULES: DeviModule[] = [teamModule, settingsModule, prefsModule, auditModule, sessionsModule, filesModule, requestsModule, chatModule, knowledgeModule];
+export const MODULES: DeviModule[] = [teamModule, settingsModule, prefsModule, auditModule, sessionsModule, filesModule, requestsModule, chatModule, knowledgeModule, claimsModule];
 
 // Tope del cuerpo HTTP: 5 archivos de 1 MB + multipart, con margen.
 const MAX_BODY = 8 * 1024 * 1024;
