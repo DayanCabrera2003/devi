@@ -69,13 +69,13 @@ describe("solicitud a una sesión nueva", () => {
     await f.newSession();
     const res = await f.redeem(code);
     expect(res.status).toBe(409);
-    expect(res.data.error).toContain("accepted");
+    expect(res.data.error).toBe("la solicitud ya está aceptada");
     expect(f.claimEvents("m-maria", code)).not.toContain("used");
     // La reserva se liberó: un segundo canje vuelve a llegar al manejador (no es claim_used).
     const again = await f.redeem(code);
     expect(again.status).toBe(409);
     expect(again.data.code).not.toBe("claim_used");
-    expect(again.data.error).toContain("accepted");
+    expect(again.data.error).toBe("la solicitud ya está aceptada");
   });
 
   test("Dayan no puede crear un código para una solicitud que no es para él", async () => {
@@ -142,6 +142,6 @@ describe("respuesta a una sesión nueva", () => {
     await f.newSession("dayan@dev", 950);
     const res = await f.redeem(code, "dayan@dev", 950);
     expect(res.status).toBe(409);
-    expect(res.data.error).toContain("closed");
+    expect(res.data.error).toBe("no hay respuesta abierta (estado: cerrada)");
   });
 });

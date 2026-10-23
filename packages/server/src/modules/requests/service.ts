@@ -24,6 +24,11 @@ const requestKey = (id: string) => `request:${id}`;
 const escalationKey = (id: string) => `escalation:${id}`;
 const RESPONSE_OPEN = ["accepted", "rejected", "answered"] as const;
 const isResponseOpen = (s: RequestRecord["status"]) => (RESPONSE_OPEN as readonly string[]).includes(s);
+// El canje de un código lo lee la persona en su sesión nueva: el estado va en palabras, no como identificador.
+const STATUS_ES: Record<RequestRecord["status"], string> = {
+  pending: "pendiente", forwarded: "enviada a una sesión", accepted: "aceptada", rejected: "rechazada",
+  answered: "respondida", timed_out: "caducada", closed: "cerrada",
+};
 
 // meta.files de las entregas: JSON de [{id, name}]. El MCP descarga los archivos y da rutas locales al agente.
 const filesMeta = (files: { id: string; name: string }[]) => JSON.stringify(files.map((f) => ({ id: f.id, name: f.name })));
@@ -536,13 +541,13 @@ export class RequestsManager {
 
   private claimableRequest(access: Access, id: string): RequestRecord {
     const r = this.received(access, id);
-    if (r.status !== "pending") throw conflict(`la solicitud ya está ${r.status}`);
+    if (r.status !== "pending") throw conflict(`la solicitud ya está ${STATUS_ES[r.status]}`);
     return r;
   }
 
   private claimableResponse(access: Access, id: string): RequestRecord {
     const r = this.sent(access, id);
-    if (!isResponseOpen(r.status)) throw conflict(`no hay respuesta abierta (estado: ${r.status})`);
+    if (!isResponseOpen(r.status)) throw conflict(`no hay respuesta abierta (estado: ${STATUS_ES[r.status]})`);
     return r;
   }
 
