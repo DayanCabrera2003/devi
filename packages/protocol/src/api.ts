@@ -14,6 +14,7 @@ import { KnowledgeResultSchema } from "./knowledge";
 import { WeekSchema } from "./week";
 import { MemberPrefsSchema } from "./notices";
 import { SessionDeliverySchema } from "./events";
+import { ClaimCodeSchema, ClaimSchema, ClaimTargetSchema } from "./claims";
 
 // Quién puede llamar una ruta además del permiso (lo comprueba el módulo, no el núcleo):
 // any = cualquier miembro; admin = team.admin; author = autor del borrador;
@@ -130,6 +131,14 @@ export const ChatFromSessionMeta = z.object({ sessionId: z.string(), to: z.strin
 export const ReassignResult = z.object({ request: DeviRequestSchema, original: DeviRequestSchema });
 export type ReassignResult = z.infer<typeof ReassignResult>;
 
+// Códigos de entrega (ver claims.ts). Crear y cancelar, solo desde la app. El canje lo hace el hook de la sesión
+// nueva, que se identifica como en GET /sessions/inbox; la entrega vuelve en la respuesta (no se empuja por el canal).
+export const RedeemClaimBody = z.object({
+  code: ClaimCodeSchema, claudeSessionId: z.string(), parentPid: z.number().int(), machine: Machine,
+});
+export const RedeemClaimResult = z.object({ delivery: SessionDeliverySchema });
+export type RedeemClaimResult = z.infer<typeof RedeemClaimResult>;
+
 export const API = {
   health: route({ method: "GET", path: "/api/v1/health", perm: null, actor: "any", body: Empty,
     response: z.object({ ok: z.literal(true), version: z.string() }) }),
@@ -195,6 +204,11 @@ export const API = {
   chatPage: route({ method: "GET", path: "/api/v1/chat/:memberId", perm: null, actor: "party", body: Empty /* query: ChatQuery */, response: ChatPageSchema }),
   // «Enviar a mi sesión»: el mensaje (mío o del compañero) a una sesión viva de quien llama. El mensaje no cambia.
   chatToSession: route({ human: true, method: "POST", path: "/api/v1/chat/:id/session", perm: null, actor: "party", body: z.object({ sessionId: z.string() }), response: Ok }),
+  createClaim: route({ human: true, method: "POST", path: "/api/v1/claims", perm: null, actor: "party",
+    body: z.object({ target: ClaimTargetSchema }), response: ClaimSchema }),
+  cancelClaim: route({ human: true, method: "DELETE", path: "/api/v1/claims/:code", perm: null, actor: "owner", body: Empty, response: Ok }),
+  myClaims: route({ method: "GET", path: "/api/v1/claims", perm: null, actor: "any", body: Empty, response: z.array(ClaimSchema) }),
+  redeemClaim: route({ method: "POST", path: "/api/v1/claims/redeem", perm: null, actor: "owner", body: RedeemClaimBody, response: RedeemClaimResult }),
 
   // Lecturas para el agente (herramientas del MCP): lo que me espera y una solicitud en la que soy parte.
   pending: route({ method: "GET", path: "/api/v1/pending", perm: null, actor: "any", body: Empty, response: PendingSchema }),

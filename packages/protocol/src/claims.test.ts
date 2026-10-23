@@ -38,3 +38,28 @@ describe("código de entrega", () => {
     expect(CLAIM_LIMITS).toEqual({ ttlMs: 600_000, maxOpenPerMember: 10 });
   });
 });
+
+import { API } from "./api";
+import { UserEventSchema } from "./events";
+
+describe("rutas de códigos", () => {
+  test("crear y cancelar son de persona; canjear y listar no", () => {
+    expect(API.createClaim).toMatchObject({ method: "POST", path: "/api/v1/claims", human: true });
+    expect(API.cancelClaim).toMatchObject({ method: "DELETE", path: "/api/v1/claims/:code", human: true });
+    expect(API.myClaims).toMatchObject({ method: "GET", path: "/api/v1/claims" });
+    expect(API.redeemClaim).toMatchObject({ method: "POST", path: "/api/v1/claims/redeem" });
+    expect("human" in API.redeemClaim).toBe(false);
+    expect("human" in API.myClaims).toBe(false);
+  });
+
+  test("redeemClaim exige el emparejamiento de la sesión", () => {
+    const ok = API.redeemClaim.body.safeParse({ code: "K7Q4MX", claudeSessionId: "c1", parentPid: 10, machine: "M1" });
+    expect(ok.success).toBe(true);
+    expect(API.redeemClaim.body.safeParse({ code: "K7Q4MX" }).success).toBe(false);
+  });
+
+  test("evento claim.updated", () => {
+    const ev = { type: "claim.updated", claim: { code: "K7Q4MX", target: { type: "chat", id: "x" }, expiresAt: 1, status: "used" } };
+    expect(UserEventSchema.safeParse(ev).success).toBe(true);
+  });
+});
