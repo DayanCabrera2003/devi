@@ -1,6 +1,6 @@
 # Builds de la app de escritorio en los tres SO y release en GitHub (borrador).
 # Se lanza al subir una etiqueta vX.Y.Z. Sin firma de código del SO (coste cero);
-# los artefactos del updater se firman con TAURI_SIGNING_PRIVATE_KEY si el secreto existe.
+# los artefactos del updater se firman con TAURI_SIGNING_PRIVATE_KEY (obligatorio).
 #
 # El job `cli` sube además los binarios `devi` de los 5 targets y SHA256SUMS al mismo borrador.
 # PUBLICAR el borrador en GitHub es lo que despliega el servidor del equipo: el timer
@@ -92,22 +92,18 @@ jobs:
           bun run --cwd apps/desktop build
           cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
 
-      # Las actualizaciones automáticas NO están activas todavía: falta generar la clave del updater
-      # y registrar el plugin y la pubkey en tauri.conf.json. Hasta entonces los usuarios
-      # actualizan instalando la versión nueva. Sin los secretos
-      # TAURI_SIGNING_PRIVATE_KEY[_PASSWORD] se desactivan los artefactos del updater (sin clave,
-      # tauri build falla al firmarlos); con ellos, no se pasa nada y rige tauri.conf.json.
-      - name: Firma del updater (opcional)
-        id: updater
+      # La app se actualiza sola desde latest.json del último release publicado, firmado con esta
+      # clave (la pública está en tauri.conf.json). Sin el secreto el build fallaría a mitad al
+      # firmar; se corta aquí con un mensaje claro. Nunca publicar un release sin artefactos del
+      # updater: las apps instaladas no verían la versión nueva.
+      - name: Clave del updater
         shell: bash
         env:
           SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
           if [ -z "$SIGNING_KEY" ]; then
-            echo "Sin TAURI_SIGNING_PRIVATE_KEY: se omiten los artefactos del updater."
-            echo 'args=--config {"bundle":{"createUpdaterArtifacts":false}}' >> "$GITHUB_OUTPUT"
-          else
-            echo "args=" >> "$GITHUB_OUTPUT"
+            echo "::error::Falta el secreto TAURI_SIGNING_PRIVATE_KEY (y su _PASSWORD): sin él no se firman las actualizaciones."
+            exit 1
           fi
 
       - uses: tauri-apps/tauri-action@v1
@@ -118,7 +114,7 @@ jobs:
         with:
           projectPath: apps/desktop
           tauriScript: bun run tauri
-          args: --target ${{ matrix.target }} ${{ steps.updater.outputs.args }}
+          args: --target ${{ matrix.target }}
           tagName: ${{ github.ref_name }}
           releaseName: Devi ${{ github.ref_name }}
           releaseBody: |

@@ -23,6 +23,8 @@ tauri-plugin-notification = "2.7"
 tauri-plugin-process = "2.4"
 tauri-plugin-shell = "2.5"
 tauri-plugin-single-instance = "2.5"
+# Desde 2.10 actualiza también instalaciones .deb y .rpm, no solo AppImage.
+tauri-plugin-updater = "2.14"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dirs = "7"

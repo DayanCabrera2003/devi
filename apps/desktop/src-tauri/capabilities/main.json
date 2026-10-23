@@ -10,6 +10,7 @@
     "autostart:allow-disable",
     "autostart:allow-is-enabled",
     "process:allow-restart",
+    "updater:default",
     "allow-save-received-files",
     "allow-save-db-export",
     "allow-pick-files",
