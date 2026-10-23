@@ -31,6 +31,19 @@ describe("NewSessionClaim", () => {
     await waitFor(() => expect(onBack).toHaveBeenCalled());
   });
 
+  test("si al cancelar el código ya se había usado (409 claim_used), lo dice y no cierra la hoja", async () => {
+    const create = vi.fn(async () => ({ code: "K7Q4MX", target: { type: "request" as const, id: "r1" }, expiresAt: Date.now() + 600_000, status: "open" as const }));
+    const cancel = vi.fn(async () => {
+      throw new DeviApiError(409, { error: "Ese código ya se usó o se canceló: genera otro en la app de Devi", code: "claim_used" });
+    });
+    const onBack = vi.fn();
+    const { getByText, findByText } = render(NewSessionClaim, { props: { target: { type: "request", id: "r1" }, create, cancel, copy: vi.fn(async () => true), onBack } });
+    await fireEvent.click(getByText("Crear código"));
+    await fireEvent.click(await findByText("Cancelar código"));
+    expect(await findByText("Ese código ya se usó o se canceló: genera otro en la app de Devi")).toBeTruthy();
+    expect(onBack).not.toHaveBeenCalled();
+  });
+
   test("si el servidor rechaza el código (409 too_many_claims), enseña su mensaje", async () => {
     const create = vi.fn(async () => {
       throw new DeviApiError(409, { error: "Tienes demasiados códigos sin usar: usa o cancela alguno", code: "too_many_claims" });

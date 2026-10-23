@@ -57,7 +57,13 @@ export class ClaimsManager {
 
   cancel(access: Access, code: string): void {
     const rec = this.own(access, code);
-    if (this.store.cancel(rec.code, this.ctx.now())) this.emit(rec, "cancelled");
+    if (this.store.cancel(rec.code, this.ctx.now())) {
+      this.emit(rec, "cancelled");
+      return;
+    }
+    // Sin filas cambiadas: si ya estaba cancelado, cancelar otra vez no falla; si se usó (o se está canjeando
+    // ahora mismo), la app tiene que saber que el elemento ya llegó a una sesión.
+    if (this.store.get(rec.code)?.usedAt != null) throw used();
   }
 
   redeem(access: Access, body: z.output<typeof RedeemClaimBody>): SessionDelivery {

@@ -141,6 +141,21 @@ describe("códigos de entrega", () => {
     expect((await t.redeem("maria@dev", code)).data.code).toBe("claim_used"); // cancelado = ya no vale
   });
 
+  test("cancelar uno ya cancelado no falla; uno ya usado, sí", async () => {
+    const t = await setup();
+    const { code } = (await t.create("maria@dev", { type: "request", id: "abierta" })).data;
+    expect((await t.call("maria@dev", "DELETE", `/api/v1/claims/${code}`)).status).toBe(200);
+    expect((await t.call("maria@dev", "DELETE", `/api/v1/claims/${code}`)).status).toBe(200);
+
+    const other = (await t.create("maria@dev", { type: "request", id: "abierta" })).data.code;
+    await t.register("maria@dev");
+    expect((await t.redeem("maria@dev", other)).status).toBe(200);
+    const r = await t.call("maria@dev", "DELETE", `/api/v1/claims/${other}`);
+    expect(r.status).toBe(409);
+    expect(r.data.code).toBe("claim_used");
+    expect(t.userEvents("m-maria").findLast((e) => e.type === "claim.updated").claim.status).toBe("used");
+  });
+
   test("los reintentos con session_unknown no gastan el límite; los códigos inventados sí", async () => {
     const t = await setup();
     const { code } = (await t.create("maria@dev", { type: "request", id: "abierta" })).data;
