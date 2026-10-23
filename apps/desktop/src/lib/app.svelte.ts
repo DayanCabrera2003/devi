@@ -1,4 +1,4 @@
-import type { DeviRequest, Draft, FileMeta, UserEvent, Week } from "@devi/protocol";
+import type { ChatMessage, DeviRequest, Draft, FileMeta, UserEvent, Week } from "@devi/protocol";
 import { type DeviApi, errorMessage } from "./api";
 import { type AuditEntry, auditNotice } from "./audit";
 import { Clock } from "./clock.svelte";
@@ -7,7 +7,7 @@ import type { MascotState } from "./mascot";
 import { HAPPY_MS, deriveMood, overdueCount, quietSinceAfter } from "./mood";
 import { isWeekDue, weekKey } from "./week";
 import { type AppPrefs, type ClientConfig, type Native, type ServerStatus, prefsOf } from "./native";
-import { type Notice, escalationNotice, noticeFor, noticeKey, shouldNotify, summaryNotice, updateNotice } from "./notify";
+import { type Notice, chatNotice, escalationNotice, noticeFor, noticeKey, shouldNotify, summaryNotice, updateNotice } from "./notify";
 import { ConnectionStore } from "./stores/connection.svelte";
 import { ComposerStore, DragState } from "./stores/composer.svelte";
 import { ConversationsStore } from "./stores/conversations.svelte";
@@ -16,6 +16,7 @@ import { SessionsStore } from "./stores/sessions.svelte";
 import { TeamStore } from "./stores/team.svelte";
 import { AGENT_THREAD, waitingByPeer } from "./thread-items";
 import { ThreadStore } from "./stores/thread.svelte";
+import { ChatThreadStore } from "./stores/chat-thread.svelte";
 
 export type View = "bandeja" | "ajustes" | "admin" | "base" | "semana";
 export type Phase = "loading" | "wizard" | "app";
@@ -66,6 +67,7 @@ export class DeviApp {
   readonly clock = new Clock(); // lo arranca y lo para Shell
   readonly convos = new ConversationsStore();
   readonly thread = new ThreadStore();
+  readonly chat = new ChatThreadStore();
   readonly composer = new ComposerStore();
   readonly drag = new DragState();
   // Persona de la conversación abierta (null = ninguna).
@@ -233,6 +235,10 @@ export class DeviApp {
       }
       return;
     }
+    if (ev.type === "chat.message") {
+      this.onChatMessage(ev.message, me);
+      return;
+    }
     if (ev.type === "conversation.updated") {
       this.scheduleConversations();
       if (this.selected === ev.memberId) void this.reloadThread();
@@ -271,6 +277,18 @@ export class DeviApp {
     this.auditAlerts = [entry, ...this.auditAlerts];
     // Un cambio de seguridad avisa aunque Devi esté en pausa; solo lo silencia desactivar los avisos.
     if (this.prefs.notifications) void this.deps.notify(auditNotice(entry, (id) => this.team.nameOf(id)));
+  }
+
+  // Mensaje del chat: entra en el hilo abierto y, si es de otra persona, avisa una sola vez (no hay tarjeta: no
+  // espera ninguna acción).
+  private onChatMessage(m: ChatMessage, me: string): void {
+    this.chat.upsert(m);
+    this.scheduleConversations();
+    if (m.fromMemberId === me) return;
+    const key = `chat:${m.id}`;
+    if (this.notified.has(key)) return;
+    this.notified.add(key);
+    if (shouldNotify(this.prefs, this.paused)) void this.deps.notify(chatNotice(this.team.nameOf(m.fromMemberId), m.text));
   }
 
   // Escalado: no abre tarjeta (la solicitud sigue pending); solo un aviso, una vez por solicitud.
@@ -443,6 +461,11 @@ export class DeviApp {
     this.applyRequest(await this.need().forwardRequest(r.id, sessionId));
   }
 
+  // «Enviar a mi sesión» de un mensaje del chat: el mensaje no cambia, así que no hay nada que actualizar.
+  async sendChatToSession(m: ChatMessage, sessionId: string): Promise<void> {
+    await this.need().chatToSession(m.id, sessionId);
+  }
+
   async forwardResponse(r: DeviRequest, sessionId: string): Promise<void> {
     this.applyRequest(await this.need().forwardResponse(r.id, sessionId));
   }
@@ -510,34 +533,38 @@ export class DeviApp {
     this.view = "bandeja";
     if (this.selected !== memberId || this.composer.to !== memberId) await this.composer.reset(this.files, memberId);
     this.selected = memberId;
-    if (memberId === AGENT_THREAD) this.thread.close();
-    else if (this.http) await this.thread.open(this.http, memberId);
+    if (memberId === AGENT_THREAD) {
+      this.thread.close();
+      this.chat.close();
+    } else if (this.http) await Promise.all([this.thread.open(this.http, memberId), this.chat.open(this.http, memberId)]);
   }
 
   closeConversation(): void {
     this.selected = null;
     this.thread.close();
+    this.chat.close();
     void this.composer.reset(this.files);
   }
 
   async reloadThread(): Promise<void> {
-    if (this.http && this.selected) await this.thread.open(this.http, this.selected);
+    if (this.http && this.selected) await Promise.all([this.thread.open(this.http, this.selected), this.chat.open(this.http, this.selected)]);
   }
 
   async loadOlder(): Promise<void> {
-    if (this.http) await this.thread.loadMore(this.http);
+    if (this.http) await Promise.all([this.thread.loadMore(this.http), this.chat.loadMore(this.http)]);
   }
 
   async pickFiles(): Promise<void> {
     this.composer.add(this.files, await this.files.pickFiles());
   }
 
-  // Enviar desde la app: la solicitud nueva entra en el hilo en cuanto el servidor la devuelve.
+  // Enviar desde la app (mensaje del chat o solicitud): entra en el hilo en cuanto el servidor lo devuelve.
   async sendMessage(): Promise<void> {
     if (!this.http) throw new Error("Sin conexión con el servidor de Devi");
-    const r = await this.composer.send(this.http, this.files);
-    if (!r) return;
-    this.thread.upsert(r);
+    const sent = await this.composer.send(this.http, this.files);
+    if (!sent) return;
+    if (sent.kind === "chat") this.chat.upsert(sent.message);
+    else this.thread.upsert(sent.request);
     this.scheduleConversations();
   }
 

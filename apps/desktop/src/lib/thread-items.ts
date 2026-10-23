@@ -1,5 +1,5 @@
 // Cómo se cuenta una conversación: qué burbujas, en qué orden y con qué estado debajo.
-import type { DeviRequest, Draft } from "@devi/protocol";
+import type { ChatMessage, DeviRequest, Draft } from "@devi/protocol";
 import type { ThreadRequest } from "./conversations-api";
 import { clockTime, daySeparator, sameDayAs } from "./format";
 import type { Card } from "./stores/inbox.svelte";
@@ -11,6 +11,7 @@ export const AGENT_THREAD = "@agente";
 export type ThreadItem =
   | { kind: "day"; key: string; label: string }
   | { kind: "request"; key: string; request: ThreadRequest; card: Card | null }
+  | { kind: "chat"; key: string; message: ChatMessage }
   | { kind: "draft"; key: string; draft: Draft };
 
 type Lookup = (requestId: string) => DeviRequest | undefined;
@@ -39,11 +40,13 @@ export function waitingByPeer(cards: Card[], lookup: Lookup): Record<string, num
 
 const GAP_MS = 60 * 60_000;
 
-// Solicitudes del hilo más las abiertas de la bandeja (que pueden ser más nuevas), y al final los
-// borradores del agente. Separador de día al empezar, al cambiar de día o tras una hora sin nada.
+// Solicitudes del hilo más las abiertas de la bandeja (que pueden ser más nuevas), intercaladas por hora con los
+// mensajes del chat, y al final los borradores del agente. Separador de día al empezar, al cambiar de día o tras
+// una hora sin nada.
 export function buildThreadItems(opts: {
   memberId: string;
   requests: ThreadRequest[];
+  messages?: ChatMessage[];
   cards: Card[];
   lookup: Lookup;
   now: number;
@@ -64,10 +67,19 @@ export function buildThreadItems(opts: {
     if (last === null || !sameDayAs(last, at) || at - last >= GAP_MS) items.push({ kind: "day", key: `day:${at}`, label: daySeparator(at, now) });
     last = at;
   };
-  for (const r of requests) {
-    stamp(r.sentAt || r.createdAt);
-    const card = cardByRequest.get(r.id) ?? null;
-    items.push({ kind: "request", key: `r:${r.id}`, request: card?.request ?? r, card });
+  const messages = memberId === AGENT_THREAD ? [] : (opts.messages ?? []);
+  const timeline = [
+    ...requests.map((r) => ({ at: r.sentAt || r.createdAt, request: r })),
+    ...messages.map((m) => ({ at: m.createdAt, message: m })),
+  ].sort((a, b) => a.at - b.at);
+  for (const t of timeline) {
+    stamp(t.at);
+    if ("message" in t) {
+      items.push({ kind: "chat", key: `c:${t.message.id}`, message: t.message });
+      continue;
+    }
+    const card = cardByRequest.get(t.request.id) ?? null;
+    items.push({ kind: "request", key: `r:${t.request.id}`, request: card?.request ?? t.request, card });
   }
   for (const d of drafts) {
     stamp(d.createdAt);

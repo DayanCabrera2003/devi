@@ -4,6 +4,7 @@
   import Avatar from "../../components/Avatar.svelte";
   import Devi from "../../components/Devi.svelte";
   import Icon from "../../components/Icon.svelte";
+  import ChatBubble from "../../cards/ChatBubble.svelte";
   import DraftCard from "../../cards/DraftCard.svelte";
   import HistoryItem from "../../cards/HistoryItem.svelte";
   import RequestCard from "../../cards/RequestCard.svelte";
@@ -47,6 +48,7 @@
     buildThreadItems({
       memberId,
       requests: agent ? [] : app.thread.requests,
+      messages: agent ? [] : app.chat.messages,
       cards: app.inbox.cards,
       lookup: (id) => app.lookupRequest(id),
       now: app.clock.now,
@@ -100,14 +102,16 @@
     onscroll={onScroll}
   >
     <div class="thread-items">
-      {#if app.thread.nextBefore !== undefined && !agent}
-        <button class="ghost older" disabled={app.thread.loadingMore} onclick={() => app.loadOlder()}>
-          {app.thread.loadingMore ? "Cargando…" : "Ver mensajes anteriores"}
+      {#if (app.thread.nextBefore !== undefined || app.chat.nextBefore !== undefined) && !agent}
+        <button class="ghost older" disabled={app.thread.loadingMore || app.chat.loadingMore} onclick={() => app.loadOlder()}>
+          {app.thread.loadingMore || app.chat.loadingMore ? "Cargando…" : "Ver mensajes anteriores"}
         </button>
       {/if}
       {#each items as it (it.key)}
         {#if it.kind === "day"}
           <div class="day">{it.label}</div>
+        {:else if it.kind === "chat"}
+          <ChatBubble message={it.message} />
         {:else if it.kind === "draft"}
           <DraftCard draft={it.draft} />
         {:else if it.card?.kind === "request"}
@@ -130,7 +134,7 @@
           </div>
         {/if}
       {/each}
-      {#if app.thread.error}<div class="error" style="align-self: center">{app.thread.error}</div>{/if}
+      {#if app.thread.error ?? app.chat.error}<div class="error" style="align-self: center">{app.thread.error ?? app.chat.error}</div>{/if}
     </div>
   </div>
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { draft, req } from "./test-fixtures";
+import { chatMsg, draft, req } from "./test-fixtures";
 import type { Card } from "./stores/inbox.svelte";
 import { AGENT_THREAD, buildThreadItems, originLabel, requestCaption, waitingByPeer } from "./thread-items";
 
@@ -19,6 +19,19 @@ describe("hilo: elementos y estados", () => {
     const b = items.find((i) => i.kind === "request" && i.request.id === "b");
     expect(b?.kind === "request" && b.card?.kind).toBe("request");
     expect(items[2]?.kind === "day" && items[2].label).toMatch(/^Hoy /);
+  });
+
+  test("los mensajes del chat se intercalan por hora con las solicitudes, sin separador de más", () => {
+    const r = req({ id: "a", createdAt: day, sentAt: day, status: "answered", outcome: "answered" });
+    const before = chatMsg({ id: "c1", createdAt: day - 60_000 });
+    const after = chatMsg({ id: "c2", createdAt: day + 60_000, fromMemberId: "m1", toMemberId: "m2" });
+    const items = buildThreadItems({ memberId: "m2", requests: [r], messages: [after, before], cards: [], lookup: () => undefined, now: day + H });
+    expect(items.map((i) => i.key)).toEqual([`day:${day - 60_000}`, "c:c1", "r:a", "c:c2"]);
+  });
+
+  test("la conversación del agente no lleva mensajes del chat", () => {
+    const items = buildThreadItems({ memberId: AGENT_THREAD, requests: [], messages: [chatMsg()], cards: [], lookup: () => undefined, now: 0 });
+    expect(items).toEqual([]);
   });
 
   test("un borrador de respuesta sin solicitud conocida va a la conversación del agente", () => {
