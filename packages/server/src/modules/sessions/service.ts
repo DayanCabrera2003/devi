@@ -122,6 +122,11 @@ export class SessionManager implements SessionsService {
     return { ...d, meta };
   }
 
+  pair(memberId: string, q: { parentPid: number; machine: string; claudeSessionId: string }): Session | null {
+    const rec = this.pairFor(memberId, q);
+    return rec ? this.toSession(rec) : null;
+  }
+
   // Entregas sin confirmar de la sesión de quien llama, emparejada como en los hooks. Sin pareja: [].
   inbox(memberId: string, q: z.output<typeof InboxQuery>): InboxItem[] {
     const rec = this.pairFor(memberId, q);

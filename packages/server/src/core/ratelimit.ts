@@ -7,6 +7,7 @@ export type RateLimits = {
   draft: RateLimit; // POST /drafts
   draftFiles: RateLimit; // POST /drafts con archivos (además de draft)
   mutation: RateLimit; // el resto de rutas que cambian algo (salvo el latido de presencia)
+  claimRedeem: RateLimit; // POST /claims/redeem (además de mutation)
 };
 
 const MINUTE = 60_000;
@@ -14,6 +15,7 @@ export const DEFAULT_RATE_LIMITS: RateLimits = {
   draft: { max: 20, windowMs: 10 * MINUTE },
   draftFiles: { max: 5, windowMs: 10 * MINUTE },
   mutation: { max: 120, windowMs: MINUTE },
+  claimRedeem: { max: 10, windowMs: 10 * MINUTE },
 };
 
 type Bucket = { tokens: number; at: number };

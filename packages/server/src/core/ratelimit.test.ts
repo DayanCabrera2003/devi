@@ -18,6 +18,7 @@ describe("RateLimiter (cubeta de fichas)", () => {
       draft: { max: 20, windowMs: 600_000 },
       draftFiles: { max: 5, windowMs: 600_000 },
       mutation: { max: 120, windowMs: 60_000 },
+      claimRedeem: { max: 10, windowMs: 600_000 },
     });
   });
 
@@ -43,5 +44,12 @@ describe("RateLimiter (cubeta de fichas)", () => {
     rl.take("mutation", "m");
     clock.advance(999);
     expect(catch429(() => rl.take("mutation", "m")).headers).toEqual({ "Retry-After": "1" });
+  });
+
+  test("claimRedeem: 10 canjes por persona cada 10 min", () => {
+    const rl = new RateLimiter(() => 0);
+    for (let i = 0; i < 10; i++) rl.take("claimRedeem", "m1");
+    expect(() => rl.take("claimRedeem", "m1")).toThrow();
+    expect(() => rl.take("claimRedeem", "m2")).not.toThrow();
   });
 });

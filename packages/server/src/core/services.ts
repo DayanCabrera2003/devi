@@ -1,4 +1,5 @@
-import type { AuditAction, AuditTarget, FileMeta, MemberPrefs, Session, SessionDelivery, SessionFeature, Settings } from "@devi/protocol";
+import type { AuditAction, AuditTarget, ClaimTargetType, FileMeta, MemberPrefs, Session, SessionDelivery, SessionFeature, Settings } from "@devi/protocol";
+import type { Access } from "./auth";
 
 // Servicios que un módulo ofrece a los demás a través de ModuleContext.services.
 // Así ningún módulo importa a otro: solo dependen de estas interfaces del núcleo.
@@ -25,6 +26,8 @@ export interface SessionsService {
   supports(id: string, feature: SessionFeature): boolean;
   // Guarda la entrega en la bandeja de la sesión (salvo debug) y la devuelve con meta.inbox_id.
   enqueue(sessionId: string, d: SessionDelivery): SessionDelivery;
+  // La sesión ACTIVA de memberId que corresponde a un hook (mismo emparejamiento que la bandeja), o null.
+  pair(memberId: string, q: { parentPid: number; machine: string; claudeSessionId: string }): Session | null;
 }
 
 // Archivo ya validado (nombre saneado, bytes en memoria, hash calculado).
@@ -95,6 +98,15 @@ export interface ChatService {
   last(a: string, b: string): { at: number; text: string; byMemberId: string } | null;
 }
 
+// Un tipo de elemento que se puede entregar con un código (ver modules/claims). check: al crear el código, lanza si
+// el elemento no es de quien llama o ya no está abierto. deliverTo: al canjearlo, lo reenvía a esa sesión igual que
+// «Enviar a sesión» (estado, bandeja, auditoría y eventos a la app) y devuelve la entrega SIN empujarla por el canal.
+export interface ClaimTargetHandler {
+  check(access: Access, id: string): void;
+  deliverTo(access: Access, id: string, sessionId: string, details: AuditDetails): SessionDelivery;
+}
+export type ClaimTargets = Partial<Record<ClaimTargetType, ClaimTargetHandler>>;
+
 export interface ServiceMap {
   team: TeamService;
   settings: SettingsService;
@@ -103,6 +115,8 @@ export interface ServiceMap {
   audit: AuditService;
   prefs: PrefsService;
   chat: ChatService;
+  requestTargets: ClaimTargets;
+  chatTargets: ClaimTargets;
 }
 
 export class ServiceRegistry {

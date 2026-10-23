@@ -139,6 +139,15 @@ describe("sesiones", () => {
     t.clock.advance(SESSION_PRUNE_MS + 3_600_000);
     expect((await t.openStream("dayan@dev", `/api/v1/events/session/${s.id}`)).status).toBe(404);
   });
+
+  test("pair: la sesión activa del mismo Claude Code, nunca la de otra persona", async () => {
+    await setup();
+    const s = (await t.call("maria@dev", "POST", "/api/v1/sessions", { name: "api", cwd: "/r", parentPid: 200, machine: "M1" })).data;
+    const sessions = t.app.ctx.services.get("sessions");
+    expect(sessions.pair("m-maria", { parentPid: 200, machine: "M1", claudeSessionId: "c9" })?.id).toBe(s.id);
+    expect(sessions.pair("m-maria", { parentPid: 201, machine: "M1", claudeSessionId: "c9" })).toBeNull();
+    expect(sessions.pair("m-dayan", { parentPid: 200, machine: "M1", claudeSessionId: "c9" })).toBeNull();
+  });
 });
 
 describe("cerrar o sustituir una sesión cierra su SSE", () => {
