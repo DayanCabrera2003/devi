@@ -60,8 +60,10 @@
     field?.focus();
   }
 
+  // Enter envía y Shift+Enter hace salto de línea. Mientras un IME compone (tildes muertas, CJK),
+  // Enter confirma la composición y no debe enviar.
   function onKey(e: KeyboardEvent) {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
       if (c.canSend) void send();
     }
@@ -105,7 +107,7 @@
       onkeydown={onKey}
       disabled={c.sending}
     ></textarea>
-    <button class="round send" aria-label="Enviar" title="Enviar (Ctrl/⌘ + Enter)" disabled={!c.canSend} onclick={send}>
+    <button class="round send" aria-label="Enviar" title="Enviar (Enter; Shift + Enter para otra línea)" disabled={!c.canSend} onclick={send}>
       <Icon name="up" />
     </button>
   </div>

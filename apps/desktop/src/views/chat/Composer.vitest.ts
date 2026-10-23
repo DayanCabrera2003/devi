@@ -14,15 +14,41 @@ async function mount(files = {}) {
 }
 
 describe("Composer", () => {
-  test("Enviar se activa con texto y Ctrl+Enter envía", async () => {
+  test("Enviar se activa con texto y Enter envía", async () => {
     const { getByRole, getByLabelText, sendFromApp } = await mount();
     const send = getByRole("button", { name: "Enviar" }) as HTMLButtonElement;
     expect(send.disabled).toBe(true);
     const field = getByLabelText("Mensaje para María");
     await fireEvent.input(field, { target: { value: "¿Me revisas el PR?" } });
     expect(send.disabled).toBe(false);
-    await fireEvent.keyDown(field, { key: "Enter", ctrlKey: true });
+    await fireEvent.keyDown(field, { key: "Enter" });
     await vi.waitFor(() => expect(sendFromApp).toHaveBeenCalledWith({ to: "m2", message: "¿Me revisas el PR?" }, []));
+  });
+
+  test("Ctrl+Enter también envía", async () => {
+    const { getByLabelText, sendFromApp } = await mount();
+    const field = getByLabelText("Mensaje para María");
+    await fireEvent.input(field, { target: { value: "hola" } });
+    await fireEvent.keyDown(field, { key: "Enter", ctrlKey: true });
+    await vi.waitFor(() => expect(sendFromApp).toHaveBeenCalledWith({ to: "m2", message: "hola" }, []));
+  });
+
+  test("Shift+Enter hace salto de línea y no envía", async () => {
+    const { getByLabelText, sendFromApp } = await mount();
+    const field = getByLabelText("Mensaje para María");
+    await fireEvent.input(field, { target: { value: "línea uno" } });
+    const ev = new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true, cancelable: true });
+    field.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(false);
+    expect(sendFromApp).not.toHaveBeenCalled();
+  });
+
+  test("Enter mientras se compone con un IME (tildes, CJK) no envía", async () => {
+    const { getByLabelText, sendFromApp } = await mount();
+    const field = getByLabelText("Mensaje para María");
+    await fireEvent.input(field, { target: { value: "hola" } });
+    await fireEvent.keyDown(field, { key: "Enter", isComposing: true });
+    expect(sendFromApp).not.toHaveBeenCalled();
   });
 
   test("+ adjunta con pickFiles; el chip se puede quitar y previsualizar", async () => {
