@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { API } from "./api";
 import { CLAIM_ALPHABET, CLAIM_LIMITS, claimPhrase, formatClaimCode, newClaimCode, parseClaimPhrase } from "./claims";
+import { UserEventSchema } from "./events";
 
 describe("código de entrega", () => {
   test("alfabeto sin símbolos ambiguos", () => {
@@ -38,9 +40,6 @@ describe("código de entrega", () => {
     expect(CLAIM_LIMITS).toEqual({ ttlMs: 600_000, maxOpenPerMember: 10 });
   });
 });
-
-import { API } from "./api";
-import { UserEventSchema } from "./events";
 
 describe("rutas de códigos", () => {
   test("crear y cancelar son de persona; canjear y listar no", () => {
