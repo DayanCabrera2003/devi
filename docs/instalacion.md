@@ -235,6 +235,7 @@ Para mandar algo a una sesión que todavía no existe (o si no tienes ninguna ab
 - Hasta que se usa, el elemento no cambia: si entretanto lo aceptas, lo rechazas o lo envías a otra sesión, el código deja de servir.
 - En la terminal hay un atajo: `devi claude --deliver K7Q-4MX` abre Claude Code con la frase ya puesta.
 - Si la sesión dice que aún no está conectada a Devi, espera unos segundos y vuelve a pegar la frase.
+- La sesión tiene que usar un `devi` de esta versión o posterior (la que trae «+ Sesión nueva»). Con uno anterior, la frase le llega al agente como texto normal y el código caduca sin usarse.
 - Como con «Enviar a mi sesión», si Claude Code relanza su MCP la solicitud vuelve a pendiente.
 
 ## 5. Actualizaciones
