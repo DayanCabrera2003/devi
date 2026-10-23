@@ -1,5 +1,5 @@
 // Datos de ejemplo del modo demo (?demo=…). Solo se cargan con `vite` en desarrollo.
-import type { AuditEntry, Draft, Me, Role, Session, Settings, TeamView, UserEvent } from "@devi/protocol";
+import type { AuditEntry, ChatMessage, Draft, Me, Role, Session, Settings, TeamView, UserEvent } from "@devi/protocol";
 import type { ConversationItem, PickResult, ThreadRequest } from "../lib/conversations-api";
 
 export const DEMO_MARKER = "devi-demo-fixtures";
@@ -117,6 +117,19 @@ export function openEvents(screen: string): UserEvent[] {
     { type: "request.incoming", request: LUCIA_ATTACK },
     { type: "draft.awaiting", draft: DRAFT_TO_MARIA },
     { type: "draft.awaiting", draft: DRAFT_ORPHAN },
+  ];
+}
+
+const chat = (id: string, from: string, to: string, text: string, minutesAgo: number): ChatMessage => ({
+  id, fromMemberId: from, toMemberId: to, text, files: [], createdAt: ago(minutesAgo), origin: "app", fromSessionName: "",
+});
+
+// Mensajes del chat (sin plazo ni estados) intercalados con las solicitudes de María.
+export function chatFor(memberId: string, screen: string): ChatMessage[] {
+  if (screen === "empty" || memberId !== "m-maria") return [];
+  return [
+    chat("c-1", "m-maria", ME.member.id, "¿Te va bien si vemos lo del deploy después de comer?", 50),
+    chat("c-2", ME.member.id, "m-maria", "Sí, a las 3 te escribo.", 48),
   ];
 }
 

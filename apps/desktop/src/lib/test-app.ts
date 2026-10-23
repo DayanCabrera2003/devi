@@ -34,6 +34,8 @@ export async function fakeApp(
     conversations: vi.fn(async () => ({ items: [] })),
     conversation: vi.fn(async () => ({ requests: [] })),
     sendFromApp: vi.fn(async () => ({})),
+    chat: vi.fn(async () => ({ messages: [] })),
+    sendChat: vi.fn(async () => ({})),
     ...conversationsOverrides,
   };
   const files = {

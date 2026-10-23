@@ -10,6 +10,8 @@ import {
   VERSION_HEADER,
   type ApiRoute,
   type AuditPage,
+  type ChatMessage,
+  type ChatPage,
   type ConversationPage,
   type ConversationsResponse,
   type CreateMemberBody,
@@ -124,6 +126,8 @@ export interface ClientLike {
   sendFromApp(meta: { to: string; message: string }, files: { name: string; content: string }[]): Promise<DeviRequest>;
   conversations(): Promise<ConversationsResponse>;
   conversation(memberId: string, opts?: { before?: number; limit?: number }): Promise<ConversationPage>;
+  sendChat(meta: { to: string; text: string }, files: { name: string; content: string }[]): Promise<ChatMessage>;
+  chat(memberId: string, opts?: { before?: number; limit?: number }): Promise<ChatPage>;
   subscribeUser(onEvent: (e: UserEvent) => void, opts?: { onStatus?: StatusListener }): () => void;
 }
 
@@ -198,6 +202,17 @@ export class DeviApi {
     return this.client.conversation(memberId, opts);
   }
 
+  // Chat: mensajes sin plazo ni estados; «Enviar a mi sesión» manda uno a una sesión propia.
+  sendChat(meta: { to: string; text: string }, files: { name: string; content: string }[]) {
+    return this.client.sendChat(meta, files);
+  }
+  chat(memberId: string, opts: { before?: number; limit?: number } = {}) {
+    return this.client.chat(memberId, opts);
+  }
+  chatToSession(id: string, sessionId: string) {
+    return this.call<{ ok: true }>("chatToSession", { params: { id }, body: { sessionId } });
+  }
+
   subscribe(onEvent: (e: UserEvent) => void, onStatus: StatusListener): () => void {
     return this.client.subscribeUser(onEvent, { onStatus });
   }
@@ -216,7 +231,7 @@ export class DeviApi {
     const query: Record<string, string> = { limit: String(q.limit) };
     if (q.before !== undefined) query.before = String(q.before);
     // Esta versión conoce las acciones nuevas; sin esto, el servidor las da como su equivalente antiguo.
-    query.features = AUDIT_FEATURES.inChat;
+    query.features = [AUDIT_FEATURES.inChat, AUDIT_FEATURES.chat].join(",");
     return this.call<AuditPage>("audit", { query });
   }
 

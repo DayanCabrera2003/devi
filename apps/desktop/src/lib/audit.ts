@@ -41,6 +41,9 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   "login.rejected": "Acceso rechazado",
   "knowledge.shared": "Respuesta guardada en la base del equipo",
   "knowledge.withdrawn": "Respuesta retirada de la base del equipo",
+  "chat.sent": "Mensaje de chat enviado",
+  "chat.to_session": "Mensaje de chat enviado a una sesión",
+  "chat.sent_from_session": "Mensaje de chat escrito desde Claude Code",
 };
 
 // Por si un servidor más nuevo manda una acción que esta versión aún no conoce.
@@ -56,6 +59,7 @@ const TARGET_LABELS: Record<AuditTarget, string> = {
   db: "Base de datos",
   login: "Login",
   knowledge: "Base del equipo",
+  chat: "Mensaje de chat",
 };
 
 export function describeTarget(e: Pick<AuditEntry, "targetType" | "targetId">, nameOf: (memberId: string) => string): string {

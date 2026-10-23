@@ -1,15 +1,16 @@
 // Conversaciones por persona, envío desde la app y archivos nativos, en un solo sitio para las
 // stores y el modo demo. Los nombres son los de @devi/protocol, @devi/client y lib/native.ts.
-import type { ConversationPage, ConversationSummary, ConversationsResponse, DeviRequest } from "@devi/protocol";
+import type { ChatMessage, ChatPage, ConversationPage, ConversationSummary, ConversationsResponse, DeviRequest } from "@devi/protocol";
 import type { DeviApi } from "./api";
 import { type PickResult, type PickedFile, native } from "./native";
 
-export type { ConversationPage, ConversationsResponse, PickResult, PickedFile };
+export type { ChatMessage, ChatPage, ConversationPage, ConversationsResponse, PickResult, PickedFile };
 export type ConversationItem = ConversationSummary;
 export type RequestOrigin = DeviRequest["origin"];
 export type ThreadRequest = DeviRequest;
 export type RejectedFile = PickResult["rejected"][number];
 export type SendMeta = { to: string; message: string };
+export type ChatMeta = { to: string; text: string };
 export type OutgoingFile = { name: string; content: string };
 
 export const CONVERSATION_UPDATED = "conversation.updated";
@@ -18,13 +19,17 @@ export interface ConversationsHttp {
   conversations(): Promise<ConversationsResponse>;
   conversation(memberId: string, opts?: { before?: number; limit?: number }): Promise<ConversationPage>;
   sendFromApp(meta: SendMeta, files: OutgoingFile[]): Promise<ThreadRequest>;
+  chat(memberId: string, opts: { before?: number; limit: number }): Promise<ChatPage>;
+  sendChat(meta: ChatMeta, files: OutgoingFile[]): Promise<ChatMessage>;
 }
 
-export function conversationsHttp(api: Pick<DeviApi, "conversations" | "conversation" | "sendFromApp">): ConversationsHttp {
+export function conversationsHttp(api: Pick<DeviApi, "conversations" | "conversation" | "sendFromApp" | "chat" | "sendChat">): ConversationsHttp {
   return {
     conversations: () => api.conversations(),
     conversation: (memberId, opts) => api.conversation(memberId, opts),
     sendFromApp: (meta, files) => api.sendFromApp(meta, files),
+    chat: (memberId, opts) => api.chat(memberId, opts),
+    sendChat: (meta, files) => api.sendChat(meta, files),
   };
 }
 

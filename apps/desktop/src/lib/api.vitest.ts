@@ -38,6 +38,8 @@ describe("DeviApi", () => {
       sendFromApp: vi.fn(async () => ({}) as never),
       conversations: vi.fn(async () => ({ items: [] })),
       conversation: vi.fn(async () => ({ requests: [] })),
+      sendChat: vi.fn(async () => ({}) as never),
+      chat: vi.fn(async () => ({ messages: [] })),
       subscribeUser: vi.fn(() => () => {}),
     };
     return { client, call };
@@ -76,9 +78,9 @@ describe("DeviApi", () => {
     call.mockResolvedValueOnce(page as never);
     const api = new DeviApi(client, "https://pc.t.ts.net");
     expect(await api.audit({ limit: 50, before: 123 })).toEqual(page);
-    expect(call).toHaveBeenLastCalledWith("audit", { query: { limit: "50", before: "123", features: "audit_in_chat" } });
+    expect(call).toHaveBeenLastCalledWith("audit", { query: { limit: "50", before: "123", features: "audit_in_chat,audit_chat" } });
     await api.audit({ limit: 20 });
-    expect(call).toHaveBeenLastCalledWith("audit", { query: { limit: "20", features: "audit_in_chat" } });
+    expect(call).toHaveBeenLastCalledWith("audit", { query: { limit: "20", features: "audit_in_chat,audit_chat" } });
   });
 
   test("audit: AuditQuery rechaza un limit fuera de rango sin llamar al servidor", () => {

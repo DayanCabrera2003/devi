@@ -73,6 +73,11 @@ function fakeConversations(screen: string): ConversationsHttp {
       id: `q-${Date.now()}`, fromMemberId: fx.ME.member.id, toMemberId: meta.to, fromSessionId: "", fromSessionName: "", origin: "app", kind: "request",
       message: meta.message, status: "pending", files: [], responseFiles: [], createdAt: Date.now(), sentAt: Date.now(), deadline: Date.now() + 3_600_000,
     }),
+    chat: async (memberId) => ({ messages: fx.chatFor(memberId, screen).slice().reverse() }),
+    sendChat: async (meta) => ({
+      id: `c-${Date.now()}`, fromMemberId: fx.ME.member.id, toMemberId: meta.to, text: meta.text, files: [], createdAt: Date.now(),
+      origin: "app", fromSessionName: "",
+    }),
   };
 }
 

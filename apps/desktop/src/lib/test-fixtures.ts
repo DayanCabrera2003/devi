@@ -1,5 +1,5 @@
 // Datos de prueba compartidos por los tests (*.vitest.ts). No se importa desde la app.
-import type { DeviRequest, Draft, Me, Member, Session, TeamView } from "@devi/protocol";
+import type { ChatMessage, DeviRequest, Draft, Me, Member, Session, TeamView } from "@devi/protocol";
 
 export const DAYAN: Member = { id: "m1", login: "dayan@x", name: "Dayan", description: "", roleIds: ["r1"], disabled: false };
 export const MARIA: Member = { id: "m2", login: "maria@x", name: "María", description: "Backend", roleIds: [], disabled: false };
@@ -37,6 +37,11 @@ export function req(over: Partial<DeviRequest> = {}): DeviRequest {
     deadline: 3_601_000,
     ...over,
   };
+}
+
+// Mensaje del chat de María (m2) a Dayan (m1).
+export function chatMsg(over: Partial<ChatMessage> = {}): ChatMessage {
+  return { id: "c1", fromMemberId: "m2", toMemberId: "m1", text: "¿comemos?", files: [], createdAt: 2_000, origin: "app", fromSessionName: "", ...over };
 }
 
 export function draft(over: Record<string, unknown> = {}): Draft {
