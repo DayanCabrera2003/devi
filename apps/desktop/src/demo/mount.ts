@@ -1,6 +1,6 @@
 // Modo demo: pinta las pantallas con datos de ejemplo, sin Rust ni servidor. Solo en desarrollo
 // (main.ts lo importa dentro de `if (import.meta.env.DEV)`).
-import type { DeviRequest, UserEvent } from "@devi/protocol";
+import type { Claim, ClaimTarget, DeviRequest, UserEvent } from "@devi/protocol";
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { mount } from "svelte";
 import type { DeviApi } from "../lib/api";
@@ -44,6 +44,9 @@ function fakeApi(screen: string): DeviApi {
     updateSettings: async (b: object) => ({ ...fx.SETTINGS, ...b }),
     audit: async () => ({ entries: fx.AUDIT, nextBefore: 3 }),
     forwardRequest: async (id: string) => touch(find(id), "forwarded"),
+    myClaims: async () => [],
+    createClaim: async (target: ClaimTarget): Promise<Claim> => ({ code: "K7Q4MX", target, expiresAt: Date.now() + 600_000, status: "open" }),
+    cancelClaim: async () => ({ ok: true }),
     acceptRequest: async (id: string) => touch(find(id), "accepted"),
     rejectRequest: async (id: string) => touch(find(id), "rejected"),
     acceptResponse: async (id: string) => touch(find(id), "closed"),

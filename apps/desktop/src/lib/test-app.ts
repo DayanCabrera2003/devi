@@ -28,6 +28,9 @@ export async function fakeApp(
     subscribe: vi.fn(() => () => {}),
     // Ajustes lee la preferencia de avisos en las sesiones al montarse.
     myPrefs: vi.fn(async () => ({ sessionNotices: true })),
+    myClaims: vi.fn(async () => []),
+    createClaim: vi.fn(async () => ({ code: "K7Q4MX", target: { type: "request", id: "x" }, expiresAt: Date.now() + 600_000, status: "open" })),
+    cancelClaim: vi.fn(async () => ({ ok: true })),
     ...api,
   };
   const conversations = {

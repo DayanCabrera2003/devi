@@ -1,15 +1,17 @@
 <script lang="ts">
   // Solicitud entrante pendiente: burbuja del compañero y, debajo, lo que puedo hacer con ella.
-  import { type DeviRequest, type InjectionScan, type Session, contextText, hasContext, scanForInjection } from "@devi/protocol";
+  import { type DeviRequest, type InjectionScan, type Session, contextText, formatClaimCode, hasContext, scanForInjection } from "@devi/protocol";
   import ContextBlock from "../components/ContextBlock.svelte";
   import DecisionForm from "../components/DecisionForm.svelte";
   import FileList from "../components/FileList.svelte";
   import HandoffStart from "../components/HandoffStart.svelte";
   import InjectionWarning from "../components/InjectionWarning.svelte";
+  import NewSessionClaim from "../components/NewSessionClaim.svelte";
   import SaveFilesButton from "../components/SaveFilesButton.svelte";
   import SendConfirm from "../components/SendConfirm.svelte";
   import SessionPicker from "../components/SessionPicker.svelte";
   import { useApp } from "../lib/context";
+  import { copyText } from "../lib/handoff";
   import type { ThreadRequest } from "../lib/conversations-api";
   import { combineScans } from "../lib/safety";
   import { originLabel, requestCaption } from "../lib/thread-items";
@@ -19,10 +21,11 @@
   let { request, compact = false }: Props = $props();
   const app = useApp();
 
-  let mode = $state<"view" | "pick" | "accept" | "reject">("view");
+  let mode = $state<"view" | "pick" | "new" | "accept" | "reject">("view");
   const from = $derived(app.team.nameOf(request.fromMemberId));
   const handoff = $derived(request.kind === "handoff");
   const caption = $derived(requestCaption(request, app.team.myId));
+  const waiting = $derived(app.claims.openFor({ type: "request", id: request.id }));
   const hint = $derived(
     request.files.length > 0
       ? "Llegará como pregunta abierta, no como orden. La sesión guardará los archivos en tu carpeta de recibidos."
@@ -67,10 +70,11 @@
     <SaveFilesButton save={() => app.saveFiles(request.id, "request", request.files)} />
   {/if}
   <div class="caption">{caption.text}</div>
+  {#if waiting}<div class="caption">Esperando sesión nueva · {formatClaimCode(waiting.code)}</div>{/if}
   {#if scan.level === "high"}<SendConfirm bind:checked={reviewed} />{/if}
   <div class="actions">
     <button class="primary" disabled={blocked} onclick={openPicker}>Enviar a mi sesión</button>
-    {#if handoff}<HandoffStart requestId={request.id} />{/if}
+    {#if handoff}<HandoffStart requestId={request.id} inline={compact} />{/if}
     <button onclick={() => (mode = "accept")}>{handoff ? "Aceptar" : "Lo hago yo"}</button>
     <button class="no" onclick={() => (mode = "reject")}>Rechazar</button>
   </div>
@@ -84,6 +88,16 @@
     title="¿A qué sesión se lo pasas?"
     {hint}
     onPick={pick}
+    onBack={() => (mode = "view")}
+    onNewSession={() => (mode = "new")}
+    inline={compact}
+  />
+{:else if mode === "new"}
+  <NewSessionClaim
+    target={{ type: "request", id: request.id }}
+    create={(t) => app.createClaim(t)}
+    cancel={(c) => app.cancelClaim(c)}
+    copy={copyText}
     onBack={() => (mode = "view")}
     inline={compact}
   />

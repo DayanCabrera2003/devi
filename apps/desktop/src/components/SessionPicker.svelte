@@ -14,9 +14,11 @@
     preferredId?: string;
     onPick: (s: Session) => Promise<void>;
     onBack: () => void;
+    // «+ Sesión nueva»: entregarlo con un código en una sesión que aún no existe.
+    onNewSession?: () => void;
     inline?: boolean;
   };
-  let { sessions, loading, error, title, hint, preferredId, onPick, onBack, inline = false }: Props = $props();
+  let { sessions, loading, error, title, hint, preferredId, onPick, onBack, onNewSession, inline = false }: Props = $props();
 
   const sorted = $derived(sortSessions(sessions, preferredId));
   let busy = $state(false);
@@ -41,7 +43,7 @@
     {#if loading}
       <div class="muted">Buscando tus sesiones…</div>
     {:else if sorted.length === 0}
-      <div class="muted">No tienes sesiones de Claude Code abiertas con Devi.</div>
+      <div class="muted">No tienes sesiones de Claude Code abiertas con Devi{onNewSession ? ": abre una nueva" : ""}.</div>
     {:else}
       {#each sorted as s (s.id)}
         {@const badge = deliveryBadge(s)}
@@ -53,7 +55,14 @@
         </button>
       {/each}
     {/if}
+    {#if onNewSession}
+      <button class="session new" disabled={busy} onclick={onNewSession}>+ Sesión nueva</button>
+    {/if}
   </div>
   <div class="actions"><button onclick={onBack}>Volver</button></div>
   {#if pickError ?? error}<div class="error">{pickError ?? error}</div>{/if}
 </Sheet>
+
+<style>
+  .new { color: var(--accent); }
+</style>

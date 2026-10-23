@@ -12,6 +12,8 @@ import {
   type AuditPage,
   type ChatMessage,
   type ChatPage,
+  type Claim,
+  type ClaimTarget,
   type ConversationPage,
   type ConversationsResponse,
   type CreateMemberBody,
@@ -212,6 +214,15 @@ export class DeviApi {
   chatToSession(id: string, sessionId: string) {
     return this.call<{ ok: true }>("chatToSession", { params: { id }, body: { sessionId } });
   }
+
+  // «+ Sesión nueva»: un código de un solo uso que el hook de una sesión nueva canjea por el elemento.
+  createClaim(target: ClaimTarget) {
+    return this.call<Claim>("createClaim", { body: { target } });
+  }
+  cancelClaim(code: string) {
+    return this.call<{ ok: true }>("cancelClaim", { params: { code }, body: {} });
+  }
+  myClaims() { return this.call<Claim[]>("myClaims"); }
 
   subscribe(onEvent: (e: UserEvent) => void, onStatus: StatusListener): () => void {
     return this.client.subscribeUser(onEvent, { onStatus });

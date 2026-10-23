@@ -1,4 +1,4 @@
-import { render } from "@testing-library/svelte";
+import { fireEvent, render } from "@testing-library/svelte";
 import { describe, expect, test, vi } from "vitest";
 import { SESSIONS } from "../lib/test-fixtures";
 import { deliveryBadge } from "../lib/stores/sessions.svelte";
@@ -20,5 +20,20 @@ describe("SessionPicker: cómo llega la entrega", () => {
   test("deliveryBadge", () => {
     expect(deliveryBadge({ channel: true })).toEqual({ label: "en tiempo real", title: "Llega a la sesión al momento" });
     expect(deliveryBadge({ channel: false })).toEqual({ label: "al escribir", title: "Llegará cuando escribas algo en esa sesión" });
+  });
+});
+
+describe("SessionPicker: sesión nueva", () => {
+  test("ofrece «+ Sesión nueva» también sin sesiones", async () => {
+    const onNewSession = vi.fn();
+    const { getByRole, getByText } = render(SessionPicker, { ...props, sessions: [], onNewSession });
+    expect(getByText(/abre una nueva/)).toBeTruthy();
+    await fireEvent.click(getByRole("button", { name: /Sesión nueva/ }));
+    expect(onNewSession).toHaveBeenCalled();
+  });
+
+  test("sin onNewSession no aparece", () => {
+    const { queryByRole } = render(SessionPicker, { ...props, sessions: SESSIONS });
+    expect(queryByRole("button", { name: /Sesión nueva/ })).toBeNull();
   });
 });
