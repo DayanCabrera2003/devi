@@ -1,6 +1,7 @@
 import { FILE_LIMITS, scanForSecrets } from "@devi/protocol";
 import { errorMessage } from "../api";
 import type {
+  ChatMessage,
   ConversationsHttp,
   NativeFiles,
   OutgoingFile,
@@ -19,9 +20,15 @@ export function scanOutgoing(text: string, files: Pick<PickedFile, "name" | "pre
   return hits;
 }
 
-// Barra de escritura de una conversación: texto, adjuntos (tokens de Rust) y aviso de secretos.
+// message: mensaje del chat (sin plazo ni estados). request: solicitud con plazo, que el otro acepta o rechaza.
+export type ComposerMode = "message" | "request";
+export type Sent = { kind: "chat"; message: ChatMessage } | { kind: "request"; request: ThreadRequest };
+
+// Barra de escritura de una conversación: texto, adjuntos (tokens de Rust), aviso de secretos y si sale como
+// mensaje del chat o como solicitud.
 export class ComposerStore {
   to = $state<string | null>(null);
+  mode = $state<ComposerMode>("message");
   text = $state("");
   files = $state<PickedFile[]>([]);
   rejected = $state<RejectedFile[]>([]);
@@ -59,6 +66,7 @@ export class ComposerStore {
   async reset(native: Pick<NativeFiles, "discardFiles">, to: string | null = null): Promise<void> {
     const tokens = this.files.map((f) => f.token);
     this.to = to;
+    this.mode = "message";
     this.text = "";
     this.files = [];
     this.rejected = [];
@@ -68,7 +76,7 @@ export class ComposerStore {
     if (tokens.length > 0) await native.discardFiles(tokens).catch(() => {});
   }
 
-  async send(http: Pick<ConversationsHttp, "sendFromApp">, native: Pick<NativeFiles, "takeFiles">): Promise<ThreadRequest | null> {
+  async send(http: Pick<ConversationsHttp, "sendFromApp" | "sendChat">, native: Pick<NativeFiles, "takeFiles">): Promise<Sent | null> {
     if (!this.canSend || !this.to) return null;
     this.sending = true;
     this.error = null;
@@ -78,7 +86,11 @@ export class ComposerStore {
       const contents =
         tokens.length === 0 ? [] : this.taken?.key === key ? this.taken.files : await native.takeFiles(tokens);
       this.taken = { key, files: contents };
-      const r = await http.sendFromApp({ to: this.to, message: this.text.trim() }, contents);
+      const text = this.text.trim();
+      const r: Sent =
+        this.mode === "message"
+          ? { kind: "chat", message: await http.sendChat({ to: this.to, text }, contents) }
+          : { kind: "request", request: await http.sendFromApp({ to: this.to, message: text }, contents) };
       this.text = "";
       this.files = [];
       this.rejected = [];

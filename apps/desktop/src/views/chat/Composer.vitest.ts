@@ -1,54 +1,69 @@
 import { fireEvent, render } from "@testing-library/svelte";
 import { describe, expect, test, vi } from "vitest";
 import { fakeApp } from "../../lib/test-app";
-import { req } from "../../lib/test-fixtures";
+import { chatMsg, req } from "../../lib/test-fixtures";
 import Composer from "./Composer.svelte";
 
 const SECRET = "API_KEY=sk-proj-Xa81kd02LmQp7Rr5Tt9Vv3Ww6Yy1Zz4Bb8Cc";
 
 async function mount(files = {}) {
   const sendFromApp = vi.fn(async () => req({ id: "q-app", fromMemberId: "m1", toMemberId: "m2", origin: "app" }));
-  const t = await fakeApp({}, {}, { sendFromApp }, files);
+  const sendChat = vi.fn(async () => chatMsg({ id: "c-app", fromMemberId: "m1", toMemberId: "m2" }));
+  const t = await fakeApp({}, {}, { sendFromApp, sendChat }, files);
   await t.app.openConversation("m2");
-  return { ...t, sendFromApp, ...render(Composer, { props: { name: "María" }, context: t.context }) };
+  return { ...t, sendFromApp, sendChat, ...render(Composer, { props: { name: "María" }, context: t.context }) };
 }
 
 describe("Composer", () => {
   test("Enviar se activa con texto y Enter envía", async () => {
-    const { getByRole, getByLabelText, sendFromApp } = await mount();
+    const { getByRole, getByLabelText, sendChat } = await mount();
     const send = getByRole("button", { name: "Enviar" }) as HTMLButtonElement;
     expect(send.disabled).toBe(true);
     const field = getByLabelText("Mensaje para María");
     await fireEvent.input(field, { target: { value: "¿Me revisas el PR?" } });
     expect(send.disabled).toBe(false);
     await fireEvent.keyDown(field, { key: "Enter" });
-    await vi.waitFor(() => expect(sendFromApp).toHaveBeenCalledWith({ to: "m2", message: "¿Me revisas el PR?" }, []));
+    await vi.waitFor(() => expect(sendChat).toHaveBeenCalledWith({ to: "m2", text: "¿Me revisas el PR?" }, []));
   });
 
   test("Ctrl+Enter también envía", async () => {
-    const { getByLabelText, sendFromApp } = await mount();
+    const { getByLabelText, sendChat } = await mount();
     const field = getByLabelText("Mensaje para María");
     await fireEvent.input(field, { target: { value: "hola" } });
     await fireEvent.keyDown(field, { key: "Enter", ctrlKey: true });
-    await vi.waitFor(() => expect(sendFromApp).toHaveBeenCalledWith({ to: "m2", message: "hola" }, []));
+    await vi.waitFor(() => expect(sendChat).toHaveBeenCalledWith({ to: "m2", text: "hola" }, []));
   });
 
   test("Shift+Enter hace salto de línea y no envía", async () => {
-    const { getByLabelText, sendFromApp } = await mount();
+    const { getByLabelText, sendFromApp, sendChat } = await mount();
     const field = getByLabelText("Mensaje para María");
     await fireEvent.input(field, { target: { value: "línea uno" } });
     const ev = new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true, cancelable: true });
     field.dispatchEvent(ev);
     expect(ev.defaultPrevented).toBe(false);
     expect(sendFromApp).not.toHaveBeenCalled();
+    expect(sendChat).not.toHaveBeenCalled();
   });
 
   test("Enter mientras se compone con un IME (tildes, CJK) no envía", async () => {
-    const { getByLabelText, sendFromApp } = await mount();
+    const { getByLabelText, sendChat } = await mount();
     const field = getByLabelText("Mensaje para María");
     await fireEvent.input(field, { target: { value: "hola" } });
     await fireEvent.keyDown(field, { key: "Enter", isComposing: true });
-    expect(sendFromApp).not.toHaveBeenCalled();
+    expect(sendChat).not.toHaveBeenCalled();
+  });
+
+  test("interruptor Mensaje / Solicitud: por defecto Mensaje; con Solicitud sale con plazo (sendFromApp)", async () => {
+    const { getByRole, getByLabelText, sendFromApp, sendChat } = await mount();
+    const message = getByRole("radio", { name: "Mensaje" }) as HTMLInputElement;
+    const request = getByRole("radio", { name: "Solicitud" }) as HTMLInputElement;
+    expect(message.checked).toBe(true);
+    await fireEvent.click(request);
+    expect(getByLabelText("Solicitud para María")).toBeTruthy();
+    await fireEvent.input(getByLabelText("Solicitud para María"), { target: { value: "¿Me apruebas el PR?" } });
+    await fireEvent.keyDown(getByLabelText("Solicitud para María"), { key: "Enter" });
+    await vi.waitFor(() => expect(sendFromApp).toHaveBeenCalledWith({ to: "m2", message: "¿Me apruebas el PR?" }, []));
+    expect(sendChat).not.toHaveBeenCalled();
   });
 
   test("+ adjunta con pickFiles; el chip se puede quitar y previsualizar", async () => {

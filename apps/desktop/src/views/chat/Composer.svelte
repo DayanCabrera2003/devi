@@ -1,5 +1,6 @@
 <script lang="ts">
-  // Barra flotante para escribir a un compañero desde la app: adjuntos, aviso de secretos y envío.
+  // Barra flotante para escribir a un compañero desde la app: mensaje del chat o solicitud, adjuntos, aviso de
+  // secretos y envío.
   import { FILE_LIMITS } from "@devi/protocol";
   import Icon from "../../components/Icon.svelte";
   import Sheet from "../../components/Sheet.svelte";
@@ -70,6 +71,7 @@
   }
 
   const mb = FILE_LIMITS.maxBytes / 1_048_576;
+  const label = $derived(c.mode === "message" ? `Mensaje para ${name}` : `Solicitud para ${name}`);
 </script>
 
 <div class="composer glass">
@@ -94,6 +96,14 @@
       <label class="check"><input type="checkbox" bind:checked={app.composer.confirmSecrets} /> Enviar de todos modos</label>
     </div>
   {/if}
+  <div class="composer-mode" role="radiogroup" aria-label="Qué envías">
+    <label title="Un mensaje del chat: sin plazo ni respuesta que esperar">
+      <input type="radio" name="composer-mode" value="message" bind:group={app.composer.mode} disabled={c.sending} /> Mensaje
+    </label>
+    <label title="Una solicitud: tiene plazo y {name} la acepta, la rechaza o la pasa a su Claude">
+      <input type="radio" name="composer-mode" value="request" bind:group={app.composer.mode} disabled={c.sending} /> Solicitud
+    </label>
+  </div>
   <div class="composer-row">
     <button class="round add" aria-label="Adjuntar archivos" title="Adjuntar (archivos de texto, hasta {FILE_LIMITS.maxFiles} de {mb} MB)" disabled={c.sending || c.files.length >= FILE_LIMITS.maxFiles} onclick={pick}>
       <Icon name="plus" />
@@ -102,8 +112,8 @@
       bind:this={field}
       bind:value={app.composer.text}
       rows="1"
-      placeholder="Mensaje para {name}"
-      aria-label="Mensaje para {name}"
+      placeholder={label}
+      aria-label={label}
       onkeydown={onKey}
       disabled={c.sending}
     ></textarea>

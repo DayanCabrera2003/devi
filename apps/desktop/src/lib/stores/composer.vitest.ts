@@ -6,9 +6,13 @@ const SECRET = "API_KEY=sk-proj-Xa81kd02LmQp7Rr5Tt9Vv3Ww6Yy1Zz4Bb8Cc";
 
 function setup() {
   const native = { discardFiles: vi.fn(async () => {}), takeFiles: vi.fn(async (t: string[]) => t.map((x) => ({ name: x, content: "c" }))) };
-  const http = { sendFromApp: vi.fn(async (meta: { to: string; message: string }) => ({ id: "q1", ...meta }) as never) };
+  const http = {
+    sendFromApp: vi.fn(async (meta: { to: string; message: string }) => ({ id: "q1", ...meta }) as never),
+    sendChat: vi.fn(async (meta: { to: string; text: string }) => ({ id: "c1", ...meta }) as never),
+  };
   const c = new ComposerStore();
   c.to = "m2";
+  c.mode = "request"; // la mayoría de estos tests son del envío de solicitudes
   return { c, native, http };
 }
 
@@ -20,7 +24,7 @@ describe("barra de escritura", () => {
     c.add(native, { files: [file("a")], rejected: [] });
     expect(c.canSend).toBe(true);
     const r = await c.send(http, native);
-    expect(r).toBeTruthy();
+    expect(r).toMatchObject({ kind: "request" });
     expect(native.takeFiles).toHaveBeenCalledWith(["a"]);
     expect(http.sendFromApp).toHaveBeenCalledWith({ to: "m2", message: "¿Me ayudas?" }, [{ name: "a", content: "c" }]);
     expect(c.text).toBe("");
@@ -69,5 +73,24 @@ describe("barra de escritura", () => {
     await c.send(http, native);
     expect(native.takeFiles).toHaveBeenCalledTimes(1);
     expect(http.sendFromApp).toHaveBeenCalledTimes(2);
+  });
+
+  test("por defecto es un mensaje del chat: va a sendChat y no a sendFromApp", async () => {
+    const { native, http } = setup();
+    const c = new ComposerStore();
+    expect(c.mode).toBe("message");
+    c.to = "m2";
+    c.text = " ¿comemos? ";
+    c.add(native, { files: [file("a")], rejected: [] });
+    const r = await c.send(http, native);
+    expect(r).toMatchObject({ kind: "chat" });
+    expect(http.sendChat).toHaveBeenCalledWith({ to: "m2", text: "¿comemos?" }, [{ name: "a", content: "c" }]);
+    expect(http.sendFromApp).not.toHaveBeenCalled();
+  });
+
+  test("cambiar de persona vuelve al modo mensaje", async () => {
+    const { c, native } = setup();
+    await c.reset(native, "m3");
+    expect(c.mode).toBe("message");
   });
 });
