@@ -89,6 +89,18 @@ describe("DeviApp", () => {
     expect(t.app.claims.openFor({ type: "chat", id: "c1" })).toBeNull();
   });
 
+  test("al reconectar el SSE recarga mis códigos vivos", async () => {
+    const t = setup();
+    await t.app.boot();
+    t.status("open");
+    await vi.waitFor(() => expect(t.api.myClaims).toHaveBeenCalledTimes(2));
+    const open: Claim = { code: "K7Q4MX", target: { type: "request", id: "r9" }, expiresAt: Date.now() + 600_000, status: "open" };
+    t.api.myClaims.mockResolvedValueOnce([open]);
+    t.status("reconnecting");
+    t.status("open");
+    await vi.waitFor(() => expect(t.app.claims.openFor({ type: "request", id: "r9" })?.code).toBe("K7Q4MX"));
+  });
+
   test("una API sin myClaims no impide conectar", async () => {
     const t = setup();
     t.api.myClaims.mockRejectedValueOnce(new Error("404"));

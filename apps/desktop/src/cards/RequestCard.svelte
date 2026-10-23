@@ -74,7 +74,7 @@
   {#if scan.level === "high"}<SendConfirm bind:checked={reviewed} />{/if}
   <div class="actions">
     <button class="primary" disabled={blocked} onclick={openPicker}>Enviar a mi sesión</button>
-    {#if handoff}<HandoffStart requestId={request.id} inline={compact} />{/if}
+    {#if handoff}<HandoffStart requestId={request.id} disabled={blocked} inline={compact} />{/if}
     <button onclick={() => (mode = "accept")}>{handoff ? "Aceptar" : "Lo hago yo"}</button>
     <button class="no" onclick={() => (mode = "reject")}>Rechazar</button>
   </div>
@@ -92,7 +92,7 @@
     onNewSession={() => (mode = "new")}
     inline={compact}
   />
-{:else if mode === "new"}
+{:else if mode === "new" && !blocked}
   <NewSessionClaim
     target={{ type: "request", id: request.id }}
     create={(t) => app.createClaim(t)}

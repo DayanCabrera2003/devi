@@ -64,5 +64,5 @@
 </Sheet>
 
 <style>
-  .new { color: var(--accent); }
+  .new { color: var(--accent-text); }
 </style>

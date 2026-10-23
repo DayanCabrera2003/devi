@@ -4,15 +4,16 @@
   import { copyText } from "../lib/handoff";
   import NewSessionClaim from "./NewSessionClaim.svelte";
 
-  type Props = { requestId: string; inline?: boolean };
-  let { requestId, inline = false }: Props = $props();
+  // disabled: la misma casilla de prompt injection que «Enviar a mi sesión».
+  type Props = { requestId: string; disabled?: boolean; inline?: boolean };
+  let { requestId, disabled = false, inline = false }: Props = $props();
   const app = useApp();
 
   let open = $state(false);
 </script>
 
-<button onclick={() => (open = true)}>Abrir en sesión nueva</button>
-{#if open}
+<button {disabled} onclick={() => (open = true)}>Abrir en sesión nueva</button>
+{#if open && !disabled}
   <div class="handoff-start">
     <NewSessionClaim
       target={{ type: "request", id: requestId }}

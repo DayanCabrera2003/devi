@@ -21,6 +21,8 @@
   let now = $state(Date.now());
   const phrase = $derived(claim ? claimPhrase(claim.code) : "");
   const left = $derived(claim ? Math.max(0, Math.ceil((claim.expiresAt - now) / 60_000)) : 0);
+  // Caducado ya no se canjea: enseñar la frase invitaría a pegar algo que el hook rechazará.
+  const expired = $derived(claim !== null && claim.expiresAt <= now);
 
   $effect(() => {
     if (!claim) return;
@@ -33,6 +35,7 @@
     error = null;
     try {
       claim = await create(target);
+      now = Date.now();
       copied = await copy(claimPhrase(claim.code));
     } catch (e) {
       error = errorMessage(e);
@@ -65,6 +68,12 @@
     <div class="actions">
       <button onclick={onBack}>Volver</button>
       <button class="primary" disabled={busy} onclick={start}>Crear código</button>
+    </div>
+  {:else if expired}
+    <p class="sheet-sub">El código caducó.</p>
+    <div class="actions">
+      <button onclick={onBack}>Volver</button>
+      <button class="primary" onclick={() => ((claim = null), (copied = null))}>Crear otro</button>
     </div>
   {:else}
     <p class="sheet-sub">

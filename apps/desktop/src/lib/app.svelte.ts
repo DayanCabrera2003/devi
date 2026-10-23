@@ -176,8 +176,13 @@ export class DeviApp {
       return;
     }
     this.unsubscribe = off;
-    // Sin bloquear la conexión: un servidor anterior responde 404. Promise.resolve().then: una API sin
-    // myClaims (servidor o test antiguo) tampoco rompe connect().
+    this.loadClaims(api, gen);
+    this.publishMascot();
+  }
+
+  // Sin bloquear la conexión: un servidor anterior responde 404. Promise.resolve().then: una API sin
+  // myClaims (servidor o test antiguo) tampoco rompe connect().
+  private loadClaims(api: DeviApi, gen: number): void {
     void Promise.resolve()
       .then(() => api.myClaims())
       .then(
@@ -186,7 +191,6 @@ export class DeviApp {
         },
         () => {},
       );
-    this.publishMascot();
   }
 
   disconnect(): void {
@@ -217,7 +221,11 @@ export class DeviApp {
       // Al conectar, el servidor reenvía las tarjetas abiertas: se parte de cero.
       this.inbox.clear();
       this.startReplay();
-      if (this.api) void this.team.refresh(this.api).catch(() => {});
+      if (this.api) {
+        void this.team.refresh(this.api).catch(() => {});
+        // Mientras estuvo cortado se perdieron los claim.updated.
+        this.loadClaims(this.api, this.generation);
+      }
       void this.refreshConversations();
     } else if (this.conn.state.status !== "connected") {
       // Se cortó antes de acabar el reenvío: esas tarjetas se volverán a reenviar y contar.
