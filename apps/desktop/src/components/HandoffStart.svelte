@@ -1,32 +1,32 @@
 <script lang="ts">
-  // «Empezar sesión con esto»: copia el comando que abre Claude Code con el traspaso y lo deja a la vista.
-  import { copyText, handoffCommand } from "../lib/handoff";
+  // «Abrir en sesión nueva»: un código de entrega para el traspaso, que se pega como primer mensaje en una sesión nueva.
+  import { useApp } from "../lib/context";
+  import { copyText } from "../lib/clipboard";
+  import NewSessionClaim from "./NewSessionClaim.svelte";
 
-  type Props = { requestId: string };
-  let { requestId }: Props = $props();
+  // disabled: la misma casilla de prompt injection que «Enviar a mi sesión».
+  type Props = { requestId: string; disabled?: boolean; inline?: boolean };
+  let { requestId, disabled = false, inline = false }: Props = $props();
+  const app = useApp();
 
-  const command = $derived(handoffCommand(requestId));
-  let copied = $state<boolean | null>(null);
-
-  async function start() {
-    copied = await copyText(command);
-  }
+  let open = $state(false);
 </script>
 
-<button onclick={start}>Empezar sesión con esto</button>
-{#if copied !== null}
+<button {disabled} onclick={() => (open = true)}>Abrir en sesión nueva</button>
+{#if open && !disabled}
   <div class="handoff-start">
-    <div class={copied ? "ok-text" : "hint"}>
-      {copied
-        ? "Copiado. Pégalo en una terminal, en la carpeta del proyecto:"
-        : "No se pudo copiar; cópialo a mano y pégalo en una terminal, en la carpeta del proyecto:"}
-    </div>
-    <pre class="preview">{command}</pre>
+    <NewSessionClaim
+      target={{ type: "request", id: requestId }}
+      create={(t) => app.createClaim(t)}
+      cancel={(c) => app.cancelClaim(c)}
+      copy={copyText}
+      onBack={() => (open = false)}
+      {inline}
+    />
   </div>
 {/if}
 
 <style>
   /* En la fila de acciones: va al final y ocupa una línea entera. */
   .handoff-start { flex-basis: 100%; order: 99; }
-  .hint { font-size: 12.5px; margin-top: 6px; color: var(--label2); }
 </style>

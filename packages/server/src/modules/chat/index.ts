@@ -12,6 +12,9 @@ export const chatModule: DeviModule = {
   routes(r, ctx) {
     const chat = new ChatManager(new ChatStore(ctx.db), ctx);
     ctx.services.provide("chat", chat);
+    ctx.services.provide("chatTargets", {
+      chat: { check: (a, id) => chat.claimCheck(a, id), deliverTo: (a, id, sessionId, details) => chat.deliverToClaim(a, id, sessionId, details) },
+    });
     registerChatRoutes(r, ctx, chat);
   },
 };

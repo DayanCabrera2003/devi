@@ -219,13 +219,24 @@ Las dos salen al momento, sin borrador que autorizar, porque las has escrito tú
 
 Si alguien tiene que continuar lo que estás haciendo, usa el prompt `traspaso` en Claude Code: el agente redacta el estado actual, las decisiones tomadas, los próximos pasos, los archivos clave, los riesgos y las dudas abiertas, te lo enseña y, cuando lo confirmas, lo envía como cualquier solicitud.
 
-Tu compañero recibe la tarjeta «Traspaso de <tu nombre>». Puede enviarlo a una de sus sesiones, aceptarlo, rechazarlo o pulsar «Empezar sesión con esto», que copia al portapapeles:
+Tu compañero recibe la tarjeta «Traspaso de <tu nombre>». Puede enviarlo a una de sus sesiones, aceptarlo, rechazarlo o pulsar «Abrir en sesión nueva» para empezar una sesión nueva con él (ver la sección siguiente). El agente lo trata como contexto a verificar contra el código, nunca como órdenes.
 
-```bash
-devi claude --handoff <id>
-```
+`devi claude --handoff <id>` sigue funcionando en la terminal: abre Claude Code con el traspaso como mensaje inicial, sin cambiar su estado.
 
-Pegado en una terminal, en la carpeta del proyecto, abre Claude Code con el traspaso como mensaje inicial. El agente lo trata como contexto a verificar contra el código, nunca como órdenes.
+### Enviar a una sesión nueva
+
+Para mandar algo a una sesión que todavía no existe (o si no tienes ninguna abierta), en «Enviar a mi sesión» elige **«+ Sesión nueva»** (en los traspasos, «Abrir en sesión nueva»). Sirve para solicitudes, respuestas, mensajes del chat y traspasos.
+
+1. Pulsa «Crear código». Devi copia una frase como `devi: recibir K7Q-4MX`.
+2. Abre una sesión nueva de Claude Code en la carpeta del proyecto y pega la frase como primer mensaje.
+3. Esa sesión recibe el elemento en ese mismo turno, igual que con «Enviar a mi sesión» (como pregunta abierta, nunca como orden, con los archivos ya descargados). En la app queda enviado a esa sesión.
+
+- El código vale **una sola vez** y caduca a los **10 minutos**. Solo sirve con tu login: si lo pega otra persona, no vale. Mientras está vivo, la tarjeta dice «Esperando sesión nueva» y puedes cancelarlo.
+- Hasta que se usa, el elemento no cambia: si entretanto lo aceptas, lo rechazas o lo envías a otra sesión, el código deja de servir.
+- En la terminal hay un atajo: `devi claude --deliver K7Q-4MX` abre Claude Code con la frase ya puesta.
+- Si la sesión dice que aún no está conectada a Devi, espera unos segundos y vuelve a pegar la frase.
+- La sesión tiene que usar un `devi` de esta versión o posterior (la que trae «+ Sesión nueva»). Con uno anterior, la frase le llega al agente como texto normal y el código caduca sin usarse.
+- Como con «Enviar a mi sesión», si Claude Code relanza su MCP la solicitud vuelve a pendiente.
 
 ## 5. Actualizaciones
 

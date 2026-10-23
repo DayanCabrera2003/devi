@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { buildClaudeArgs, claudeEnv, sessionNameFor } from "./claude";
+import { buildClaudeArgs, claudeEnv, deliverPrompt, sessionNameFor } from "./claude";
 
 test("nombre de sesión: --session o la carpeta actual", () => {
   expect(sessionNameFor("api", "/home/a/proyecto")).toBe("api");
@@ -49,5 +49,12 @@ test("args de claude: -c y --resume se pasan tal cual", () => {
 test("args de claude: el prompt inicial (traspaso) va al final, como argumento posicional", () => {
   expect(buildClaudeArgs({ session: "api", mode: "plugin", passthrough: ["--model", "opus"], prompt: "Hola" })).toEqual([
     "--channels", "plugin:devi@devi-local", "--name", "api", "--model", "opus", "Hola",
+  ]);
+});
+
+test("--deliver abre la sesión con la frase de canje como prompt inicial", () => {
+  expect(deliverPrompt("K7Q4MX")).toBe("devi: recibir K7Q-4MX");
+  expect(buildClaudeArgs({ session: "api", mode: "plugin", passthrough: [], prompt: deliverPrompt("K7Q4MX") })).toEqual([
+    "--channels", "plugin:devi@devi-local", "--name", "api", "devi: recibir K7Q-4MX",
   ]);
 });

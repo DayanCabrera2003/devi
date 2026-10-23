@@ -1,4 +1,4 @@
-import type { ChatMessage, DeviRequest, Draft, FileMeta, UserEvent, Week } from "@devi/protocol";
+import type { ChatMessage, Claim, ClaimTarget, DeviRequest, Draft, FileMeta, UserEvent, Week } from "@devi/protocol";
 import { type DeviApi, errorMessage } from "./api";
 import { type AuditEntry, auditNotice } from "./audit";
 import { Clock } from "./clock.svelte";
@@ -8,6 +8,7 @@ import { HAPPY_MS, deriveMood, overdueCount, quietSinceAfter } from "./mood";
 import { isWeekDue, weekKey } from "./week";
 import { type AppPrefs, type ClientConfig, type Native, type ServerStatus, prefsOf } from "./native";
 import { type Notice, chatNotice, escalationNotice, noticeFor, noticeKey, shouldNotify, summaryNotice, updateNotice } from "./notify";
+import { ClaimsStore } from "./stores/claims.svelte";
 import { ConnectionStore } from "./stores/connection.svelte";
 import { ComposerStore, DragState } from "./stores/composer.svelte";
 import { ConversationsStore } from "./stores/conversations.svelte";
@@ -64,6 +65,7 @@ export class DeviApp {
   readonly team = new TeamStore();
   readonly inbox = new InboxStore();
   readonly sessions = new SessionsStore();
+  readonly claims = new ClaimsStore();
   readonly clock = new Clock(); // lo arranca y lo para Shell
   readonly convos = new ConversationsStore();
   readonly thread = new ThreadStore();
@@ -174,7 +176,21 @@ export class DeviApp {
       return;
     }
     this.unsubscribe = off;
+    this.loadClaims(api, gen);
     this.publishMascot();
+  }
+
+  // Sin bloquear la conexión: un servidor anterior responde 404. Promise.resolve().then: una API sin
+  // myClaims (servidor o test antiguo) tampoco rompe connect().
+  private loadClaims(api: DeviApi, gen: number): void {
+    void Promise.resolve()
+      .then(() => api.myClaims())
+      .then(
+        (c) => {
+          if (gen === this.generation) this.claims.set(c);
+        },
+        () => {},
+      );
   }
 
   disconnect(): void {
@@ -205,7 +221,11 @@ export class DeviApp {
       // Al conectar, el servidor reenvía las tarjetas abiertas: se parte de cero.
       this.inbox.clear();
       this.startReplay();
-      if (this.api) void this.team.refresh(this.api).catch(() => {});
+      if (this.api) {
+        void this.team.refresh(this.api).catch(() => {});
+        // Mientras estuvo cortado se perdieron los claim.updated.
+        this.loadClaims(this.api, this.generation);
+      }
       void this.refreshConversations();
     } else if (this.conn.state.status !== "connected") {
       // Se cortó antes de acabar el reenvío: esas tarjetas se volverán a reenviar y contar.
@@ -250,6 +270,10 @@ export class DeviApp {
     }
     if (ev.type === "sessions.updated") {
       if (ev.memberId === me) void this.sessions.load(this.api, me);
+      return;
+    }
+    if (ev.type === "claim.updated") {
+      this.claims.apply(ev.claim);
       return;
     }
     if ("request" in ev) {
@@ -464,6 +488,23 @@ export class DeviApp {
   // «Enviar a mi sesión» de un mensaje del chat: el mensaje no cambia, así que no hay nada que actualizar.
   async sendChatToSession(m: ChatMessage, sessionId: string): Promise<void> {
     await this.need().chatToSession(m.id, sessionId);
+  }
+
+  // «+ Sesión nueva»: el código queda en claims al momento; claim.updated lo saca al usarse o cancelarse.
+  createClaim(t: ClaimTarget): Promise<Claim> {
+    return this.need()
+      .createClaim(t)
+      .then((c) => {
+        this.claims.apply(c);
+        return c;
+      });
+  }
+
+  async cancelClaim(code: string): Promise<void> {
+    await this.need().cancelClaim(code);
+    // Sin esperar al evento: la tarjeta deja de decir «Esperando sesión nueva» en cuanto se cancela.
+    const c = this.claims.list.find((x) => x.code === code);
+    if (c) this.claims.apply({ ...c, status: "cancelled" });
   }
 
   async forwardResponse(r: DeviRequest, sessionId: string): Promise<void> {

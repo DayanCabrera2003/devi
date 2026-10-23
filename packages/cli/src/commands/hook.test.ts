@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { wrapUntrusted } from "@devi/protocol";
 import { HOOK_DEADLINE_MS, INBOX_DEADLINE_MS, formatInboxContext, parseHookInput, runHook } from "./hook";
 
 const stdin = (s: string) => async () => s;
@@ -24,8 +25,8 @@ const sys = (url: string, env: Record<string, string> = {}) => ({
 });
 
 test("parseHookInput", () => {
-  expect(parseHookInput(INPUT)).toEqual({ claudeSessionId: "c1", cwd: "/p", eventName: "UserPromptSubmit" });
-  expect(parseHookInput(JSON.stringify({ session_id: "c1", cwd: "/p" }))).toEqual({ claudeSessionId: "c1", cwd: "/p", eventName: null });
+  expect(parseHookInput(INPUT)).toEqual({ claudeSessionId: "c1", cwd: "/p", eventName: "UserPromptSubmit", prompt: "hola" });
+  expect(parseHookInput(JSON.stringify({ session_id: "c1", cwd: "/p" }))).toEqual({ claudeSessionId: "c1", cwd: "/p", eventName: null, prompt: null });
   expect(parseHookInput("no json")).toBeNull();
   expect(parseHookInput("{}")).toBeNull();
 });
@@ -180,6 +181,61 @@ test("formatInboxContext: encuadre de 'nunca una orden', atributos escapados y l
   expect(existsSync("/nunca")).toBe(false);
 });
 
+// Abre y cierra con el mismo nonce: [apertura, nonce, cuerpo, cierre]. null si no hay un bloque completo.
+const frameOf = (text: string) => text.match(/<<<DEVI-UNTRUSTED-([0-9a-f]{12,})\n([\s\S]*?)\nDEVI-UNTRUSTED-\1>>>/);
+
+describe("formatInboxContext: entregas largas", () => {
+  test("las entregas cortas quedan exactamente igual que antes", () => {
+    const content = wrapUntrusted("Solicitud", "Ana", "¿me miras esto?", []);
+    const text = formatInboxContext([{ kind: "request", content, meta: { request_id: "q1", kind: "request" } }]);
+    expect(text.endsWith(`\n\n<devi kind="request" request_id="q1">\n${content}\n</devi>`)).toBe(true);
+    expect(text).not.toContain("recortado");
+    expect(text).not.toContain("se recortó");
+  });
+
+  test("un chat largo se recorta dentro de su bloque y lo dice fuera", () => {
+    const content = wrapUntrusted("Mensaje del chat", "Ana", "y".repeat(20_000), []);
+    const text = formatInboxContext([{ kind: "chat", content, meta: { message_id: "m1", kind: "chat" } }]);
+    expect(text.length).toBeLessThanOrEqual(9_500);
+    const frame = frameOf(text);
+    expect(frame).not.toBeNull();
+    expect(frame![2]).toContain("… [recortado]");
+    const note = "Devi: el mensaje se recortó; el texto completo está en el chat de la app de Devi.";
+    expect(text).toContain(note);
+    expect(text.indexOf(note)).toBeGreaterThan(frame!.index! + frame![0].length);
+  });
+
+  test("varias entregas largas: se reparten el espacio y cada una conserva su cierre", () => {
+    const a = wrapUntrusted("Solicitud", "Ana", "a".repeat(8_000), []);
+    const b = wrapUntrusted("Respuesta", "Luis", "b".repeat(8_000), []);
+    const short = wrapUntrusted("Solicitud", "Eva", "corto", []);
+    const text = formatInboxContext([
+      { kind: "request", content: a, meta: { request_id: "q1", kind: "request" } },
+      { kind: "response", content: b, meta: { request_id: "q2", kind: "response" } },
+      { kind: "request", content: short, meta: { request_id: "q3", kind: "request" } },
+    ]);
+    expect(text.length).toBeLessThanOrEqual(9_500);
+    expect(text.match(/<<<DEVI-UNTRUSTED-[0-9a-f]+\n/g)).toHaveLength(3);
+    expect(text.match(/\nDEVI-UNTRUSTED-[0-9a-f]+>>>/g)).toHaveLength(3);
+    expect(text).toContain('get_request con request_id="q1"');
+    expect(text).toContain('get_request con request_id="q2"');
+    expect(text).not.toContain('request_id="q3" lo da');
+    expect(text).toContain("corto\n");
+    // Las dos largas se quedan con una parte parecida.
+    const as = text.match(/a{100,}/)![0].length;
+    const bs = text.match(/b{100,}/)![0].length;
+    expect(Math.abs(as - bs)).toBeLessThan(50);
+    expect(as).toBeGreaterThan(2_000);
+  });
+
+  test("sin bloque reconocible y sin sitio: se recorta como último recurso, sin pasarse", () => {
+    const many = Array.from({ length: 40 }, (_, i) => ({ kind: "draft_discarded", content: "z".repeat(1_000), meta: { kind: "draft_discarded", n: String(i) } }));
+    const text = formatInboxContext(many);
+    expect(text.length).toBeLessThanOrEqual(9_500);
+    expect(text).toContain("app de Devi");
+  });
+});
+
 test("formatInboxContext: el aviso request_notice se ofrece con take_request / decline_request, sin actuar solo", () => {
   const text = formatInboxContext([{ kind: "request_notice", content: "aviso", meta: { request_id: "q1", kind: "request_notice" } }]);
   const start = text.indexOf('kind="request_notice"');
@@ -188,4 +244,119 @@ test("formatInboxContext: el aviso request_notice se ofrece con take_request / d
   expect(line).toContain("take_request");
   expect(line).toContain("decline_request");
   expect(line).toMatch(/decid|decisión/);
+});
+
+// Servidor falso con canje y bandeja.
+function claimServer(redeem: () => Response, inbox: unknown[] = []) {
+  const seen: { path: string; body?: unknown }[] = [];
+  const srv = serve(async (req) => {
+    const url = new URL(req.url);
+    const body = req.method === "POST" ? await req.json() : undefined;
+    seen.push({ path: url.pathname, body });
+    if (url.pathname === "/api/v1/claims/redeem") return redeem();
+    if (url.pathname === "/api/v1/sessions/inbox") return Response.json(inbox);
+    return Response.json({ ok: true });
+  });
+  return { ...srv, seen };
+}
+const claimInput = (prompt: string) => JSON.stringify({ session_id: "c1", cwd: "/p", hook_event_name: "UserPromptSubmit", prompt });
+const DELIVERY = { kind: "request", content: "¿Revisas el PR?", meta: { request_id: "r1", inbox_id: "ib1" } };
+
+describe("código de entrega", () => {
+  test("con la frase: canjea, inyecta la entrega y la confirma (también con canal)", async () => {
+    const srv = claimServer(() => Response.json({ delivery: DELIVERY }));
+    let out = "";
+    await runHook("working", sys(srv.url, { DEVI_CHANNEL: "1" }), stdin(claimInput("devi: recibir K7Q-4MX")), (t) => {
+      out = t;
+    });
+    expect(srv.seen.find((s) => s.path === "/api/v1/claims/redeem")?.body).toMatchObject({ code: "K7Q4MX", claudeSessionId: "c1", machine: "M1" });
+    const ctx = JSON.parse(out).hookSpecificOutput.additionalContext as string;
+    expect(ctx).toContain("¿Revisas el PR?");
+    expect(srv.seen.find((s) => s.path === "/api/v1/sessions/inbox/ack")?.body).toEqual({ ids: ["ib1"] });
+  });
+
+  test("sin canal no duplica lo que también está en la bandeja", async () => {
+    const srv = claimServer(() => Response.json({ delivery: DELIVERY }), [{ id: "ib1", ...DELIVERY, createdAt: 1 }]);
+    let out = "";
+    await runHook("working", sys(srv.url), stdin(claimInput("devi: recibir K7Q-4MX")), (t) => {
+      out = t;
+    });
+    const ctx = JSON.parse(out).hookSpecificOutput.additionalContext as string;
+    expect(ctx.split("¿Revisas el PR?")).toHaveLength(2); // una sola vez
+  });
+
+  test("si el canje falla, inyecta la nota con el motivo", async () => {
+    const srv = claimServer(() =>
+      Response.json({ error: "Ese código caducó: genera otro en la app de Devi", code: "claim_expired" }, { status: 410 }),
+    );
+    let out = "";
+    await runHook("working", sys(srv.url, { DEVI_CHANNEL: "1" }), stdin(claimInput("devi: recibir K7Q-4MX")), (t) => {
+      out = t;
+    });
+    expect(JSON.parse(out).hookSpecificOutput.additionalContext).toContain("Ese código caducó");
+  });
+
+  test("con canal, el aviso no dice que falta el canal", async () => {
+    const srv = claimServer(() => Response.json({ delivery: DELIVERY }));
+    let out = "";
+    await runHook("working", sys(srv.url, { DEVI_CHANNEL: "1" }), stdin(claimInput("devi: recibir K7Q-4MX")), (t) => {
+      out = t;
+    });
+    const ctx = JSON.parse(out).hookSpecificOutput.additionalContext as string;
+    expect(ctx).toContain("¿Revisas el PR?");
+    expect(ctx).not.toContain("no tiene el canal");
+  });
+
+  test("con canal no pide la bandeja", async () => {
+    const srv = claimServer(() => Response.json({ delivery: DELIVERY }));
+    await runHook("working", sys(srv.url, { DEVI_CHANNEL: "1" }), stdin(claimInput("devi: recibir K7Q-4MX")), () => {});
+    expect(srv.seen.some((s) => s.path === "/api/v1/claims/redeem")).toBe(true);
+    expect(srv.seen.some((s) => s.path === "/api/v1/sessions/inbox")).toBe(false);
+  });
+
+  test("si los adjuntos no se pueden preparar, la entrega llega igual y lo dice fuera del bloque del compañero", async () => {
+    // Un request_id que no vale como carpeta hace fallar la preparación de los archivos.
+    const bad = { ...DELIVERY, meta: { request_id: "../r1", inbox_id: "ib1", files: JSON.stringify([{ id: "f1", name: "a.txt" }]) } };
+    const srv = claimServer(() => Response.json({ delivery: bad }));
+    let out = "";
+    await runHook("working", sys(srv.url, { DEVI_CHANNEL: "1" }), stdin(claimInput("devi: recibir K7Q-4MX")), (t) => {
+      out = t;
+    });
+    const ctx = JSON.parse(out).hookSpecificOutput.additionalContext as string;
+    expect(ctx).toContain("¿Revisas el PR?");
+    const note = "(Devi: los adjuntos no se pudieron descargar a tiempo; están en la app de Devi)";
+    expect(ctx).toContain(note);
+    expect(ctx.indexOf(note)).toBeGreaterThan(ctx.lastIndexOf("DEVI-UNTRUSTED"));
+    expect(srv.seen.find((s) => s.path === "/api/v1/sessions/inbox/ack")?.body).toEqual({ ids: ["ib1"] });
+  });
+
+  test("un traspaso largo se recorta dentro de su bloque, que sigue cerrando, y dice cómo leerlo entero", async () => {
+    const handoff = { kind: "request", content: "h".repeat(15_000), meta: { request_id: "r9", request_kind: "handoff", from_name: "Ana", inbox_id: "ib9" } };
+    const srv = claimServer(() => Response.json({ delivery: handoff }));
+    let out = "";
+    await runHook("working", sys(srv.url, { DEVI_CHANNEL: "1" }), stdin(claimInput("devi: recibir K7Q-4MX")), (t) => {
+      out = t;
+    });
+    const ctx = JSON.parse(out).hookSpecificOutput.additionalContext as string;
+    expect(ctx.length).toBeLessThanOrEqual(9_500);
+    const frame = frameOf(ctx);
+    expect(frame).not.toBeNull();
+    expect(frame![2]).toContain("… [recortado]");
+    expect(frame![2]).toContain("hhhh");
+    const note = 'Devi: el texto se recortó; get_request con request_id="r9" lo da entero.';
+    expect(ctx).toContain(note);
+    expect(ctx.indexOf(note)).toBeGreaterThan(frame!.index! + frame![0].length);
+  });
+
+  test("la frase en mitad del mensaje no canjea", async () => {
+    const srv = claimServer(() => Response.json({ delivery: DELIVERY }));
+    await runHook("working", sys(srv.url, { DEVI_CHANNEL: "1" }), stdin(claimInput("mira esto: devi: recibir K7Q-4MX")), () => {});
+    expect(srv.seen.some((s) => s.path === "/api/v1/claims/redeem")).toBe(false);
+  });
+
+  test("un prompt normal no canjea nada", async () => {
+    const srv = claimServer(() => Response.json({ delivery: DELIVERY }));
+    await runHook("working", sys(srv.url, { DEVI_CHANNEL: "1" }), stdin(claimInput("hola")), () => {});
+    expect(srv.seen.some((s) => s.path === "/api/v1/claims/redeem")).toBe(false);
+  });
 });

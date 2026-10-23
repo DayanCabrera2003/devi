@@ -12,6 +12,7 @@ export * from "./pending";
 export * from "./knowledge";
 export * from "./week";
 export * from "./notices";
+export * from "./claims";
 export * from "./api";
 export * from "./events";
 export * from "./safety";

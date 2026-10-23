@@ -31,6 +31,16 @@ describe("ChatBubble", () => {
     expect(await findByText(/Enviado a «frontend»/)).toBeTruthy();
   });
 
+  test("+ Sesión nueva: crea un código para el mensaje y la burbuja dice que espera", async () => {
+    const { app, getByRole, findByRole, findByText, api } = await mount();
+    await fireEvent.click(getByRole("button", { name: "Enviar a mi sesión" }));
+    await fireEvent.click(await findByRole("button", { name: /Sesión nueva/ }));
+    await fireEvent.click(await findByRole("button", { name: "Crear código" }));
+    await vi.waitFor(() => expect(api.createClaim).toHaveBeenCalledWith({ type: "chat", id: "c1" }));
+    app.claims.apply({ code: "K7Q4MX", target: { type: "chat", id: "c1" }, expiresAt: Date.now() + 600_000, status: "open" });
+    expect(await findByText("Esperando sesión nueva · K7Q-4MX")).toBeTruthy();
+  });
+
   test("escrito por Claude: dice desde qué sesión", async () => {
     const { getByText } = await mount(chatMsg({ origin: "session", fromSessionName: "api" }));
     expect(getByText("desde «api»")).toBeTruthy();

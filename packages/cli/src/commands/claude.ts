@@ -1,5 +1,6 @@
 import { basename } from "node:path";
 import { createClient } from "@devi/client";
+import { claimPhrase } from "@devi/protocol";
 import { loadClientConfig } from "../config";
 import { HANDOFF_MAX_CHARS, HANDOFF_MAX_CHARS_CMD, argvPrompt, prepareHandoff } from "../handoff";
 import { readableError } from "../mcp/errors";
@@ -27,6 +28,12 @@ export function buildClaudeArgs(opts: { session: string; mode: "plugin" | "dev";
   return [...channelArgs(opts.mode), ...name, ...opts.passthrough, ...(opts.prompt !== undefined ? [opts.prompt] : [])];
 }
 
+// La frase no tiene saltos de línea, así que no pasa por argvPrompt. El canje lo hace el hook
+// UserPromptSubmit cuando ese primer mensaje se envía.
+export function deliverPrompt(code: string): string {
+  return claimPhrase(code);
+}
+
 const CHANNEL_FLAGS = new Set(["--channels", "--dangerously-load-development-channels"]);
 
 // Entorno de Claude Code: DEVI_SESSION y, solo si se le pasa un flag de canal, DEVI_CHANNEL=1.
@@ -40,7 +47,7 @@ export function claudeEnv(base: Record<string, string | undefined>, session: str
 
 // `devi claude`: lanza Claude Code con el canal de Devi y espera a que termine (mismo código de salida).
 export async function runClaude(
-  opts: { session: string | undefined; channel: ChannelMode; passthrough: string[]; handoff?: string },
+  opts: { session: string | undefined; channel: ChannelMode; passthrough: string[]; handoff?: string; deliver?: string },
   sys: Sys,
 ): Promise<number> {
   const claude = await findClaude(sys.env, sys.platform, sys.home);
@@ -61,6 +68,7 @@ export async function runClaude(
       return 1;
     }
   }
+  if (opts.deliver !== undefined) prompt = deliverPrompt(opts.deliver);
   const mode = decideChannelMode(opts.channel, await readChannelPolicy(sys));
   const session = sessionNameFor(opts.session, process.cwd());
   if (mode === "dev") {

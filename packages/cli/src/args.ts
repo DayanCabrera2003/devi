@@ -1,4 +1,6 @@
 // Parser de argumentos de `devi`. Sin dependencias: cada subcomando tiene pocos flags.
+import { parseClaimPhrase } from "@devi/protocol";
+
 export type ChannelMode = "auto" | "plugin" | "dev";
 // working = UserPromptSubmit, idle = Stop, start = SessionStart.
 export type HookEvent = "working" | "idle" | "start";
@@ -9,7 +11,7 @@ export type CliCommand =
   | { cmd: "server"; argv: string[] }
   | { cmd: "mcp" }
   | { cmd: "hook"; event: HookEvent | null }
-  | { cmd: "claude"; session: string | undefined; channel: ChannelMode; passthrough: string[]; handoff?: string }
+  | { cmd: "claude"; session: string | undefined; channel: ChannelMode; passthrough: string[]; handoff?: string; deliver?: string }
   | { cmd: "doctor" }
   | { cmd: "shell-alias"; action: "install" | "remove" | "status"; json: boolean }
   | {
@@ -34,9 +36,10 @@ export const USAGE = `Uso: devi <comando>
   mcp                    Servidor MCP + canal (lo lanza Claude Code, no a mano)
   hook <working|idle|start>
                          Hook de Claude Code (lee el JSON del hook por stdin)
-  claude [--session NOMBRE] [--channel auto|plugin|dev] [--handoff ID] [-- args de claude]
+  claude [--session NOMBRE] [--channel auto|plugin|dev] [--handoff ID] [--deliver CÓDIGO] [-- args de claude]
                          Lanza Claude Code con el canal de Devi cargado
                          (con --handoff, empieza con el traspaso ID de un compañero)
+                         (con --deliver, recibe lo que enviaste desde la app con «+ Sesión nueva»)
   doctor                 Diagnostica Tailscale, servidor, login, plugin y canal
   install-integration [--from BINARIO] [--bin-dir DIR] [--marketplace-dir DIR] [--no-claude] [--json]
                          Instala el binario en una ruta estable y el plugin de Claude Code
@@ -98,6 +101,7 @@ function parseClaude(argv: string[], env: Record<string, string | undefined>): C
   let channel = env.DEVI_CHANNEL === "1" ? "auto" : parseChannel(env.DEVI_CHANNEL);
   let passthrough: string[] = [];
   let handoff: string | undefined;
+  let deliver: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === "--") {
@@ -106,13 +110,20 @@ function parseClaude(argv: string[], env: Record<string, string | undefined>): C
     } else if (a === "--session") session = takeValue(argv, i++, a);
     else if (a === "--channel") channel = parseChannel(takeValue(argv, i++, a));
     else if (a === "--handoff") handoff = takeValue(argv, i++, a);
+    else if (a === "--deliver") deliver = takeValue(argv, i++, a);
     else throw new CliArgError(`argumento desconocido para devi claude: ${a} (los de claude van después de --)`);
   }
   if (session !== undefined && session.trim() === "") throw new CliArgError("--session no puede estar vacío");
   if (handoff !== undefined && !HANDOFF_ID.test(handoff)) {
     throw new CliArgError(`--handoff necesita el id del traspaso (letras, números, _ y -): ${handoff}`);
   }
-  return { cmd: "claude", session, channel, passthrough, ...(handoff !== undefined ? { handoff } : {}) };
+  let code: string | undefined;
+  if (deliver !== undefined) {
+    code = parseClaimPhrase(`devi: recibir ${deliver}`) ?? undefined;
+    if (!code) throw new CliArgError(`--deliver necesita el código que te dio la app de Devi (como K7Q-4MX): ${deliver}`);
+    if (handoff !== undefined) throw new CliArgError("--deliver y --handoff no se pueden usar a la vez");
+  }
+  return { cmd: "claude", session, channel, passthrough, ...(handoff !== undefined ? { handoff } : {}), ...(code ? { deliver: code } : {}) };
 }
 
 function parseShellAlias(argv: string[]): CliCommand {

@@ -61,6 +61,18 @@ export function hasUntrustedFrame(text: string): boolean {
   return FRAMED.test(text);
 }
 
+// Dónde está el texto del compañero dentro de cada marco completo: [start, end) entre la línea de apertura y la de
+// cierre, que se casan por el mismo nonce. Sirve para acortar ese texto sin tocar los delimitadores.
+export function untrustedFrameBodies(text: string): { start: number; end: number }[] {
+  const out: { start: number; end: number }[] = [];
+  for (const m of text.matchAll(new RegExp(FRAMED.source, "g"))) {
+    const open = `<<<${FRAME}-${m[1]}\n`;
+    const close = `\n${FRAME}-${m[1]}>>>`;
+    out.push({ start: m.index + open.length, end: m.index + m[0].length - close.length });
+  }
+  return out;
+}
+
 // Lista de archivos recibidos: solo rutas (o nombres), una por línea, con la advertencia.
 export function untrustedFilesBlock(paths: string[], heading = "Archivos adjuntos"): string {
   if (paths.length === 0) return "";

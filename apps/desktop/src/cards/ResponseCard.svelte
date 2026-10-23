@@ -1,14 +1,16 @@
 <script lang="ts">
   // Respuesta a una solicitud mía: mi burbuja, la suya justo después y qué hago con ella.
-  import { type DeviRequest, type InjectionScan, type Session, scanForInjection } from "@devi/protocol";
+  import { type DeviRequest, type InjectionScan, type Session, formatClaimCode, scanForInjection } from "@devi/protocol";
   import FileList from "../components/FileList.svelte";
   import InjectionWarning from "../components/InjectionWarning.svelte";
+  import NewSessionClaim from "../components/NewSessionClaim.svelte";
   import SaveFilesButton from "../components/SaveFilesButton.svelte";
   import SendConfirm from "../components/SendConfirm.svelte";
   import SessionPicker from "../components/SessionPicker.svelte";
   import { errorMessage } from "../lib/api";
   import { useApp } from "../lib/context";
   import { OUTCOME } from "../lib/format";
+  import { copyText } from "../lib/clipboard";
   import { combineScans } from "../lib/safety";
   import { requestCaption } from "../lib/thread-items";
 
@@ -17,12 +19,13 @@
   let { request, compact = false }: Props = $props();
   const app = useApp();
 
-  let mode = $state<"view" | "pick">("view");
+  let mode = $state<"view" | "pick" | "new">("view");
   let busy = $state(false);
   let error = $state<string | null>(null);
   const outcome = $derived(OUTCOME[request.outcome ?? "answered"]);
   const to = $derived(app.team.nameOf(request.toMemberId));
   const caption = $derived(requestCaption(request, app.team.myId));
+  const waiting = $derived(app.claims.openFor({ type: "response", id: request.id }));
   // Las solicitudes enviadas desde la app no tienen sesión de origen que resaltar.
   const fromApp = $derived(request.origin === "app" || !request.fromSessionId);
 
@@ -82,6 +85,7 @@
   {#if !compact && request.responseFiles.length > 0}
     <SaveFilesButton save={() => app.saveFiles(request.id, "response", request.responseFiles)} />
   {/if}
+  {#if waiting}<div class="caption">Esperando sesión nueva · {formatClaimCode(waiting.code)}</div>{/if}
   {#if scan.level === "high"}<SendConfirm bind:checked={reviewed} />{/if}
   <div class="actions">
     <button class="primary" disabled={busy} onclick={acceptIt}>Aceptar</button>
@@ -103,6 +107,16 @@
       : "Resaltada: la sesión que hizo la solicitud, si sigue abierta."}
     preferredId={fromApp ? undefined : request.fromSessionId}
     onPick={pick}
+    onBack={() => (mode = "view")}
+    onNewSession={() => (mode = "new")}
+    inline={compact}
+  />
+{:else if mode === "new"}
+  <NewSessionClaim
+    target={{ type: "response", id: request.id }}
+    create={(t) => app.createClaim(t)}
+    cancel={(c) => app.cancelClaim(c)}
+    copy={copyText}
     onBack={() => (mode = "view")}
     inline={compact}
   />

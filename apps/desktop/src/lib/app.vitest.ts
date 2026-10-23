@@ -1,4 +1,4 @@
-import type { DeviRequest, UserEvent } from "@devi/protocol";
+import type { Claim, DeviRequest, UserEvent } from "@devi/protocol";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { DeviApi } from "./api";
 import { DeviApp, REPLAY_QUIET_MS } from "./app.svelte";
@@ -15,6 +15,7 @@ function setup(config: ClientConfig | null = CONFIG, extra: { trayAttention?: (p
     me: vi.fn(async () => ME),
     team: vi.fn(async () => TEAM),
     memberSessions: vi.fn(async () => []),
+    myClaims: vi.fn(async (): Promise<Claim[]> => []),
     rejectRequest: vi.fn(async () => req({ status: "rejected", outcome: "rejected", outcomeText: "no" })),
     authorizeDraft: vi.fn(async () => draft({ status: "authorized" })),
     discardDraft: vi.fn(async () => draft({ status: "discarded" })),
@@ -77,6 +78,35 @@ const incoming: UserEvent = { type: "request.incoming", request: req() };
 
 describe("DeviApp", () => {
   afterEach(() => vi.useRealTimers());
+
+  test("carga mis códigos vivos al conectar y los mantiene con claim.updated", async () => {
+    const t = setup();
+    const open: Claim = { code: "K7Q4MX", target: { type: "chat", id: "c1" }, expiresAt: Date.now() + 600_000, status: "open" };
+    t.api.myClaims.mockResolvedValueOnce([open]);
+    await t.app.boot();
+    await vi.waitFor(() => expect(t.app.claims.openFor({ type: "chat", id: "c1" })?.code).toBe("K7Q4MX"));
+    t.event({ type: "claim.updated", claim: { ...open, status: "used" } });
+    expect(t.app.claims.openFor({ type: "chat", id: "c1" })).toBeNull();
+  });
+
+  test("al reconectar el SSE recarga mis códigos vivos", async () => {
+    const t = setup();
+    await t.app.boot();
+    t.status("open");
+    await vi.waitFor(() => expect(t.api.myClaims).toHaveBeenCalledTimes(2));
+    const open: Claim = { code: "K7Q4MX", target: { type: "request", id: "r9" }, expiresAt: Date.now() + 600_000, status: "open" };
+    t.api.myClaims.mockResolvedValueOnce([open]);
+    t.status("reconnecting");
+    t.status("open");
+    await vi.waitFor(() => expect(t.app.claims.openFor({ type: "request", id: "r9" })?.code).toBe("K7Q4MX"));
+  });
+
+  test("una API sin myClaims no impide conectar", async () => {
+    const t = setup();
+    t.api.myClaims.mockRejectedValueOnce(new Error("404"));
+    await t.app.boot();
+    expect(t.api.subscribe).toHaveBeenCalledOnce();
+  });
 
   test("sin configuración abre el asistente", async () => {
     const t = setup(null);

@@ -2,6 +2,7 @@ import { API } from "@devi/protocol";
 import { json } from "../../core/http";
 import type { DeviModule, ModuleContext } from "../../core/module";
 import { registerAppRoutes } from "./app-routes";
+import { requestClaimTargets } from "./claim-targets";
 import { Conversations } from "./conversations";
 import { PendingReads } from "./pending";
 import { registerRequestRoutes } from "./routes";
@@ -32,6 +33,7 @@ export const requestsModule: DeviModule = {
     const store = new RequestsStore(ctx.db, ctx.now);
     const requests = new RequestsManager(store, ctx);
     managers.set(ctx, requests);
+    ctx.services.provide("requestTargets", requestClaimTargets(requests));
     ctx.bus.on("session.closed", ({ sessionId }) => requests.onSessionClosed(sessionId));
     registerRequestRoutes(r, ctx, requests);
     const view = (x: Parameters<RequestsManager["viewOf"]>[0]) => requests.viewOf(x);

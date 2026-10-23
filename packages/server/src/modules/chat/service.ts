@@ -64,17 +64,58 @@ export class ChatManager {
 
   // «Enviar a mi sesión»: cualquiera de las dos partes, a una sesión suya viva que entienda el chat.
   toSession(access: Access, id: string, sessionId: string): void {
+    const m = this.partyMessage(access, id);
+    const s = this.ownLiveSession(access, sessionId);
+    this.requireChat(s.id);
+    const delivery = this.delivery(access, m);
+    // Bandeja y envío juntos: si la sesión se cerró justo ahora (sin stream), no queda nada en su bandeja.
+    this.store.transaction(() => {
+      const staged = this.sessions.enqueue(s.id, delivery);
+      if (!deliverToSession(this.ctx.sse, s.id, staged)) throw sessionGone();
+    });
+    this.audit("chat.to_session", access.memberId, m.id, { sessionId: s.id, sessionName: s.name });
+  }
+
+  // ---- códigos de entrega (modules/claims) ----------------------------------
+
+  claimCheck(access: Access, id: string): void {
+    this.partyMessage(access, id);
+  }
+
+  // Como toSession, hacia la sesión que canjeó el código y sin empujar por el canal: la entrega vuelve al hook.
+  // No se exige isAlive (la sesión recién abierta puede no tener aún su SSE). Todo se valida antes de escribir:
+  // si lanza, no ha cambiado nada y claims solo tiene que liberar el código.
+  deliverToClaim(access: Access, id: string, sessionId: string, details: AuditDetails): SessionDelivery {
+    const m = this.partyMessage(access, id);
+    const s = this.ownSession(access, sessionId);
+    this.requireChat(s.id);
+    let delivery: SessionDelivery | null = null;
+    this.store.transaction(() => {
+      delivery = this.sessions.enqueue(s.id, this.delivery(access, m));
+    });
+    this.audit("chat.to_session", access.memberId, m.id, { ...details, sessionId: s.id, sessionName: s.name });
+    return delivery!;
+  }
+
+  // El mensaje, si quien llama es una de las dos partes.
+  private partyMessage(access: Access, id: string): ChatRecord {
     const m = this.store.get(id);
     if (!m || (m.fromMemberId !== access.memberId && m.toMemberId !== access.memberId)) throw notFound();
-    const s = this.ownLiveSession(access, sessionId);
-    if (!this.sessions.supports(s.id, "chat")) {
+    return m;
+  }
+
+  private requireChat(sessionId: string): void {
+    if (!this.sessions.supports(sessionId, "chat")) {
       throw new HttpError(409, "esa sesión usa una versión de Devi que no entiende el chat: actualiza Devi y ábrela de nuevo", {
         code: "session_outdated",
       });
     }
+  }
+
+  private delivery(access: Access, m: ChatRecord): SessionDelivery {
     const mine = m.fromMemberId === access.memberId;
     const files = this.files.forMessage(m.id);
-    const delivery: SessionDelivery = {
+    return {
       kind: "chat",
       content: chatContent({
         fromName: this.team.nameOf(m.fromMemberId), toName: this.team.nameOf(m.toMemberId),
@@ -82,12 +123,6 @@ export class ChatManager {
       }),
       meta: { message_id: m.id, from: m.fromMemberId, from_name: this.team.nameOf(m.fromMemberId), files: filesMeta(files) },
     };
-    // Bandeja y envío juntos: si la sesión se cerró justo ahora (sin stream), no queda nada en su bandeja.
-    this.store.transaction(() => {
-      const staged = this.sessions.enqueue(s.id, delivery);
-      if (!deliverToSession(this.ctx.sse, s.id, staged)) throw sessionGone();
-    });
-    this.audit("chat.to_session", access.memberId, m.id, { sessionId: s.id, sessionName: s.name });
   }
 
   private async send(access: Access, out: Outgoing, rawFiles: File[], action: AuditAction): Promise<ChatMessage> {
@@ -136,9 +171,15 @@ export class ChatManager {
     return m.id;
   }
 
-  private ownLiveSession(access: Access, sessionId: string): Session {
+  private ownSession(access: Access, sessionId: string): Session {
     const s = this.sessions.get(sessionId);
-    if (!s || s.memberId !== access.memberId || !this.sessions.isAlive(s.id)) throw sessionGone();
+    if (!s || s.memberId !== access.memberId) throw sessionGone();
+    return s;
+  }
+
+  private ownLiveSession(access: Access, sessionId: string): Session {
+    const s = this.ownSession(access, sessionId);
+    if (!this.sessions.isAlive(s.id)) throw sessionGone();
     return s;
   }
 

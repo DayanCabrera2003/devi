@@ -3,6 +3,7 @@ import { AuditEntrySchema } from "./audit";
 import { ChatMessageSchema } from "./chat";
 import { DeviRequestSchema, DraftSchema } from "./entities";
 import { KnowledgeEntrySchema } from "./knowledge";
+import { ClaimSchema } from "./claims";
 
 // SSE de usuario (app de escritorio). En el cable: `event: <type>` + `data: <JSON del evento>`.
 export const UserEventSchema = z.discriminatedUnion("type", [
@@ -25,6 +26,8 @@ export const UserEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("knowledge.refused"), requestId: z.string(), reasons: z.array(z.string()) }),
   // Mensaje de chat nuevo entre esta persona y otra (a las dos partes, también al autor).
   z.object({ type: z.literal("chat.message"), message: ChatMessageSchema }),
+  // Un código de entrega mío cambió (creado, usado, cancelado o caducado).
+  z.object({ type: z.literal("claim.updated"), claim: ClaimSchema }),
 ]);
 export type UserEvent = z.infer<typeof UserEventSchema>;
 export type UserEventType = UserEvent["type"];

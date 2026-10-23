@@ -1,14 +1,16 @@
 <script lang="ts">
   // Mensaje del chat: burbuja sin plazo ni estados. Cualquiera de las dos partes puede mandarlo, con sus
   // adjuntos, a una de sus sesiones de Claude; el mensaje no cambia, solo se anota a dónde se mandó.
-  import { type ChatMessage, type InjectionScan, type Session, scanForInjection } from "@devi/protocol";
+  import { type ChatMessage, type InjectionScan, type Session, formatClaimCode, scanForInjection } from "@devi/protocol";
   import FileList from "../components/FileList.svelte";
   import InjectionWarning from "../components/InjectionWarning.svelte";
+  import NewSessionClaim from "../components/NewSessionClaim.svelte";
   import SaveFilesButton from "../components/SaveFilesButton.svelte";
   import SendConfirm from "../components/SendConfirm.svelte";
   import SessionPicker from "../components/SessionPicker.svelte";
   import { useApp } from "../lib/context";
   import { clockTime } from "../lib/format";
+  import { copyText } from "../lib/clipboard";
   import { combineScans } from "../lib/safety";
 
   type Props = { message: ChatMessage };
@@ -25,6 +27,8 @@
   const blocked = $derived(scan.level === "high" && !reviewed);
 
   let picking = $state(false);
+  let newSession = $state(false);
+  const waiting = $derived(app.claims.openFor({ type: "chat", id: message.id }));
   let sentTo = $state<string | null>(null);
   const hint = $derived(
     message.files.length > 0
@@ -59,6 +63,7 @@
     <SaveFilesButton save={() => app.saveFiles(message.id, "request", message.files)} />
   {/if}
   <div class="caption">{sentTo ? `Enviado a «${sentTo}» · ` : ""}{clockTime(message.createdAt)}</div>
+  {#if waiting}<div class="caption">Esperando sesión nueva · {formatClaimCode(waiting.code)}</div>{/if}
   {#if scan.level === "high"}<SendConfirm bind:checked={reviewed} />{/if}
   <div class="actions">
     <button class="ghost" disabled={blocked} onclick={openPicker}>Enviar a mi sesión</button>
@@ -74,5 +79,18 @@
     {hint}
     onPick={pick}
     onBack={() => (picking = false)}
+    onNewSession={() => {
+      picking = false;
+      newSession = true;
+    }}
+  />
+{/if}
+{#if newSession}
+  <NewSessionClaim
+    target={{ type: "chat", id: message.id }}
+    create={(t) => app.createClaim(t)}
+    cancel={(c) => app.cancelClaim(c)}
+    copy={copyText}
+    onBack={() => (newSession = false)}
   />
 {/if}
