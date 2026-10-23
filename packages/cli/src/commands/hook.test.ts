@@ -24,8 +24,8 @@ const sys = (url: string, env: Record<string, string> = {}) => ({
 });
 
 test("parseHookInput", () => {
-  expect(parseHookInput(INPUT)).toEqual({ claudeSessionId: "c1", cwd: "/p", eventName: "UserPromptSubmit" });
-  expect(parseHookInput(JSON.stringify({ session_id: "c1", cwd: "/p" }))).toEqual({ claudeSessionId: "c1", cwd: "/p", eventName: null });
+  expect(parseHookInput(INPUT)).toEqual({ claudeSessionId: "c1", cwd: "/p", eventName: "UserPromptSubmit", prompt: "hola" });
+  expect(parseHookInput(JSON.stringify({ session_id: "c1", cwd: "/p" }))).toEqual({ claudeSessionId: "c1", cwd: "/p", eventName: null, prompt: null });
   expect(parseHookInput("no json")).toBeNull();
   expect(parseHookInput("{}")).toBeNull();
 });
@@ -188,4 +188,61 @@ test("formatInboxContext: el aviso request_notice se ofrece con take_request / d
   expect(line).toContain("take_request");
   expect(line).toContain("decline_request");
   expect(line).toMatch(/decid|decisión/);
+});
+
+// Servidor falso con canje y bandeja.
+function claimServer(redeem: () => Response, inbox: unknown[] = []) {
+  const seen: { path: string; body?: unknown }[] = [];
+  const srv = serve(async (req) => {
+    const url = new URL(req.url);
+    const body = req.method === "POST" ? await req.json() : undefined;
+    seen.push({ path: url.pathname, body });
+    if (url.pathname === "/api/v1/claims/redeem") return redeem();
+    if (url.pathname === "/api/v1/sessions/inbox") return Response.json(inbox);
+    return Response.json({ ok: true });
+  });
+  return { ...srv, seen };
+}
+const claimInput = (prompt: string) => JSON.stringify({ session_id: "c1", cwd: "/p", hook_event_name: "UserPromptSubmit", prompt });
+const DELIVERY = { kind: "request", content: "¿Revisas el PR?", meta: { request_id: "r1", inbox_id: "ib1" } };
+
+describe("código de entrega", () => {
+  test("con la frase: canjea, inyecta la entrega y la confirma (también con canal)", async () => {
+    const srv = claimServer(() => Response.json({ delivery: DELIVERY }));
+    let out = "";
+    await runHook("working", sys(srv.url, { DEVI_CHANNEL: "1" }), stdin(claimInput("devi: recibir K7Q-4MX")), (t) => {
+      out = t;
+    });
+    expect(srv.seen.find((s) => s.path === "/api/v1/claims/redeem")?.body).toMatchObject({ code: "K7Q4MX", claudeSessionId: "c1", machine: "M1" });
+    const ctx = JSON.parse(out).hookSpecificOutput.additionalContext as string;
+    expect(ctx).toContain("¿Revisas el PR?");
+    expect(srv.seen.find((s) => s.path === "/api/v1/sessions/inbox/ack")?.body).toEqual({ ids: ["ib1"] });
+  });
+
+  test("sin canal no duplica lo que también está en la bandeja", async () => {
+    const srv = claimServer(() => Response.json({ delivery: DELIVERY }), [{ id: "ib1", ...DELIVERY, createdAt: 1 }]);
+    let out = "";
+    await runHook("working", sys(srv.url), stdin(claimInput("devi: recibir K7Q-4MX")), (t) => {
+      out = t;
+    });
+    const ctx = JSON.parse(out).hookSpecificOutput.additionalContext as string;
+    expect(ctx.split("¿Revisas el PR?")).toHaveLength(2); // una sola vez
+  });
+
+  test("si el canje falla, inyecta la nota con el motivo", async () => {
+    const srv = claimServer(() =>
+      Response.json({ error: "Ese código caducó: genera otro en la app de Devi", code: "claim_expired" }, { status: 410 }),
+    );
+    let out = "";
+    await runHook("working", sys(srv.url, { DEVI_CHANNEL: "1" }), stdin(claimInput("devi: recibir K7Q-4MX")), (t) => {
+      out = t;
+    });
+    expect(JSON.parse(out).hookSpecificOutput.additionalContext).toContain("Ese código caducó");
+  });
+
+  test("un prompt normal no canjea nada", async () => {
+    const srv = claimServer(() => Response.json({ delivery: DELIVERY }));
+    await runHook("working", sys(srv.url, { DEVI_CHANNEL: "1" }), stdin(claimInput("hola")), () => {});
+    expect(srv.seen.some((s) => s.path === "/api/v1/claims/redeem")).toBe(false);
+  });
 });
