@@ -12,9 +12,10 @@ export const HOOK_DEADLINE_MS = 1000; // aviso de estado (trabajando/libre)
 // así que el total ronda los 4 s (el timeout del hook en plugin.json es 10).
 export const INBOX_DEADLINE_MS = 3000;
 const ACK_DEADLINE_MS = 1000;
-// Con código de entrega, el canje va antes y por su cuenta: sus reintentos caben en CLAIM_REDEEM_BUDGET_MS y el
-// último intento tiene este margen para contestar antes de cortarlo. Total con canje: 2,5 + 3 + 1 = 6,5 s, más
-// hasta 1 s leyendo stdin; sigue dentro de los 10 s del hook.
+// Con código de entrega, el canje va antes y con su propio plazo: sus reintentos caben en CLAIM_REDEEM_BUDGET_MS y
+// el último intento tiene este margen para contestar antes de cortarlo. Después, los archivos del canje y la bandeja
+// comparten un único INBOX_DEADLINE_MS, y el ack su segundo. Peor caso: 2,5 + 3 + 1 = 6,5 s, más hasta 1 s leyendo
+// stdin; sigue dentro de los 10 s del hook.
 const CLAIM_LAST_TRY_MS = 500;
 // Claude Code corta additionalContext a 10.000 caracteres (lo que sobra lo guarda en un archivo).
 const MAX_CONTEXT = 9_500;
@@ -121,15 +122,23 @@ async function collectInbox(
 
 const timeout = (ms: number) => new Promise<null>((resolve) => setTimeout(() => resolve(null), ms).unref());
 
-// La entrega del canje ya está marcada como usada en el servidor: si sus archivos no se descargan a tiempo, llega
-// igual, sin ellos (el agente lo puede leer de nuevo con get_request), en vez de perderse este turno.
-async function materializeClaimed(d: SessionDelivery, cfg: HookConfig, client: DeviClient): Promise<KindedMessage> {
+// La entrega del canje ya está marcada como usada en el servidor: si sus archivos no se preparan dentro de `deadline`,
+// llega igual, sin ellos y avisándolo, en vez de perderse este turno.
+const ATTACHMENTS_LATE = "(Devi: los adjuntos no se pudieron descargar a tiempo; están en la app de Devi)";
+async function materializeClaimed(
+  d: SessionDelivery,
+  cfg: HookConfig,
+  client: DeviClient,
+  deadline: Promise<null>,
+): Promise<KindedMessage> {
   const withFiles = materializeDelivery(d, { client, receivedDir: cfg.receivedDir }).catch(() => null);
-  const got = await Promise.race([withFiles, timeout(INBOX_DEADLINE_MS)]);
+  const got = await Promise.race([withFiles, deadline]);
+  if (got) return { ...got, kind: d.kind };
   const meta = { ...d.meta };
   delete meta.files;
-  const message = got ?? (await materializeDelivery({ ...d, meta }, { client, receivedDir: cfg.receivedDir }));
-  return { ...message, kind: d.kind };
+  const bare = await materializeDelivery({ ...d, meta }, { client, receivedDir: cfg.receivedDir });
+  // Después del bloque del compañero: es texto de Devi, no suyo.
+  return { ...bare, content: `${bare.content}\n\n${ATTACHMENTS_LATE}`, kind: d.kind };
 }
 
 // `devi hook working|idle|start`. Nunca falla ni bloquea: cualquier error se ignora (sin salida, código 0).
@@ -171,18 +180,23 @@ export async function runHook(
           const parts: string[] = [];
           const messages: KindedMessage[] = [];
           const ids: string[] = [];
+          let claimed: SessionDelivery | null = null;
           if (code) {
-            // Señal propia del canje: no se come el plazo de la bandeja ni la bandeja el suyo.
+            // Señal propia del canje: no se come el plazo de lo que viene después.
             const redeemer = clientWith(cfg, AbortSignal.timeout(claimMs));
             const got = await redeemWithRetry(redeemer, code, { claudeSessionId: input.claudeSessionId, ...pair });
-            if (got.ok) {
-              messages.push(await materializeClaimed(got.delivery, cfg, clientWith(cfg, AbortSignal.timeout(INBOX_DEADLINE_MS))));
-              if (got.delivery.meta.inbox_id) ids.push(got.delivery.meta.inbox_id);
-            } else parts.push(claimFailureNote(code, got.message));
+            if (got.ok) claimed = got.delivery;
+            else parts.push(claimFailureNote(code, got.message, { unreachable: got.unreachable }));
+          }
+          // Un solo plazo, desde aquí, para los archivos del canje y la bandeja.
+          const client = clientWith(cfg, AbortSignal.timeout(INBOX_DEADLINE_MS));
+          const deadline = timeout(INBOX_DEADLINE_MS);
+          if (claimed) {
+            messages.push(await materializeClaimed(claimed, cfg, client, deadline));
+            if (claimed.meta.inbox_id) ids.push(claimed.meta.inbox_id);
           }
           if (wantsInbox) {
-            const client = clientWith(cfg, AbortSignal.timeout(INBOX_DEADLINE_MS));
-            const inbox = await Promise.race([collectInbox(input, cfg, pair, client, new Set(ids)).catch(() => null), timeout(INBOX_DEADLINE_MS)]);
+            const inbox = await Promise.race([collectInbox(input, cfg, pair, client, new Set(ids)).catch(() => null), deadline]);
             if (inbox) {
               messages.push(...inbox.messages);
               ids.push(...inbox.ids);

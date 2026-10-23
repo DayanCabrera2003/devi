@@ -8,7 +8,12 @@ export const CLAIM_REDEEM_BUDGET_MS = 2000;
 const INTERVAL_MS = 500;
 
 export type Pair = { claudeSessionId: string; parentPid: number; machine: string };
-export type RedeemOutcome = { ok: true; delivery: SessionDelivery } | { ok: false; message: string };
+export type RedeemOutcome = { ok: true; delivery: SessionDelivery } | { ok: false; message: string; unreachable?: true };
+
+// Sin respuesta (red, plazo agotado) no se sabe si el servidor llegó a canjearlo: el código puede estar ya gastado y
+// la entrega en esta sesión, así que no se manda generar otro a ciegas.
+export const CLAIM_UNREACHABLE_MESSAGE =
+  "El servidor de Devi no respondió a tiempo: puede que la entrega ya esté en esta sesión. Revisa la app de Devi antes de generar otro código.";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -27,19 +32,19 @@ export async function redeemWithRetry(
       const r = await client.call("redeemClaim", { body: { code, ...pair } });
       return { ok: true, delivery: r.delivery };
     } catch (e) {
-      const unknown = e instanceof DeviApiError && e.body.code === "session_unknown";
-      if (!unknown || Date.now() + interval > deadline) {
-        return { ok: false, message: e instanceof Error ? e.message : String(e) };
-      }
+      if (!(e instanceof DeviApiError) || e.status === 0) return { ok: false, message: CLAIM_UNREACHABLE_MESSAGE, unreachable: true };
+      if (e.body.code !== "session_unknown" || Date.now() + interval > deadline) return { ok: false, message: e.message };
       await sleep(interval);
     }
   }
 }
 
 // Nota para el agente cuando el código no sirvió. Solo texto propio de Devi y del servidor (nada de compañeros).
-export function claimFailureNote(code: string, message: string): string {
+export function claimFailureNote(code: string, message: string, o: { unreachable?: boolean } = {}): string {
   return [
     `Devi: el usuario pegó el código de entrega ${formatClaimCode(code)}, pero no se pudo usar: ${message}`,
-    "Díselo al usuario en una línea. Si hace falta, que genere otro en la app de Devi («+ Sesión nueva») y lo pegue aquí.",
+    o.unreachable
+      ? "Díselo al usuario en una línea."
+      : "Díselo al usuario en una línea. Si hace falta, que genere otro en la app de Devi («+ Sesión nueva») y lo pegue aquí.",
   ].join("\n");
 }

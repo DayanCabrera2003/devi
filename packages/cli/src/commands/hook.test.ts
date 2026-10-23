@@ -251,6 +251,35 @@ describe("código de entrega", () => {
     expect(ctx).not.toContain("no tiene el canal");
   });
 
+  test("con canal no pide la bandeja", async () => {
+    const srv = claimServer(() => Response.json({ delivery: DELIVERY }));
+    await runHook("working", sys(srv.url, { DEVI_CHANNEL: "1" }), stdin(claimInput("devi: recibir K7Q-4MX")), () => {});
+    expect(srv.seen.some((s) => s.path === "/api/v1/claims/redeem")).toBe(true);
+    expect(srv.seen.some((s) => s.path === "/api/v1/sessions/inbox")).toBe(false);
+  });
+
+  test("si los adjuntos no se pueden preparar, la entrega llega igual y lo dice fuera del bloque del compañero", async () => {
+    // Un request_id que no vale como carpeta hace fallar la preparación de los archivos.
+    const bad = { ...DELIVERY, meta: { request_id: "../r1", inbox_id: "ib1", files: JSON.stringify([{ id: "f1", name: "a.txt" }]) } };
+    const srv = claimServer(() => Response.json({ delivery: bad }));
+    let out = "";
+    await runHook("working", sys(srv.url, { DEVI_CHANNEL: "1" }), stdin(claimInput("devi: recibir K7Q-4MX")), (t) => {
+      out = t;
+    });
+    const ctx = JSON.parse(out).hookSpecificOutput.additionalContext as string;
+    expect(ctx).toContain("¿Revisas el PR?");
+    const note = "(Devi: los adjuntos no se pudieron descargar a tiempo; están en la app de Devi)";
+    expect(ctx).toContain(note);
+    expect(ctx.indexOf(note)).toBeGreaterThan(ctx.lastIndexOf("DEVI-UNTRUSTED"));
+    expect(srv.seen.find((s) => s.path === "/api/v1/sessions/inbox/ack")?.body).toEqual({ ids: ["ib1"] });
+  });
+
+  test("la frase en mitad del mensaje no canjea", async () => {
+    const srv = claimServer(() => Response.json({ delivery: DELIVERY }));
+    await runHook("working", sys(srv.url, { DEVI_CHANNEL: "1" }), stdin(claimInput("mira esto: devi: recibir K7Q-4MX")), () => {});
+    expect(srv.seen.some((s) => s.path === "/api/v1/claims/redeem")).toBe(false);
+  });
+
   test("un prompt normal no canjea nada", async () => {
     const srv = claimServer(() => Response.json({ delivery: DELIVERY }));
     await runHook("working", sys(srv.url, { DEVI_CHANNEL: "1" }), stdin(claimInput("hola")), () => {});
