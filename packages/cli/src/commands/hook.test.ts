@@ -240,6 +240,17 @@ describe("código de entrega", () => {
     expect(JSON.parse(out).hookSpecificOutput.additionalContext).toContain("Ese código caducó");
   });
 
+  test("con canal, el aviso no dice que falta el canal", async () => {
+    const srv = claimServer(() => Response.json({ delivery: DELIVERY }));
+    let out = "";
+    await runHook("working", sys(srv.url, { DEVI_CHANNEL: "1" }), stdin(claimInput("devi: recibir K7Q-4MX")), (t) => {
+      out = t;
+    });
+    const ctx = JSON.parse(out).hookSpecificOutput.additionalContext as string;
+    expect(ctx).toContain("¿Revisas el PR?");
+    expect(ctx).not.toContain("no tiene el canal");
+  });
+
   test("un prompt normal no canjea nada", async () => {
     const srv = claimServer(() => Response.json({ delivery: DELIVERY }));
     await runHook("working", sys(srv.url, { DEVI_CHANNEL: "1" }), stdin(claimInput("hola")), () => {});
