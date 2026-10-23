@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AuditEntry } from "@devi/protocol";
+import type { Access } from "../../core/auth";
 import { createTestApp, stubTeamModule } from "../../testing/harness";
 import { auditModule } from "../audit/index";
 import { claimsModule } from "../claims/index";
@@ -75,14 +76,14 @@ describe("mensaje del chat a una sesión nueva", () => {
     const t = await setup();
     const leoSession = await t.register(["chat"], "leo@dev", 901);
     const handler = t.app.ctx.services.get("chatTargets").chat!;
-    const access = { memberId: "m-maria" } as Parameters<typeof handler.check>[0];
-    let err: any;
+    const maria: Access = { memberId: "m-maria", perms: new Set() };
+    let err: unknown;
     try {
-      handler.deliverTo(access, t.msg.id, leoSession.id, {});
+      handler.deliverTo(maria, t.msg.id, leoSession.id, {});
     } catch (e) {
       err = e;
     }
-    expect(err?.extra?.code).toBe("session_gone");
+    expect(err).toMatchObject({ status: 409, extra: { code: "session_gone" } });
     expect((await t.audit()).some((e) => e.action === "chat.to_session")).toBe(false);
   });
 });

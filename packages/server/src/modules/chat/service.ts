@@ -87,8 +87,7 @@ export class ChatManager {
   // si lanza, no ha cambiado nada y claims solo tiene que liberar el código.
   deliverToClaim(access: Access, id: string, sessionId: string, details: AuditDetails): SessionDelivery {
     const m = this.partyMessage(access, id);
-    const s = this.sessions.get(sessionId);
-    if (!s || s.memberId !== access.memberId) throw sessionGone();
+    const s = this.ownSession(access, sessionId);
     this.requireChat(s.id);
     let delivery: SessionDelivery | null = null;
     this.store.transaction(() => {
@@ -172,9 +171,15 @@ export class ChatManager {
     return m.id;
   }
 
-  private ownLiveSession(access: Access, sessionId: string): Session {
+  private ownSession(access: Access, sessionId: string): Session {
     const s = this.sessions.get(sessionId);
-    if (!s || s.memberId !== access.memberId || !this.sessions.isAlive(s.id)) throw sessionGone();
+    if (!s || s.memberId !== access.memberId) throw sessionGone();
+    return s;
+  }
+
+  private ownLiveSession(access: Access, sessionId: string): Session {
+    const s = this.ownSession(access, sessionId);
+    if (!this.sessions.isAlive(s.id)) throw sessionGone();
     return s;
   }
 
