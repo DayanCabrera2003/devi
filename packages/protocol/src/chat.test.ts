@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { API, ChatFromSessionMeta } from "./api";
-import { AUDIT_ACTIONS, AUDIT_FEATURES, AUDIT_TARGETS, legacyAuditAction, legacyAuditTarget } from "./audit";
+import { AUDIT_ACTIONS, AUDIT_FEATURES, AUDIT_TARGETS, auditFeatureFor, legacyAuditAction, legacyAuditTarget } from "./audit";
 import { CHAT_LIMITS, ChatMessageSchema, ChatQuery, SendChatMeta } from "./chat";
 import { InboxItemSchema } from "./entities";
 import { SessionDeliverySchema, UserEventSchema } from "./events";
@@ -53,5 +53,8 @@ describe("chat", () => {
     expect(legacyAuditAction("chat.sent_from_session")).toBe("draft.approved_in_chat");
     expect(legacyAuditTarget("chat")).toBe("request");
     expect(legacyAuditTarget("member")).toBe("member");
+    expect(auditFeatureFor("chat.sent")).toBe("audit_chat");
+    expect(auditFeatureFor("request.taken_in_chat")).toBe("audit_in_chat");
+    expect(auditFeatureFor("request.forwarded")).toBeNull();
   });
 });

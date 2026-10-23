@@ -1,4 +1,4 @@
-import { API, AUDIT_FEATURES, type AuditPage, AuditQuery, legacyAuditAction } from "@devi/protocol";
+import { API, type AuditPage, AuditQuery, auditFeatureFor, legacyAuditAction, legacyAuditTarget } from "@devi/protocol";
 import { json } from "../../core/http";
 import type { DeviModule, ModuleContext } from "../../core/module";
 import { AuditManager } from "./service";
@@ -7,14 +7,16 @@ import { AuditStore, auditMigrations } from "./store";
 const DAY = 86_400_000;
 const managers = new WeakMap<ModuleContext, AuditManager>();
 
-// Una app anterior valida las acciones con un enum cerrado: una sola desconocida rompería la página entera. Si no
-// declara entenderlas, las nuevas salen como su equivalente antiguo, marcadas con details.via = "chat".
-function forOldApp(page: AuditPage): AuditPage {
+// Una app anterior valida las acciones y los objetivos con un enum cerrado: uno solo desconocido rompería la página
+// entera. Lo que el cliente no declara entender (features) sale como su equivalente antiguo, marcado con
+// details.via = "chat".
+function forClient(page: AuditPage, features: string[]): AuditPage {
   return {
     ...page,
     entries: page.entries.map((e) => {
-      const action = legacyAuditAction(e.action);
-      return action === e.action ? e : { ...e, action, details: { ...e.details, via: "chat" } };
+      const need = auditFeatureFor(e.action);
+      if (!need || features.includes(need)) return e;
+      return { ...e, action: legacyAuditAction(e.action), targetType: legacyAuditTarget(e.targetType), details: { ...e.details, via: "chat" } };
     }),
   };
 }
@@ -32,7 +34,7 @@ export const auditModule: DeviModule = {
     r.on(API.audit, ({ url }) => {
       const q = AuditQuery.parse(Object.fromEntries(url.searchParams));
       const page = audit.page(q.limit, q.before);
-      return json(q.features.includes(AUDIT_FEATURES.inChat) ? page : forOldApp(page));
+      return json(forClient(page, q.features));
     });
   },
 

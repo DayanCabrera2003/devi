@@ -82,6 +82,9 @@ const LEGACY_ACTIONS: Partial<Record<AuditAction, AuditAction>> = {
   "chat.sent_from_session": "draft.approved_in_chat",
 };
 export const legacyAuditAction = (action: AuditAction): AuditAction => LEGACY_ACTIONS[action] ?? action;
+// Qué feature tiene que declarar el cliente para recibir una acción tal cual (null = cualquier app la entiende).
+export const auditFeatureFor = (action: AuditAction): string | null =>
+  action.startsWith("chat.") ? AUDIT_FEATURES.chat : LEGACY_ACTIONS[action] ? AUDIT_FEATURES.inChat : null;
 // Igual con el objetivo: una app anterior no conoce "chat".
 export const legacyAuditTarget = (target: AuditTarget): AuditTarget => (target === "chat" ? "request" : target);
 export const AuditPageSchema = z.object({ entries: z.array(AuditEntrySchema), nextBefore: z.number().int().optional() });
