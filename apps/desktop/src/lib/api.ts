@@ -54,6 +54,11 @@ export function isApiFailure(e: unknown): e is ApiFailure {
   return typeof x.status === "number" && typeof x.body === "object" && x.body !== null;
 }
 
+// Ruta que el servidor no conoce (un servidor anterior a la función): 404 sin código o con el "not_found" del router.
+// Los 404 de las propias rutas traen su código (claim_not_found…) y no cuentan.
+export const isMissingRoute = (e: unknown): boolean =>
+  isApiFailure(e) && e.status === 404 && (e.body.code === undefined || e.body.code === "not_found");
+
 export class HttpFailure extends Error {
   readonly status: number;
   readonly body: ErrorBody;

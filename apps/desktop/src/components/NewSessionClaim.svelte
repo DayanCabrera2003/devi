@@ -1,7 +1,7 @@
 <script lang="ts">
   // «+ Sesión nueva»: crea un código de un solo uso y lo copia como frase para pegar en una sesión nueva.
   import { type Claim, type ClaimTarget, claimPhrase } from "@devi/protocol";
-  import { errorMessage } from "../lib/api";
+  import { errorMessage, isMissingRoute } from "../lib/api";
   import Sheet from "./Sheet.svelte";
 
   type Props = {
@@ -38,7 +38,7 @@
       now = Date.now();
       copied = await copy(claimPhrase(claim.code));
     } catch (e) {
-      error = errorMessage(e);
+      error = isMissingRoute(e) ? "El servidor de Devi todavía no tiene esta función: espera a que se actualice." : errorMessage(e);
     } finally {
       busy = false;
     }

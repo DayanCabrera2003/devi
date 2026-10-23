@@ -53,6 +53,25 @@ describe("NewSessionClaim", () => {
     expect(await findByText("Tienes demasiados códigos sin usar: usa o cancela alguno")).toBeTruthy();
   });
 
+  test("con un servidor anterior (sin la ruta), avisa de que falta actualizarlo", async () => {
+    const create = vi.fn(async () => {
+      throw new DeviApiError(404, { error: "Ruta no encontrada", code: "not_found" });
+    });
+    const { getByText, findByText } = render(NewSessionClaim, { props: { target: { type: "request", id: "r1" }, create, cancel: vi.fn(), copy: vi.fn(async () => true), onBack: vi.fn() } });
+    await fireEvent.click(getByText("Crear código"));
+    expect(await findByText("El servidor de Devi todavía no tiene esta función: espera a que se actualice.")).toBeTruthy();
+  });
+
+  test("un 404 con otro código es el mensaje del servidor, no el aviso de versión", async () => {
+    const create = vi.fn(async () => {
+      throw new DeviApiError(404, { error: "esa solicitud no existe", code: "request_not_found" });
+    });
+    const { getByText, findByText, queryByText } = render(NewSessionClaim, { props: { target: { type: "request", id: "r1" }, create, cancel: vi.fn(), copy: vi.fn(async () => true), onBack: vi.fn() } });
+    await fireEvent.click(getByText("Crear código"));
+    expect(await findByText("esa solicitud no existe")).toBeTruthy();
+    expect(queryByText(/todavía no tiene esta función/)).toBeNull();
+  });
+
   test("si no se pudo copiar, lo dice y deja la frase a la vista", async () => {
     const create = vi.fn(async () => ({ code: "K7Q4MX", target: { type: "request" as const, id: "r1" }, expiresAt: Date.now() + 600_000, status: "open" as const }));
     const { getByText, findByText } = render(NewSessionClaim, { props: { target: { type: "request", id: "r1" }, create, cancel: vi.fn(), copy: vi.fn(async () => false), onBack: vi.fn() } });
