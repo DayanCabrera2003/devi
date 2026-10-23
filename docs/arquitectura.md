@@ -47,7 +47,7 @@ Fuera de alcance: tiendas de apps, clientes móviles, integraciones distintas de
 | `devi server` | Arranca el servidor (como servicio del SO o como sidecar de la app). |
 | `devi mcp` | Servidor MCP por stdio y canal de Claude Code. Herramientas de lectura: `whoami`, `list_teammates`, `get_conversation`, `list_pending`, `get_request`, `search_knowledge`; de envío: `send_request` (con `kind: handoff` para traspasos), `respond_to_request` (con `share_with_team` para guardar la respuesta en la base del equipo). Prompts: `pedir`, `pendientes`, `equipo`, `traspaso`. |
 | `devi hook <start\|working\|idle>` | Lo llaman los hooks: marca la sesión como trabajando o libre y, sin canal, entrega lo pendiente (ver más abajo). Nunca falla ni bloquea. |
-| `devi claude [--session <nombre>] [--handoff <id>] [-- args]` | Lanza `claude` con el canal de Devi cargado. Con `--handoff`, empieza con el traspaso `<id>` de un compañero como prompt inicial (contexto a verificar). |
+| `devi claude [--session <nombre>] [--handoff <id>] [--deliver <código>] [-- args]` | Lanza `claude` con el canal de Devi cargado. Con `--handoff`, empieza con el traspaso `<id>` de un compañero como prompt inicial (contexto a verificar). Con `--deliver`, empieza con la frase `devi: recibir <código>` de «+ Sesión nueva», que canjea el hook (ver [Sesión nueva con un código](#entrega-a-la-sesión)). Los dos no van a la vez. |
 | `devi doctor` | Diagnóstico: Tailscale, servidor, login, plugin y política de canales. |
 | `devi install-integration` | Copia el binario a una ruta estable e instala el plugin desde un marketplace local (`devi@devi-local`). Lo usa el asistente de la app. |
 | `devi shell-alias` | Instala o quita la función `claude` en los perfiles de shell para que `claude` abra la sesión con el canal. |
@@ -102,13 +102,17 @@ Todas las rutas están declaradas en `API` (`packages/protocol/src/api.ts`) con 
 | `GET /knowledge?q=&limit=` | miembro | Base del equipo: búsqueda de texto completo (sin `q`, las más recientes; 10 por defecto, hasta 50). Lo usa `search_knowledge`. |
 | `DELETE /knowledge/:id` | quien respondió o admin, humana | Retirar una entrada de la base del equipo. |
 | `POST /requests/:id/reassign` | remitente, `requests.send` (+ `files.send` con archivos), humana | Pedírselo a otra persona (`{ to }`), con la solicitud en `pending` o `timed_out`: crea una nueva con el mismo mensaje, origen y archivos (copiados) y cierra la original con `closed_note` «Reenviada a …» y `replaced_by`. |
+| `POST /claims` | remitente o destinatario, humana | «+ Sesión nueva»: crea un código de entrega de un solo uso (`{ target: { type: request\|response\|chat, id } }`), válido 10 min. Solo si el elemento es de quien llama y sigue abierto; como mucho 10 vivos por persona (`409 too_many_claims`). |
+| `DELETE /claims/:code` | dueño del código, humana | Cancelar un código. Repetirlo no falla; si ya se usó, `409 claim_used`. |
+| `GET /claims` | miembro (solo los suyos) | Mis códigos vivos (la app los pinta como «Esperando sesión nueva»). |
+| `POST /claims/redeem` | dueño del código (no humana) | Lo llama el hook `UserPromptSubmit` de la sesión nueva (`{ code, claudeSessionId, parentPid, machine }`): devuelve la entrega. Errores: `claim_not_found`, `claim_used`, `410 claim_expired` y `409 session_unknown` (el MCP aún no se registró; el código sigue valiendo). |
 | `GET /files/:id` | remitente o destinatario | Descargar un archivo. |
 | `GET /events/user` · `GET /events/session/:id` | miembro / dueño | SSE de la app y del MCP. |
 | `POST /debug/push` | admin | Solo en modo dev (404 en producción). |
 
 ### Eventos
 
-**SSE de usuario** (app): `draft.awaiting`, `draft.discarded`, `request.incoming`, `request.updated`, `response.incoming`, `request.timed_out`, `request.escalated` (solo al autor: sigue sin respuesta al cumplirse el plazo de escalado), `conversation.updated` (`{ memberId }`: cambió una solicitud o borrador con esa persona; llega a las dos partes), `team.updated`, `sessions.updated`, `knowledge.saved` / `knowledge.refused` (a quien respondió: su respuesta entró en la base del equipo o no se publicó por posibles secretos) y, solo a admins, `audit.alert`. Al conectar, el servidor reenvía las tarjetas abiertas.
+**SSE de usuario** (app): `draft.awaiting`, `draft.discarded`, `request.incoming`, `request.updated`, `response.incoming`, `request.timed_out`, `request.escalated` (solo al autor: sigue sin respuesta al cumplirse el plazo de escalado), `conversation.updated` (`{ memberId }`: cambió una solicitud o borrador con esa persona; llega a las dos partes), `team.updated`, `sessions.updated`, `knowledge.saved` / `knowledge.refused` (a quien respondió: su respuesta entró en la base del equipo o no se publicó por posibles secretos), `claim.updated` (`{ claim }`: un código de entrega mío pasó a `open`, `used`, `cancelled` o `expired`) y, solo a admins, `audit.alert`. Al conectar, el servidor reenvía las tarjetas abiertas.
 
 **Compatibilidad.** Un MCP o un hook anteriores validan los `kind` con un enum cerrado. Por eso el servidor solo manda un `kind` nuevo a las sesiones que lo declararon en `features` al registrarse, y `@devi/client` valida la bandeja entrega a entrega: una con un `kind` que no conoce se salta (y se apunta en el log con `onIgnored`) sin perder las demás; lo mismo con el SSE de sesión.
 
@@ -142,8 +146,11 @@ Módulos, en el orden en que se registran (`MODULES` en `packages/server/src/mai
 | `requests` | Borradores, solicitudes, respuestas y plazos. |
 | `chat` | Mensajes del chat entre personas (sin plazo ni estados), sus adjuntos y «Enviar a mi sesión». Ofrece el servicio `chat` (último mensaje de una conversación). |
 | `knowledge` | Base de conocimiento del equipo: indexa con FTS5 las respuestas compartidas, búsqueda y retirada. |
+| `claims` | Códigos de entrega de «+ Sesión nueva»: crear, cancelar, listar, canjear y caducar (barrido cada 15 s, `claim.updated` a la app). No sabe de solicitudes ni de chat: el elemento lo reenvía el módulo dueño con su manejador. |
 
-Los módulos no se importan entre sí: se comunican por el **bus** (`draft.discarded`, `request.closed`, `session.closed`, `request.shared`) y por **servicios** que se ofrecen en `ctx.services` (`team`, `settings`, `sessions`, `files`, `audit`, `prefs`, `chat`).
+Los módulos no se importan entre sí: se comunican por el **bus** (`draft.discarded`, `request.closed`, `session.closed`, `request.shared`) y por **servicios** que se ofrecen en `ctx.services` (`team`, `settings`, `sessions`, `files`, `audit`, `prefs`, `chat`, `requestTargets`, `chatTargets`).
+
+**Manejadores de códigos de entrega.** `requests` publica `requestTargets` (tipos `request` y `response`) y `chat`, `chatTargets` (tipo `chat`): por tipo, un `ClaimTargetHandler` con `check` (al crear el código: el elemento es de quien llama y sigue abierto) y `deliverTo` (al canjearlo: lo reenvía a la sesión igual que «Enviar a sesión», con estado, bandeja, auditoría y eventos, y devuelve la entrega sin empujarla por el canal). `claims` los busca al usarlos, así que no depende del orden de `MODULES`. `deliverTo` valida antes de escribir y escribe en una sola transacción: si lanza, a `claims` le basta con liberar su reserva del código. Un tipo nuevo se entrega con código publicando su manejador, sin tocar `claims`.
 
 ## Modelo de datos
 
@@ -174,11 +181,11 @@ knowledge_fts      entry_id, question, answer   -- FTS5, sin acentos ni mayúscu
 ```
 
 - Los **borradores** son una tabla aparte: una solicitud de un agente solo existe en `requests` cuando su borrador se autoriza. Las escritas en la app (`origin = app`) se crean directamente, con `from_session` y `from_session_name` vacíos y sus archivos ya unidos a la solicitud (`draft_id` vacío).
-- **Traspasos de sesión** (`kind = handoff`): una solicitud con el contexto de un trabajo (estado, decisiones, próximos pasos, archivos clave, riesgos y dudas) para que otra persona lo continúe. Sigue el mismo ciclo (borrador, autorización, aceptar, rechazar, reenviar). Al entregarse a una sesión va encuadrado como contexto a verificar, nunca órdenes, con `meta.request_kind = handoff`. `devi claude --handoff <id>` lo descarga con `GET /requests/:id` (solo el destinatario) y abre Claude Code con él como prompt inicial, también encuadrado.
+- **Traspasos de sesión** (`kind = handoff`): una solicitud con el contexto de un trabajo (estado, decisiones, próximos pasos, archivos clave, riesgos y dudas) para que otra persona lo continúe. Sigue el mismo ciclo (borrador, autorización, aceptar, rechazar, reenviar). Al entregarse a una sesión va encuadrado como contexto a verificar, nunca órdenes, con `meta.request_kind = handoff`. `devi claude --handoff <id>` lo descarga con `GET /requests/:id` (solo el destinatario) y abre Claude Code con él como prompt inicial, también encuadrado. En la app, «Abrir en sesión nueva» lo entrega con un código de «+ Sesión nueva» (ver [Entrega a la sesión](#entrega-a-la-sesión)).
 - **Permisos** (`packages/protocol/src/perms.ts`): `requests.send`, `files.send` y `team.admin`. Los de una persona son la unión de los de sus roles. Siempre debe quedar al menos un admin.
 - **Ajustes por defecto**: plazo de una solicitud 1 h, aviso de escalado a los 30 min (`escalateAfterMs`; null lo desactiva), 15 min para autorizar un borrador, archivos 7 días tras cerrarse la solicitud y 30 días como máximo, dominios permitidos vacíos.
 - **Base del equipo**: quien responde decide si guarda la respuesta («Guardar en la base del equipo» en la app al aceptar con nota, o `share_with_team` en `respond_to_request`; queda en el borrador como `share_with_team`). Al enviarse, `requests` emite `request.shared` y `knowledge` lo indexa: pregunta (el mensaje original), respuesta, quién preguntó, quién respondió y cuándo, nunca los archivos. Si el detector de secretos salta en la pregunta o en la respuesta, no se publica y se avisa a quien respondió. Al agente le llega encuadrada como cualquier texto de compañeros (`DEVI-UNTRUSTED`).
-- **Auditoría**: solo se añade (un trigger impide modificar filas) y se borra a los 365 días. De los mensajes guarda su SHA-256, nunca el texto.
+- **Auditoría**: solo se añade (un trigger impide modificar filas) y se borra a los 365 días. De los mensajes guarda su SHA-256, nunca el texto. Una entrega canjeada con un código (`request.forwarded`, `response.forwarded`, `chat.to_session`) lleva además `claimCode` en `details`.
 
 ## Ciclo de vida
 
@@ -250,6 +257,8 @@ Claude Code solo carga un canal si la sesión se lanzó con un flag de canal. De
 **Sin canal** (`claude` a secas, desde un IDE, u organizaciones sin canales). Cada entrega `request`, `response`, `draft_authorized` o `draft_discarded` se guarda en `session_inbox` en la misma transacción que el cambio de estado que la provoca. Los hooks `start` (SessionStart) y `working` (UserPromptSubmit) piden la bandeja, descargan los archivos con el mismo código que el MCP, devuelven el texto como `additionalContext` del hook (cada entrega en `<devi kind="…" request_id="…">`, recortado por debajo del límite de Claude Code) y confirman. Llega cuando la persona escribe en la sesión o la abre. Las entregas sin confirmar caducan a los 7 días.
 
 El selector de sesiones de la app marca cada una como «en tiempo real» (con canal) o «al escribir» (sin canal).
+
+**Sesión nueva con un código.** Para una sesión que todavía no existe, «+ Sesión nueva» (en el selector de sesiones de una solicitud, una respuesta o un mensaje del chat, y «Abrir en sesión nueva» en un traspaso) crea un código y copia la frase `devi: recibir K7Q-4MX`, que la persona pega como primer mensaje (o abre con `devi claude --deliver`). El hook `UserPromptSubmit` la reconoce y canjea el código con `POST /claims/redeem`, con o sin canal, porque el servidor no la empuja por él. Mientras el MCP de la sesión recién abierta no se haya registrado (`session_unknown`), reintenta durante 2 s. El servidor empareja la sesión como con el resto de hooks, reserva el código y llama al `deliverTo` del módulo dueño; la entrega vuelve en la respuesta y el hook la inyecta como `additionalContext` en ese mismo turno, con sus archivos descargados. Si el código no sirve, el agente recibe una nota de Devi para decírselo a la persona. Los intentos con códigos que no existen o no son tuyos gastan un límite de ritmo propio.
 
 ## Identidad y sesiones
 
