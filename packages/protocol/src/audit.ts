@@ -35,11 +35,14 @@ export const AUDIT_ACTIONS = [
   "login.rejected",
   "knowledge.shared",
   "knowledge.withdrawn",
+  "chat.sent", // mensaje de chat escrito en la app
+  "chat.to_session", // un mensaje del chat mandado a una sesión propia
+  "chat.sent_from_session", // mensaje de chat escrito por Claude (aprobado en el aviso de Claude Code)
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 export const AuditActionSchema = z.enum(AUDIT_ACTIONS);
 
-export const AUDIT_TARGETS = ["draft", "request", "file", "member", "role", "settings", "db", "login", "knowledge"] as const;
+export const AUDIT_TARGETS = ["draft", "request", "file", "member", "role", "settings", "db", "login", "knowledge", "chat"] as const;
 export type AuditTarget = (typeof AUDIT_TARGETS)[number];
 
 // actorLogin "system" = lo hizo el propio servidor (caducidades, plazos).
@@ -68,13 +71,18 @@ export const AuditQuery = z.object({
   features: z.string().max(500).default("").transform((v) => v.split(",").map((x) => x.trim()).filter((x) => x.length > 0)),
 });
 
-export const AUDIT_FEATURES = { inChat: "audit_in_chat" } as const;
+export const AUDIT_FEATURES = { inChat: "audit_in_chat", chat: "audit_chat" } as const;
 
 // Acciones que una app anterior no conoce → la que sí conoce (con details.via = "chat" para distinguirlas).
 const LEGACY_ACTIONS: Partial<Record<AuditAction, AuditAction>> = {
   "request.taken_in_chat": "request.forwarded",
   "request.declined_in_chat": "request.rejected",
+  "chat.sent": "request.sent_from_app",
+  "chat.to_session": "request.forwarded",
+  "chat.sent_from_session": "draft.approved_in_chat",
 };
 export const legacyAuditAction = (action: AuditAction): AuditAction => LEGACY_ACTIONS[action] ?? action;
+// Igual con el objetivo: una app anterior no conoce "chat".
+export const legacyAuditTarget = (target: AuditTarget): AuditTarget => (target === "chat" ? "request" : target);
 export const AuditPageSchema = z.object({ entries: z.array(AuditEntrySchema), nextBefore: z.number().int().optional() });
 export type AuditPage = z.infer<typeof AuditPageSchema>;

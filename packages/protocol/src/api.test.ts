@@ -15,9 +15,9 @@ describe("catálogo de la API", () => {
   test("las acciones humanas y las mutaciones de equipo/ajustes van marcadas como human", () => {
     const human = Object.entries(API).filter(([, r]) => "human" in r && r.human).map(([k]) => k).sort();
     expect(human).toEqual([
-      "acceptRequest", "acceptResponse", "authorizeDraft", "createMember", "createRole", "deleteMember", "deleteRole",
+      "acceptRequest", "acceptResponse", "authorizeDraft", "chatToSession", "createMember", "createRole", "deleteMember", "deleteRole",
       "discardDraft", "exportDb", "forwardRequest", "forwardResponse", "ignoreRequest", "reassignRequest", "rejectRequest", "resendRequest",
-      "sendFromApp",
+      "sendChat", "sendFromApp",
       "updateMember", "updateMyPrefs", "updateRole", "updateSettings",
       "withdrawKnowledge",
     ]);

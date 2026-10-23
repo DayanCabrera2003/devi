@@ -7,6 +7,7 @@ import { RequestKindSchema } from "./entities";
 import type { Perm } from "./perms";
 import { AuditPageSchema } from "./audit";
 import { RequestContextSchema } from "./context";
+import { ChatMessageSchema, ChatPageSchema, ChatText, SendChatMeta } from "./chat";
 import { ConversationPageSchema, ConversationsResponseSchema, SendFromAppMeta } from "./conversations";
 import { PendingSchema } from "./pending";
 import { KnowledgeResultSchema } from "./knowledge";
@@ -120,6 +121,12 @@ export const DeclineRequestBody = z.object({ sessionId: z.string(), reason: NonE
 export const TakeRequestResult = z.object({ request: DeviRequestSchema, delivery: SessionDeliverySchema });
 export type TakeRequestResult = z.infer<typeof TakeRequestResult>;
 
+// Claude escribe en el chat (reply_in_chat del MCP). Multipart como POST /chat: "meta" (JSON de este esquema) + 0..5
+// "files". Igual que take_request: lo aprueba el humano en el aviso de permisos de Claude Code (approval "chat" y el
+// ajuste chatApproval); si no, el servidor lo rechaza y hay que escribirlo desde la app. sessionId: la sesión que
+// escribe (de quien llama y viva).
+export const ChatFromSessionMeta = z.object({ sessionId: z.string(), to: z.string(), text: ChatText, approval: ApprovalSchema });
+
 export const ReassignResult = z.object({ request: DeviRequestSchema, original: DeviRequestSchema });
 export type ReassignResult = z.infer<typeof ReassignResult>;
 
@@ -179,6 +186,15 @@ export const API = {
   // Conversaciones por persona: solo las solicitudes entre quien llama y :memberId (query: ConversationQuery).
   conversations: route({ method: "GET", path: "/api/v1/conversations", perm: null, actor: "any", body: Empty, response: ConversationsResponseSchema }),
   conversation: route({ method: "GET", path: "/api/v1/conversations/:memberId", perm: null, actor: "party", body: Empty /* query: ConversationQuery */, response: ConversationPageSchema }),
+
+  // Chat entre personas (ver chat.ts). Enviar desde la app: multipart como sendFromApp (con archivos, además files.send).
+  sendChat: route({ human: true, method: "POST", path: "/api/v1/chat", perm: "requests.send", actor: "any", body: SendChatMeta, response: ChatMessageSchema }),
+  // Escrito por Claude con la aprobación del aviso de Claude Code (ver ChatFromSessionMeta).
+  chatFromSession: route({ method: "POST", path: "/api/v1/chat/from-session", perm: "requests.send", actor: "any", body: ChatFromSessionMeta, response: ChatMessageSchema }),
+  // Mensajes entre quien llama y :memberId (query: ChatQuery).
+  chatPage: route({ method: "GET", path: "/api/v1/chat/:memberId", perm: null, actor: "party", body: Empty /* query: ChatQuery */, response: ChatPageSchema }),
+  // «Enviar a mi sesión»: el mensaje (mío o del compañero) a una sesión viva de quien llama. El mensaje no cambia.
+  chatToSession: route({ human: true, method: "POST", path: "/api/v1/chat/:id/session", perm: null, actor: "party", body: z.object({ sessionId: z.string() }), response: Ok }),
 
   // Lecturas para el agente (herramientas del MCP): lo que me espera y una solicitud en la que soy parte.
   pending: route({ method: "GET", path: "/api/v1/pending", perm: null, actor: "any", body: Empty, response: PendingSchema }),

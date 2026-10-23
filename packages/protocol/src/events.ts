@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AuditEntrySchema } from "./audit";
+import { ChatMessageSchema } from "./chat";
 import { DeviRequestSchema, DraftSchema } from "./entities";
 import { KnowledgeEntrySchema } from "./knowledge";
 
@@ -22,6 +23,8 @@ export const UserEventSchema = z.discriminatedUnion("type", [
   // A quien respondió: su respuesta ya está en la base del equipo, o no se guardó (posibles secretos).
   z.object({ type: z.literal("knowledge.saved"), entry: KnowledgeEntrySchema }),
   z.object({ type: z.literal("knowledge.refused"), requestId: z.string(), reasons: z.array(z.string()) }),
+  // Mensaje de chat nuevo entre esta persona y otra (a las dos partes, también al autor).
+  z.object({ type: z.literal("chat.message"), message: ChatMessageSchema }),
 ]);
 export type UserEvent = z.infer<typeof UserEventSchema>;
 export type UserEventType = UserEvent["type"];
@@ -30,7 +33,8 @@ export type UserEventType = UserEvent["type"];
 export const SESSION_EVENT = "deliver";
 export const SessionDeliverySchema = z.object({
   // request_notice: aviso de que llegó una solicitud (resumen); se trae a la sesión con take_request.
-  kind: z.enum(["request", "response", "draft_authorized", "draft_discarded", "escalation", "request_notice", "debug"]),
+  // chat: un mensaje del chat que su persona mandó a esta sesión («Enviar a mi sesión» en la app).
+  kind: z.enum(["request", "response", "draft_authorized", "draft_discarded", "escalation", "request_notice", "chat", "debug"]),
   content: z.string(), // texto que verá el agente
   meta: z.record(z.string(), z.string()), // atributos del <channel>: request_id, draft_id, files…
 });

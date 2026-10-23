@@ -6,6 +6,7 @@ export * from "./errors";
 export * from "./context";
 export * from "./entities";
 export * from "./audit";
+export * from "./chat";
 export * from "./conversations";
 export * from "./pending";
 export * from "./knowledge";
