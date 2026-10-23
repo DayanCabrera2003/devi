@@ -427,6 +427,14 @@ export class RequestsManager {
     if (scan.level !== "none") {
       throw new HttpError(409, `Posible prompt injection (${scan.reasons.join("; ")}): revísala en la app de Devi`, { code: "injection" });
     }
+    const delivery = this.stageForward(r, s);
+    this.audit("request.taken_in_chat", access.memberId, "request", r.id, { sessionId: s.id, sessionName: s.name, from: r.fromMemberId });
+    return { request: this.pushBoth(r, "request.updated"), delivery };
+  }
+
+  // Reenvío sin canal (take y códigos de entrega): bandeja + estado en una transacción; la entrega vuelve a quien
+  // la pidió, que la devuelve a la sesión, en vez de empujarse por el SSE.
+  private stageForward(r: RequestRecord, s: Session): SessionDelivery {
     let delivery: SessionDelivery | null = null;
     this.store.transaction(() => {
       delivery = this.sessions.enqueue(s.id, this.requestDelivery(r));
@@ -434,8 +442,7 @@ export class RequestsManager {
       r.forwardedSessionId = s.id;
       this.store.saveRequest(r);
     });
-    this.audit("request.taken_in_chat", access.memberId, "request", r.id, { sessionId: s.id, sessionName: s.name, from: r.fromMemberId });
-    return { request: this.pushBoth(r, "request.updated"), delivery: delivery! };
+    return delivery!;
   }
 
   // Como Rechazar en la app (motivo obligatorio), con las mismas condiciones que take.
@@ -491,8 +498,7 @@ export class RequestsManager {
   // ---- códigos de entrega (modules/claims) ----------------------------------
 
   claimCheckRequest(access: Access, id: string): void {
-    const r = this.received(access, id);
-    if (r.status !== "pending") throw conflict(`la solicitud ya está ${r.status}`);
+    this.claimableRequest(access, id);
   }
 
   // Como forward, hacia la sesión que canjeó el código y sin empujar por el canal (como take): la entrega vuelve
@@ -500,45 +506,50 @@ export class RequestsManager {
   // lo decidió la persona en la app al crear el código. Todo se valida antes de la transacción y los eventos van
   // después: si lanza, no ha cambiado nada y claims solo tiene que liberar el código.
   deliverRequestToClaim(access: Access, id: string, sessionId: string, details: AuditDetails): SessionDelivery {
-    this.claimCheckRequest(access, id);
-    const r = this.received(access, id);
-    const s = this.claimSession(sessionId);
-    let delivery: SessionDelivery | null = null;
-    this.store.transaction(() => {
-      delivery = this.sessions.enqueue(s.id, this.requestDelivery(r));
-      r.status = "forwarded";
-      r.forwardedSessionId = s.id;
-      this.store.saveRequest(r);
-    });
-    this.audit("request.forwarded", access.memberId, "request", r.id, { sessionId: s.id, sessionName: s.name, ...details });
+    const r = this.claimableRequest(access, id);
+    const s = this.claimSession(access, sessionId);
+    const delivery = this.stageForward(r, s);
+    this.audit("request.forwarded", access.memberId, "request", r.id, { ...details, sessionId: s.id, sessionName: s.name });
     this.pushBoth(r, "request.updated");
-    return delivery!;
+    return delivery;
   }
 
   claimCheckResponse(access: Access, id: string): void {
-    const r = this.sent(access, id);
-    if (!isResponseOpen(r.status)) throw conflict(`no hay respuesta abierta (estado: ${r.status})`);
+    this.claimableResponse(access, id);
   }
 
+  // Como forwardResponse sin empujar por el canal; close vuelve a guardar el estado ya guardado y avisa (files libera
+  // los adjuntos de la respuesta por el bus).
   deliverResponseToClaim(access: Access, id: string, sessionId: string, details: AuditDetails): SessionDelivery {
-    this.claimCheckResponse(access, id);
-    const r = this.sent(access, id);
-    const s = this.claimSession(sessionId);
+    const r = this.claimableResponse(access, id);
+    const s = this.claimSession(access, sessionId);
     let delivery: SessionDelivery | null = null;
     this.store.transaction(() => {
       delivery = this.sessions.enqueue(s.id, this.responseDelivery(r));
       r.status = "closed";
       this.store.saveRequest(r);
     });
-    this.audit("response.forwarded", access.memberId, "request", r.id, { sessionId: s.id, sessionName: s.name, outcome: r.outcome, ...details });
+    this.audit("response.forwarded", access.memberId, "request", r.id, { ...details, sessionId: s.id, sessionName: s.name, outcome: r.outcome });
     this.close(r);
     return delivery!;
   }
 
-  // claims la acaba de emparejar con pair, así que debería existir; si no, se falla antes de escribir nada.
-  private claimSession(sessionId: string): Session {
+  private claimableRequest(access: Access, id: string): RequestRecord {
+    const r = this.received(access, id);
+    if (r.status !== "pending") throw conflict(`la solicitud ya está ${r.status}`);
+    return r;
+  }
+
+  private claimableResponse(access: Access, id: string): RequestRecord {
+    const r = this.sent(access, id);
+    if (!isResponseOpen(r.status)) throw conflict(`no hay respuesta abierta (estado: ${r.status})`);
+    return r;
+  }
+
+  // claims la acaba de emparejar con pair; aun así, solo sesiones existentes de quien llama, antes de escribir nada.
+  private claimSession(access: Access, sessionId: string): Session {
     const s = this.sessions.get(sessionId);
-    if (!s) throw sessionGone();
+    if (!s || s.memberId !== access.memberId) throw sessionGone();
     return s;
   }
 

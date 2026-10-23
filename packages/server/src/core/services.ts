@@ -103,6 +103,7 @@ export interface ChatService {
 // «Enviar a sesión» (estado, bandeja, auditoría y eventos a la app) y devuelve la entrega SIN empujarla por el canal.
 // Contrato de deliverTo: valida todo antes de escribir, hace sus escrituras en una sola transacción y emite los eventos
 // a la app al final. Si lanza, no ha cambiado nada: por eso al canjeador le basta con liberar su reserva del código.
+// Solo entrega a sesiones de quien llama.
 export interface ClaimTargetHandler {
   check(access: Access, id: string): void;
   deliverTo(access: Access, id: string, sessionId: string, details: AuditDetails): SessionDelivery;
