@@ -3,6 +3,10 @@ import { HttpError } from "../../core/http";
 import type { ModuleContext } from "../../core/module";
 import type { RequestRecord, RequestsStore } from "./store";
 
+type Last = { at: number; text: string; byMemberId: string };
+// Lo más reciente entre la última actividad de las solicitudes y el último mensaje del chat (si el módulo existe).
+const latest = (a: Last | null, b: Last | null): Last | null => (!a ? b : !b ? a : b.at > a.at ? b : a);
+
 // Conversaciones por persona: las solicitudes entre quien llama y cada compañero, en los dos sentidos.
 // Quien llama siempre es una de las dos partes (la ruta solo nombra a la otra), así nadie lee ajenas.
 export class Conversations {
@@ -22,7 +26,7 @@ export class Conversations {
       .memberIds()
       .filter((id) => id !== me && this.team.member(id)?.disabled === false)
       .map((memberId) => {
-        const last = this.store.lastActivity(me, memberId);
+        const last = latest(this.store.lastActivity(me, memberId), this.ctx.services.find("chat")?.last(me, memberId) ?? null);
         return {
           memberId,
           lastAt: last?.at ?? null,
