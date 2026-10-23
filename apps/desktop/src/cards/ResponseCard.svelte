@@ -10,7 +10,7 @@
   import { errorMessage } from "../lib/api";
   import { useApp } from "../lib/context";
   import { OUTCOME } from "../lib/format";
-  import { copyText } from "../lib/handoff";
+  import { copyText } from "../lib/clipboard";
   import { combineScans } from "../lib/safety";
   import { requestCaption } from "../lib/thread-items";
 

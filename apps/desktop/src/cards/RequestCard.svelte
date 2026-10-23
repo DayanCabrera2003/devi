@@ -11,7 +11,7 @@
   import SendConfirm from "../components/SendConfirm.svelte";
   import SessionPicker from "../components/SessionPicker.svelte";
   import { useApp } from "../lib/context";
-  import { copyText } from "../lib/handoff";
+  import { copyText } from "../lib/clipboard";
   import type { ThreadRequest } from "../lib/conversations-api";
   import { combineScans } from "../lib/safety";
   import { originLabel, requestCaption } from "../lib/thread-items";

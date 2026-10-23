@@ -1,7 +1,7 @@
 <script lang="ts">
   // «Abrir en sesión nueva»: un código de entrega para el traspaso, que se pega como primer mensaje en una sesión nueva.
   import { useApp } from "../lib/context";
-  import { copyText } from "../lib/handoff";
+  import { copyText } from "../lib/clipboard";
   import NewSessionClaim from "./NewSessionClaim.svelte";
 
   // disabled: la misma casilla de prompt injection que «Enviar a mi sesión».

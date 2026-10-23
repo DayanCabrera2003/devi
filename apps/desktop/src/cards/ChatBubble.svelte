@@ -10,7 +10,7 @@
   import SessionPicker from "../components/SessionPicker.svelte";
   import { useApp } from "../lib/context";
   import { clockTime } from "../lib/format";
-  import { copyText } from "../lib/handoff";
+  import { copyText } from "../lib/clipboard";
   import { combineScans } from "../lib/safety";
 
   type Props = { message: ChatMessage };
