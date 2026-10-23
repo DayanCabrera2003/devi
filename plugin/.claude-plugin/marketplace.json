@@ -12,7 +12,7 @@
       "name": "devi",
       "source": "./devi",
       "description": "Devi: conecta las sesiones de Claude Code de tu equipo (solicitudes, respuestas y archivos con autorización humana)",
-      "version": "0.6.0"
+      "version": "0.7.0"
     }
   ]
 }
