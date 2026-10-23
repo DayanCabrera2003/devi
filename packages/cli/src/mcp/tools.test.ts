@@ -37,7 +37,7 @@ const deps = (client: ReturnType<typeof fakeClient>["client"] | null, sessionId:
 test("herramientas: seis de lectura, dos de envío y dos para atender solicitudes, con files opcional", () => {
   expect(TOOLS.map((t) => t.name)).toEqual([
     "whoami", "list_teammates", "get_conversation", "list_pending", "get_request", "search_knowledge", "send_request", "respond_to_request",
-    "take_request", "decline_request",
+    "reply_in_chat", "take_request", "decline_request",
   ]);
   const byName = Object.fromEntries(TOOLS.map((t) => [t.name, t]));
   expect(byName.send_request!.inputSchema.required).toEqual(["to", "message"]);
@@ -49,7 +49,7 @@ test("herramientas: seis de lectura, dos de envío y dos para atender solicitude
 
 test("las de lectura van marcadas como solo lectura y sin aviso; las de envío, al revés", () => {
   for (const t of TOOLS) {
-    const send = ["send_request", "respond_to_request", "take_request", "decline_request"].includes(t.name);
+    const send = ["send_request", "respond_to_request", "reply_in_chat", "take_request", "decline_request"].includes(t.name);
     expect(t.annotations.readOnlyHint).toBe(!send);
     expect("_meta" in t).toBe(send);
     if (!send) expect(t.description).toContain("Solo lectura");

@@ -200,6 +200,32 @@ export const TOOLS = [
     _meta: ASK_EVERY_TIME,
   },
   {
+    name: "reply_in_chat",
+    description:
+      "Escribe un mensaje en el chat de Devi con un compañero, como si tu usuario lo escribiera en la app. Úsala SOLO si tu " +
+      "usuario te lo pide (p. ej. tras mandarte un mensaje del chat, kind=\"chat\"); por defecto, lo que contestes se queda " +
+      "en esta sesión. Es un mensaje: sin plazo ni respuesta que esperar (para pedir algo, send_request). Claude Code le " +
+      "enseña al usuario un aviso de permisos con el destinatario (to_name), el mensaje y los archivos en CADA llamada; si lo " +
+      "deniega, no reintentes. No sale si la aprobación en el chat no está disponible, si incluye posibles secretos (salvo " +
+      "allow_secrets confirmado por el usuario) o si parece una inyección: entonces, que lo escriba en la app de Devi.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        to: { type: "string", description: "id del compañero (el from del mensaje kind=\"chat\", o de list_teammates)" },
+        to_name: { type: "string", description: "Nombre del compañero tal como sale en list_teammates: es lo que el usuario lee en el aviso." },
+        message: { type: "string", description: "El mensaje, en el tono de una conversación. Sin secretos." },
+        files: FILES_ARG,
+        allow_secrets: {
+          type: "boolean",
+          description: "Solo si el usuario confirmó expresamente enviar algo que Devi detectó como posible secreto.",
+        },
+      },
+      required: ["to", "message"],
+    },
+    annotations: { title: "Escribir en el chat con un compañero", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    _meta: ASK_EVERY_TIME,
+  },
+  {
     name: "take_request",
     description:
       "Trae a esta sesión una solicitud que un compañero te envió y sigue pendiente (aviso kind=\"request_notice\" o " +
