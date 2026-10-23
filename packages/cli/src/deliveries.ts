@@ -36,8 +36,10 @@ async function safeFolder(root: string, parts: string[]): Promise<string> {
 
 // Solicitudes, respuestas y avisos de solicitud traen texto de un compañero. El servidor ya lo encuadra (DEVI-UNTRUSTED); si no
 // trae marco (servidor antiguo o alterado), se encuadra aquí el contenido entero antes de dárselo al agente.
-// El aviso request_notice también trae texto del compañero (el resumen del mensaje).
-const FRAMED: Partial<Record<SessionDelivery["kind"], string>> = { request: "Solicitud", response: "Respuesta", request_notice: "Aviso de solicitud" };
+// El aviso request_notice también trae texto del compañero (el resumen del mensaje), y un mensaje del chat, el suyo.
+const FRAMED: Partial<Record<SessionDelivery["kind"], string>> = {
+  request: "Solicitud", response: "Respuesta", request_notice: "Aviso de solicitud", chat: "Mensaje del chat",
+};
 function framed(d: Pick<SessionDelivery, "kind" | "content" | "meta">): string {
   const label = FRAMED[d.kind];
   if (!label) return d.content;
@@ -53,7 +55,7 @@ export async function materializeDelivery(
   const meta: Record<string, string> = { ...d.meta, kind: d.kind };
   const raw = d.meta.files;
   d = { ...d, content: framed(d) };
-  if ((d.kind !== "request" && d.kind !== "response") || !raw) return { content: d.content, meta };
+  if ((d.kind !== "request" && d.kind !== "response" && d.kind !== "chat") || !raw) return { content: d.content, meta };
 
   let files: z.infer<typeof FilesMeta>;
   try {
@@ -63,8 +65,10 @@ export async function materializeDelivery(
   }
   if (files.length === 0) return { content: d.content, meta };
 
-  const requestId = d.meta.request_id ?? "";
-  if (!REQUEST_ID.test(requestId)) throw new Error(`request_id inválido: "${requestId}" (solo letras, números, _ y -, máximo 64)`);
+  // La carpeta lleva el id de la solicitud o, en un mensaje del chat, el del mensaje.
+  const idKey = d.kind === "chat" ? "message_id" : "request_id";
+  const requestId = d.meta[idKey] ?? "";
+  if (!REQUEST_ID.test(requestId)) throw new Error(`${idKey} inválido: "${requestId}" (solo letras, números, _ y -, máximo 64)`);
 
   const paths: string[] = [];
   const failed: string[] = [];
