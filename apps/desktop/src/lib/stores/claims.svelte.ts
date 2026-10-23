@@ -14,7 +14,8 @@ export class ClaimsStore {
     this.list = c.status === "open" ? [...rest, c] : rest;
   }
 
-  // La caducidad se mira aquí también: el evento «expired» puede tardar en llegar.
+  // Date.now() no es reactivo: esto filtra un caducado solo cuando algo vuelve a pintar la tarjeta. La línea
+  // «Esperando sesión nueva» desaparece de verdad con el evento «expired» (el servidor barre cada 15 s) o al reconectar.
   openFor(t: ClaimTarget): Claim | null {
     return this.list.find((c) => c.target.type === t.type && c.target.id === t.id && c.expiresAt > Date.now()) ?? null;
   }
