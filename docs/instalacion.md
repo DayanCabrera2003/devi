@@ -223,9 +223,12 @@ Pegado en una terminal, en la carpeta del proyecto, abre Claude Code con el tras
 
 ## 5. Actualizaciones
 
-**Las actualizaciones automáticas todavía no están activas.** Requieren generar la clave de firma del updater, y aún no se ha hecho. Hasta entonces, para actualizar descarga el instalador de la versión nueva desde Releases e instálalo encima de la actual: se conservan tus datos y tu configuración.
+Devi busca versiones nuevas al abrirse y cada 6 horas mientras sigue abierta (también minimizada en la bandeja). Cuando hay una, avisa con una notificación del sistema y con «Devi X está disponible» en la barra lateral: **Actualizar y reiniciar** la descarga, la instala y vuelve a abrir Devi.
 
-Cuando estén activas, Devi buscará versiones nuevas al abrirse y mostrará «Devi X está disponible → Actualizar y reiniciar», y solo instalará las versiones firmadas con la clave del proyecto.
+- **Windows y macOS:** se instala sin más pasos.
+- **Linux:** funciona con el AppImage, el `.deb` y el `.rpm`. Con `.deb` y `.rpm` el sistema pide tu contraseña, porque instala un paquete.
+- Solo se instalan versiones firmadas con la clave del proyecto; una descarga alterada se rechaza.
+- **Desde una versión anterior a la 0.7.0** no hay actualización automática: instala la 0.7.0 a mano encima de la actual (se conservan tus datos y tu configuración). Desde ahí, las siguientes llegan solas.
 
 Si el servidor exige una versión más nueva, la app muestra **Actualiza Devi**: instala la versión nueva como se explica arriba.
 
