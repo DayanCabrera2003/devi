@@ -150,6 +150,8 @@ describe("códigos de entrega", () => {
     for (let i = 0; i < CLAIM_LIMITS.maxOpenPerMember; i++) {
       expect((await t.create("maria@dev", { type: "request", id: "abierta" })).status).toBe(200);
     }
-    expect((await t.create("maria@dev", { type: "request", id: "abierta" })).status).toBe(429);
+    const over = await t.create("maria@dev", { type: "request", id: "abierta" });
+    expect(over.status).toBe(409);
+    expect(over.data.code).toBe("too_many_claims");
   });
 });

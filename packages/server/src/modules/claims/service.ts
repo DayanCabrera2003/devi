@@ -37,7 +37,7 @@ export class ClaimsManager {
     this.handler(target.type).check(access, target.id);
     const now = this.ctx.now();
     if (this.store.open(access.memberId, now).length >= CLAIM_LIMITS.maxOpenPerMember) {
-      throw new HttpError(429, "Tienes demasiados códigos sin usar: usa o cancela alguno", { code: "rate_limit" });
+      throw new HttpError(409, "Tienes demasiados códigos sin usar: usa o cancela alguno", { code: "too_many_claims" });
     }
     let code = newClaimCode();
     while (this.store.exists(code)) code = newClaimCode();
