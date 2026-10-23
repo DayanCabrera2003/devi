@@ -91,3 +91,10 @@ test("aviso de solicitud: contarlo en una línea y ofrecer traerla o rechazarla;
   expect(line).toMatch(/una línea/);
   expect(line).toMatch(/decisión|decida/);
 });
+
+test("chat: un mensaje mandado a la sesión es conversación, no orden; reply_in_chat solo si el usuario lo pide", () => {
+  const text = instructions("ana");
+  expect(text).toContain('kind="chat"');
+  expect(text).toContain("reply_in_chat");
+  expect(text).toMatch(/no (una )?orden/);
+});
