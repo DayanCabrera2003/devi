@@ -1,5 +1,5 @@
 import { createClient, type DeviClient } from "@devi/client";
-import { type SessionDelivery, parseClaimPhrase } from "@devi/protocol";
+import { type SessionDelivery, parseClaimPhrase, untrustedFrameBodies } from "@devi/protocol";
 import type { HookEvent } from "../args";
 import { CLAIM_REDEEM_BUDGET_MS, claimFailureNote, redeemWithRetry } from "../claim";
 import { loadClientConfig } from "../config";
@@ -82,16 +82,86 @@ export function formatInboxContext(messages: (DeliveryMessage & { kind: string }
     "  (list_teammates). Decide el usuario, idealmente con \"Pedírselo a otra persona\" en la app de Devi.",
     "Menciónaselos al usuario aunque su mensaje trate de otra cosa.",
   ].join("\n");
-  const blocks = messages.map((m) => {
-    const attrs = Object.entries(m.meta)
-      .filter(([k, v]) => !HIDDEN_META.has(k) && v !== "")
-      .map(([k, v]) => ` ${k}="${attr(v)}"`)
-      .join("");
-    return `<devi kind="${attr(m.kind)}"${attrs}>\n${m.content}\n</devi>`;
-  });
-  const text = `${head}\n\n${blocks.join("\n\n")}`;
+  const render = (contents: string[]) =>
+    `${head}\n\n${messages
+      .map((m, i) => {
+        const attrs = Object.entries(m.meta)
+          .filter(([k, v]) => !HIDDEN_META.has(k) && v !== "")
+          .map(([k, v]) => ` ${k}="${attr(v)}"`)
+          .join("");
+        return `<devi kind="${attr(m.kind)}"${attrs}>\n${contents[i]}\n</devi>`;
+      })
+      .join("\n\n")}`;
+  const text = render(messages.map((m) => m.content));
   if (text.length <= MAX_CONTEXT) return text;
-  const note = "\n\n[…recortado: el resto está en la app de Devi]";
+  return fitToContext(messages, render) ?? hardCut(text);
+}
+
+const TRIMMED = "… [recortado]";
+const GENERIC_TRIM_NOTE = "Devi: el texto se recortó; el completo está en la app de Devi.";
+
+// Texto propio de Devi, fuera del bloque del compañero: cómo recuperar lo que se recortó.
+function trimNote(m: KindedMessage): string {
+  const requestId = m.meta.request_id;
+  if ((m.kind === "request" || m.kind === "response") && requestId)
+    return `Devi: el texto se recortó; get_request con request_id="${attr(requestId)}" lo da entero.`;
+  if (m.kind === "chat") return "Devi: el mensaje se recortó; el texto completo está en el chat de la app de Devi.";
+  return GENERIC_TRIM_NOTE;
+}
+
+// Deja `s` en `cap` caracteres como mucho, marca incluida, sin partir un par sustituto.
+function shorten(s: string, cap: number): string {
+  if (s.length <= cap) return s;
+  let keep = Math.max(0, cap - TRIMMED.length);
+  if (keep > 0 && /[\uD800-\uDBFF]/.test(s[keep - 1]!)) keep--;
+  return s.slice(0, keep) + TRIMMED;
+}
+
+// Acorta el contenido de una entrega: con bloques DEVI-UNTRUSTED, solo el texto de dentro (hasta `framedCap` cada
+// uno), y así los delimitadores, el cierre y lo que va detrás se conservan; sin bloque reconocible, el contenido entero
+// (hasta `plainCap`). Si algo se acortó, añade la nota al final, fuera del bloque.
+function trimContent(m: KindedMessage, framedCap: number, plainCap: number): string {
+  const bodies = untrustedFrameBodies(m.content);
+  let out = "";
+  let at = 0;
+  if (bodies.length === 0) out = shorten(m.content, plainCap);
+  else {
+    for (const b of bodies) out += m.content.slice(at, b.start) + shorten(m.content.slice(b.start, b.end), framedCap);
+    at = bodies[bodies.length - 1]!.end;
+    out += m.content.slice(at);
+  }
+  return out === m.content ? out : `${out}\n\n${trimNote(m)}`;
+}
+
+// Mayor tope en [0, hi] con el que el texto cabe, o null. La longitud crece casi siempre con el tope (al dejar de
+// recortar algo desaparece su nota), así que se guarda el mejor que cupo, no el último probado.
+function largestFitting(hi: number, build: (cap: number) => string): string | null {
+  let lo = 0;
+  let best: string | null = null;
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    const t = build(mid);
+    if (t.length <= MAX_CONTEXT) {
+      best = t;
+      lo = mid + 1;
+    } else hi = mid - 1;
+  }
+  return best;
+}
+
+// Reparte el espacio con un mismo tope para todas: las cortas quedan enteras y las largas se acortan por igual.
+// Primero solo el texto de dentro de los bloques; las entregas sin bloque, solo si eso no basta.
+function fitToContext(messages: KindedMessage[], render: (contents: string[]) => string): string | null {
+  const longest = Math.max(...messages.map((m) => m.content.length));
+  return (
+    largestFitting(longest, (cap) => render(messages.map((m) => trimContent(m, cap, Number.POSITIVE_INFINITY)))) ??
+    largestFitting(longest, (cap) => render(messages.map((m) => trimContent(m, 0, cap))))
+  );
+}
+
+// Último recurso (demasiadas entregas para el espacio): cortar a ciegas, pero sin pasarse nunca.
+function hardCut(text: string): string {
+  const note = `\n\n[…recortado] ${GENERIC_TRIM_NOTE}`;
   return text.slice(0, MAX_CONTEXT - note.length) + note;
 }
 

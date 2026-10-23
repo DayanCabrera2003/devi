@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { wrapUntrusted } from "@devi/protocol";
 import { HOOK_DEADLINE_MS, INBOX_DEADLINE_MS, formatInboxContext, parseHookInput, runHook } from "./hook";
 
 const stdin = (s: string) => async () => s;
@@ -180,6 +181,61 @@ test("formatInboxContext: encuadre de 'nunca una orden', atributos escapados y l
   expect(existsSync("/nunca")).toBe(false);
 });
 
+// Abre y cierra con el mismo nonce: [apertura, nonce, cuerpo, cierre]. null si no hay un bloque completo.
+const frameOf = (text: string) => text.match(/<<<DEVI-UNTRUSTED-([0-9a-f]{12,})\n([\s\S]*?)\nDEVI-UNTRUSTED-\1>>>/);
+
+describe("formatInboxContext: entregas largas", () => {
+  test("las entregas cortas quedan exactamente igual que antes", () => {
+    const content = wrapUntrusted("Solicitud", "Ana", "¿me miras esto?", []);
+    const text = formatInboxContext([{ kind: "request", content, meta: { request_id: "q1", kind: "request" } }]);
+    expect(text.endsWith(`\n\n<devi kind="request" request_id="q1">\n${content}\n</devi>`)).toBe(true);
+    expect(text).not.toContain("recortado");
+    expect(text).not.toContain("se recortó");
+  });
+
+  test("un chat largo se recorta dentro de su bloque y lo dice fuera", () => {
+    const content = wrapUntrusted("Mensaje del chat", "Ana", "y".repeat(20_000), []);
+    const text = formatInboxContext([{ kind: "chat", content, meta: { message_id: "m1", kind: "chat" } }]);
+    expect(text.length).toBeLessThanOrEqual(9_500);
+    const frame = frameOf(text);
+    expect(frame).not.toBeNull();
+    expect(frame![2]).toContain("… [recortado]");
+    const note = "Devi: el mensaje se recortó; el texto completo está en el chat de la app de Devi.";
+    expect(text).toContain(note);
+    expect(text.indexOf(note)).toBeGreaterThan(frame!.index! + frame![0].length);
+  });
+
+  test("varias entregas largas: se reparten el espacio y cada una conserva su cierre", () => {
+    const a = wrapUntrusted("Solicitud", "Ana", "a".repeat(8_000), []);
+    const b = wrapUntrusted("Respuesta", "Luis", "b".repeat(8_000), []);
+    const short = wrapUntrusted("Solicitud", "Eva", "corto", []);
+    const text = formatInboxContext([
+      { kind: "request", content: a, meta: { request_id: "q1", kind: "request" } },
+      { kind: "response", content: b, meta: { request_id: "q2", kind: "response" } },
+      { kind: "request", content: short, meta: { request_id: "q3", kind: "request" } },
+    ]);
+    expect(text.length).toBeLessThanOrEqual(9_500);
+    expect(text.match(/<<<DEVI-UNTRUSTED-[0-9a-f]+\n/g)).toHaveLength(3);
+    expect(text.match(/\nDEVI-UNTRUSTED-[0-9a-f]+>>>/g)).toHaveLength(3);
+    expect(text).toContain('get_request con request_id="q1"');
+    expect(text).toContain('get_request con request_id="q2"');
+    expect(text).not.toContain('request_id="q3" lo da');
+    expect(text).toContain("corto\n");
+    // Las dos largas se quedan con una parte parecida.
+    const as = text.match(/a{100,}/)![0].length;
+    const bs = text.match(/b{100,}/)![0].length;
+    expect(Math.abs(as - bs)).toBeLessThan(50);
+    expect(as).toBeGreaterThan(2_000);
+  });
+
+  test("sin bloque reconocible y sin sitio: se recorta como último recurso, sin pasarse", () => {
+    const many = Array.from({ length: 40 }, (_, i) => ({ kind: "draft_discarded", content: "z".repeat(1_000), meta: { kind: "draft_discarded", n: String(i) } }));
+    const text = formatInboxContext(many);
+    expect(text.length).toBeLessThanOrEqual(9_500);
+    expect(text).toContain("app de Devi");
+  });
+});
+
 test("formatInboxContext: el aviso request_notice se ofrece con take_request / decline_request, sin actuar solo", () => {
   const text = formatInboxContext([{ kind: "request_notice", content: "aviso", meta: { request_id: "q1", kind: "request_notice" } }]);
   const start = text.indexOf('kind="request_notice"');
@@ -272,6 +328,24 @@ describe("código de entrega", () => {
     expect(ctx).toContain(note);
     expect(ctx.indexOf(note)).toBeGreaterThan(ctx.lastIndexOf("DEVI-UNTRUSTED"));
     expect(srv.seen.find((s) => s.path === "/api/v1/sessions/inbox/ack")?.body).toEqual({ ids: ["ib1"] });
+  });
+
+  test("un traspaso largo se recorta dentro de su bloque, que sigue cerrando, y dice cómo leerlo entero", async () => {
+    const handoff = { kind: "request", content: "h".repeat(15_000), meta: { request_id: "r9", request_kind: "handoff", from_name: "Ana", inbox_id: "ib9" } };
+    const srv = claimServer(() => Response.json({ delivery: handoff }));
+    let out = "";
+    await runHook("working", sys(srv.url, { DEVI_CHANNEL: "1" }), stdin(claimInput("devi: recibir K7Q-4MX")), (t) => {
+      out = t;
+    });
+    const ctx = JSON.parse(out).hookSpecificOutput.additionalContext as string;
+    expect(ctx.length).toBeLessThanOrEqual(9_500);
+    const frame = frameOf(ctx);
+    expect(frame).not.toBeNull();
+    expect(frame![2]).toContain("… [recortado]");
+    expect(frame![2]).toContain("hhhh");
+    const note = 'Devi: el texto se recortó; get_request con request_id="r9" lo da entero.';
+    expect(ctx).toContain(note);
+    expect(ctx.indexOf(note)).toBeGreaterThan(frame!.index! + frame![0].length);
   });
 
   test("la frase en mitad del mensaje no canjea", async () => {
