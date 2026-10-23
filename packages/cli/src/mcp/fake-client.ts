@@ -25,6 +25,16 @@ export function fakeClient(responses: Record<string, unknown | ((opts: unknown) 
     async sendFromApp(meta, files) {
       return answer("sendFromApp", { meta, files }) as never;
     },
+    async sendChat(meta, files) {
+      return answer("sendChat", { meta, files }) as never;
+    },
+    async chatFromSession(meta, files) {
+      drafts.push({ meta, files });
+      return answer("chatFromSession", meta) as never;
+    },
+    async chat(memberId, opts) {
+      return answer("chat", { memberId, ...opts }) as never;
+    },
     async conversations() {
       return answer("conversations") as never;
     },

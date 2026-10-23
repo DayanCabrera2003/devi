@@ -1,5 +1,8 @@
 import {
   API,
+  ChatMessageSchema,
+  ChatPageSchema,
+  type ChatFromSessionMeta,
   API_VERSION,
   CreateDraftResult,
   ConversationPageSchema,
@@ -15,6 +18,8 @@ import {
   VERSION_QUERY,
   buildPath,
   type ApiRoute,
+  type ChatMessage,
+  type ChatPage,
   type ConversationPage,
   type ConversationsResponse,
   type CreateDraftMeta,
@@ -56,6 +61,11 @@ export interface DeviClient {
   // Solicitud escrita por la persona en la app (POST /requests, multipart). En el webview el navegador
   // pone el Origin de la app, que la ruta exige.
   sendFromApp(meta: { to: string; message: string }, files: { name: string; content: string }[]): Promise<DeviRequest>;
+  // Mensaje de chat escrito en la app (POST /chat, multipart; exige el Origin de la app, como sendFromApp).
+  sendChat(meta: { to: string; text: string }, files: { name: string; content: string }[]): Promise<ChatMessage>;
+  // Mensaje de chat escrito por Claude (reply_in_chat): solo sale con approval "chat" (ver ChatFromSessionMeta).
+  chatFromSession(meta: z.input<typeof ChatFromSessionMeta>, files: { name: string; content: string }[]): Promise<ChatMessage>;
+  chat(memberId: string, opts?: { before?: number; limit?: number }): Promise<ChatPage>;
   conversations(): Promise<ConversationsResponse>;
   conversation(memberId: string, opts?: { before?: number; limit?: number }): Promise<ConversationPage>;
   downloadFile(id: string): Promise<string>;
@@ -173,19 +183,28 @@ export function createClient(opts: ClientOptions): DeviClient {
     },
 
     async createDraft(meta, files) {
-      const form = new FormData();
-      form.append("meta", JSON.stringify(meta));
-      for (const f of files) form.append("files", new File([f.content], f.name, { type: "text/plain;charset=utf-8" }));
-      const res = await send(API.createDraft.method, API.createDraft.path, { body: form });
+      const res = await send(API.createDraft.method, API.createDraft.path, { body: multipart(meta, files) });
       return parsed(res, CreateDraftResult);
     },
 
     async sendFromApp(meta, files) {
-      const form = new FormData();
-      form.append("meta", JSON.stringify(meta));
-      for (const f of files) form.append("files", new File([f.content], f.name, { type: "text/plain;charset=utf-8" }));
-      const res = await send(API.sendFromApp.method, API.sendFromApp.path, { body: form });
+      const res = await send(API.sendFromApp.method, API.sendFromApp.path, { body: multipart(meta, files) });
       return parsed(res, DeviRequestSchema);
+    },
+
+    async sendChat(meta, files) {
+      const res = await send(API.sendChat.method, API.sendChat.path, { body: multipart(meta, files) });
+      return parsed(res, ChatMessageSchema);
+    },
+
+    async chatFromSession(meta, files) {
+      const res = await send(API.chatFromSession.method, API.chatFromSession.path, { body: multipart(meta, files) });
+      return parsed(res, ChatMessageSchema);
+    },
+
+    async chat(memberId, pageOpts = {}) {
+      const path = buildPath(API.chatPage.path, { memberId }) + pageQuery(pageOpts);
+      return parsed(await send(API.chatPage.method, path), ChatPageSchema);
     },
 
     async conversations() {
@@ -193,10 +212,7 @@ export function createClient(opts: ClientOptions): DeviClient {
     },
 
     async conversation(memberId, pageOpts = {}) {
-      const q = new URLSearchParams();
-      if (pageOpts.before !== undefined) q.set("before", String(pageOpts.before));
-      if (pageOpts.limit !== undefined) q.set("limit", String(pageOpts.limit));
-      const path = buildPath(API.conversation.path, { memberId }) + (q.size > 0 ? `?${q}` : "");
+      const path = buildPath(API.conversation.path, { memberId }) + pageQuery(pageOpts);
       return parsed(await send(API.conversation.method, path), ConversationPageSchema);
     },
 
@@ -251,6 +267,21 @@ export function createClient(opts: ClientOptions): DeviClient {
       };
     },
   };
+}
+
+// Multipart de los envíos con archivos: "meta" (JSON) y un campo "files" por archivo de texto.
+function multipart(meta: unknown, files: { name: string; content: string }[]): FormData {
+  const form = new FormData();
+  form.append("meta", JSON.stringify(meta));
+  for (const f of files) form.append("files", new File([f.content], f.name, { type: "text/plain;charset=utf-8" }));
+  return form;
+}
+
+function pageQuery(opts: { before?: number; limit?: number }): string {
+  const q = new URLSearchParams();
+  if (opts.before !== undefined) q.set("before", String(opts.before));
+  if (opts.limit !== undefined) q.set("limit", String(opts.limit));
+  return q.size > 0 ? `?${q}` : "";
 }
 
 async function errorBody(res: Response): Promise<ErrorBody> {
