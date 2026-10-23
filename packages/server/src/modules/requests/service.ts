@@ -466,14 +466,7 @@ export class RequestsManager {
     if (!isResponseOpen(r.status)) throw conflict(`no hay respuesta abierta (estado: ${r.status})`);
     const s = this.sessions.get(sessionId);
     if (!s || s.memberId !== r.fromMemberId || !this.sessions.isAlive(s.id)) throw sessionGone();
-    const files = this.files.forRequest(r.id).responseFiles;
-    const delivery: SessionDelivery = {
-      kind: "response",
-      content: responseContent({
-        toName: this.team.nameOf(r.toMemberId), message: r.message, outcome: r.outcome!, outcomeText: r.outcomeText, files,
-      }),
-      meta: { request_id: r.id, from: r.toMemberId, outcome: r.outcome ?? "", files: filesMeta(files) },
-    };
+    const delivery = this.responseDelivery(r);
     this.store.transaction(() => {
       if (!this.deliver(s.id, this.sessions.enqueue(s.id, delivery))) throw sessionGone();
       r.status = "closed";
@@ -481,6 +474,72 @@ export class RequestsManager {
     });
     this.audit("response.forwarded", access.memberId, "request", r.id, { sessionId: s.id, sessionName: s.name, outcome: r.outcome });
     return this.close(r);
+  }
+
+  // La entrega de una respuesta a una sesión de quien preguntó (desde la app o con un código).
+  private responseDelivery(r: RequestRecord): SessionDelivery {
+    const files = this.files.forRequest(r.id).responseFiles;
+    return {
+      kind: "response",
+      content: responseContent({
+        toName: this.team.nameOf(r.toMemberId), message: r.message, outcome: r.outcome!, outcomeText: r.outcomeText, files,
+      }),
+      meta: { request_id: r.id, from: r.toMemberId, outcome: r.outcome ?? "", files: filesMeta(files) },
+    };
+  }
+
+  // ---- códigos de entrega (modules/claims) ----------------------------------
+
+  claimCheckRequest(access: Access, id: string): void {
+    const r = this.received(access, id);
+    if (r.status !== "pending") throw conflict(`la solicitud ya está ${r.status}`);
+  }
+
+  // Como forward, hacia la sesión que canjeó el código y sin empujar por el canal (como take): la entrega vuelve
+  // al hook. No se exige isAlive (la sesión recién abierta puede no tener aún su SSE) ni hay escaneo de injection:
+  // lo decidió la persona en la app al crear el código. Todo se valida antes de la transacción y los eventos van
+  // después: si lanza, no ha cambiado nada y claims solo tiene que liberar el código.
+  deliverRequestToClaim(access: Access, id: string, sessionId: string, details: AuditDetails): SessionDelivery {
+    this.claimCheckRequest(access, id);
+    const r = this.received(access, id);
+    const s = this.claimSession(sessionId);
+    let delivery: SessionDelivery | null = null;
+    this.store.transaction(() => {
+      delivery = this.sessions.enqueue(s.id, this.requestDelivery(r));
+      r.status = "forwarded";
+      r.forwardedSessionId = s.id;
+      this.store.saveRequest(r);
+    });
+    this.audit("request.forwarded", access.memberId, "request", r.id, { sessionId: s.id, sessionName: s.name, ...details });
+    this.pushBoth(r, "request.updated");
+    return delivery!;
+  }
+
+  claimCheckResponse(access: Access, id: string): void {
+    const r = this.sent(access, id);
+    if (!isResponseOpen(r.status)) throw conflict(`no hay respuesta abierta (estado: ${r.status})`);
+  }
+
+  deliverResponseToClaim(access: Access, id: string, sessionId: string, details: AuditDetails): SessionDelivery {
+    this.claimCheckResponse(access, id);
+    const r = this.sent(access, id);
+    const s = this.claimSession(sessionId);
+    let delivery: SessionDelivery | null = null;
+    this.store.transaction(() => {
+      delivery = this.sessions.enqueue(s.id, this.responseDelivery(r));
+      r.status = "closed";
+      this.store.saveRequest(r);
+    });
+    this.audit("response.forwarded", access.memberId, "request", r.id, { sessionId: s.id, sessionName: s.name, outcome: r.outcome, ...details });
+    this.close(r);
+    return delivery!;
+  }
+
+  // claims la acaba de emparejar con pair, así que debería existir; si no, se falla antes de escribir nada.
+  private claimSession(sessionId: string): Session {
+    const s = this.sessions.get(sessionId);
+    if (!s) throw sessionGone();
+    return s;
   }
 
   resend(access: Access, id: string): DeviRequest {
