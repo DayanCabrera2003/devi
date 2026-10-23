@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Card } from "./stores/inbox.svelte";
-import { noticeFor, noticeKey, shouldNotify } from "./notify";
+import { noticeFor, noticeKey, shouldNotify, updateNotice } from "./notify";
 import { draft, req } from "./test-fixtures";
 
 const names: Record<string, string> = { m1: "Dayan", m2: "María" };
@@ -39,5 +39,9 @@ describe("notificaciones", () => {
     expect(shouldNotify({ notifications: true }, false)).toBe(true);
     expect(shouldNotify({ notifications: true }, true)).toBe(false);
     expect(shouldNotify({ notifications: false }, false)).toBe(false);
+  });
+
+  test("versión nueva disponible", () => {
+    expect(updateNotice("0.7.0")).toEqual({ title: "Devi · Hay una versión nueva", body: "Devi 0.7.0 está disponible. Ábrela para actualizar." });
   });
 });

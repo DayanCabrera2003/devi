@@ -43,7 +43,11 @@ export function summaryNotice(n: number): Notice {
   return { title: "Devi", body: `Tienes ${n} avisos pendientes en Devi` };
 }
 
-export const shouldNotify = (prefs: { notifications: boolean }, paused: boolean) => prefs.notifications && !paused;
+export function updateNotice(version: string): Notice {
+  return { title: "Devi · Hay una versión nueva", body: `Devi ${version} está disponible. Ábrela para actualizar.` };
+}
+
+export const shouldNotify =(prefs: { notifications: boolean }, paused: boolean) => prefs.notifications && !paused;
 
 export async function sendNative(n: Notice): Promise<void> {
   const { isPermissionGranted, requestPermission, sendNotification } = await import("@tauri-apps/plugin-notification");

@@ -130,6 +130,17 @@ describe("DeviApp", () => {
     expect(t.app.pokeKey).toBe(1);
   });
 
+  test("una versión nueva avisa con notificación del sistema, salvo con avisos en pausa", async () => {
+    const t = setup();
+    await t.app.boot();
+    t.app.announceUpdate("0.7.0");
+    expect(t.notify).toHaveBeenCalledOnce();
+    expect(t.notify.mock.calls[0]?.[0]).toMatchObject({ title: "Devi · Hay una versión nueva" });
+    t.app.setPaused(true);
+    t.app.announceUpdate("0.8.0");
+    expect(t.notify).toHaveBeenCalledOnce();
+  });
+
   test("con avisos en pausa no notifica", async () => {
     vi.useFakeTimers();
     const t = setup();

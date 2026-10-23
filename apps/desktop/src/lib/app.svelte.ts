@@ -7,7 +7,7 @@ import type { MascotState } from "./mascot";
 import { HAPPY_MS, deriveMood, overdueCount, quietSinceAfter } from "./mood";
 import { isWeekDue, weekKey } from "./week";
 import { type AppPrefs, type ClientConfig, type Native, type ServerStatus, prefsOf } from "./native";
-import { type Notice, escalationNotice, noticeFor, noticeKey, shouldNotify, summaryNotice } from "./notify";
+import { type Notice, escalationNotice, noticeFor, noticeKey, shouldNotify, summaryNotice, updateNotice } from "./notify";
 import { ConnectionStore } from "./stores/connection.svelte";
 import { ComposerStore, DragState } from "./stores/composer.svelte";
 import { ConversationsStore } from "./stores/conversations.svelte";
@@ -279,6 +279,12 @@ export class DeviApp {
     if (this.notified.has(key)) return;
     this.notified.add(key);
     if (shouldNotify(this.prefs, this.paused)) void this.deps.notify(escalationNotice(r, (id) => this.team.nameOf(id)));
+  }
+
+  // Versión nueva publicada: además del aviso en la barra lateral, una notificación del sistema,
+  // porque la ventana suele estar cerrada en la bandeja.
+  announceUpdate(version: string): void {
+    if (shouldNotify(this.prefs, this.paused)) void this.deps.notify(updateNotice(version));
   }
 
   clearAuditAlerts(): void {
