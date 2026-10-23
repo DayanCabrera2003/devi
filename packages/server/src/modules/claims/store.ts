@@ -71,7 +71,7 @@ export class ClaimsStore {
     this.db.query("UPDATE claims SET used_at = NULL WHERE code = $code").run({ code });
   }
 
-  markUsed(code: string, sessionId: string): void {
+  recordSession(code: string, sessionId: string): void {
     this.db.query("UPDATE claims SET used_session = $sessionId WHERE code = $code").run({ code, sessionId });
   }
 
@@ -81,11 +81,13 @@ export class ClaimsStore {
 
   // Caducados aún no avisados: se marcan y se devuelven (para el evento a la app).
   takeExpired(now: number): ClaimRecord[] {
-    const rows = this.db
-      .query(`SELECT ${COLS} FROM claims WHERE used_at IS NULL AND cancelled_at IS NULL AND expires_at <= $now AND expired_notified = 0`)
+    return this.db
+      .query(
+        `UPDATE claims SET expired_notified = 1
+         WHERE used_at IS NULL AND cancelled_at IS NULL AND expires_at <= $now AND expired_notified = 0
+         RETURNING ${COLS}`,
+      )
       .all({ now }) as ClaimRecord[];
-    for (const r of rows) this.db.query("UPDATE claims SET expired_notified = 1 WHERE code = $code").run({ code: r.code });
-    return rows;
   }
 
   // Las filas viejas no hacen falta (el código caduca a los 10 min): se borran al día.

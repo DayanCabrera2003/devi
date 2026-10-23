@@ -1,5 +1,6 @@
 import {
   CLAIM_LIMITS,
+  ClaimCodeSchema,
   type Claim,
   type ClaimTarget,
   type ClaimTargetType,
@@ -16,6 +17,7 @@ import type { ClaimTargetHandler } from "../../core/services";
 import type { ClaimRecord, ClaimsStore } from "./store";
 
 const notFound = () => new HttpError(404, "Ese código no existe: genera otro en la app de Devi", { code: "claim_not_found" });
+const used = () => new HttpError(409, "Ese código ya se usó o se canceló: genera otro en la app de Devi", { code: "claim_used" });
 const DAY = 86_400_000;
 
 // Códigos de entrega: crear (app), cancelar (app), listar los míos y canjear (hook de la sesión nueva).
@@ -68,7 +70,7 @@ export class ClaimsManager {
     }
     const now = this.ctx.now();
     if (rec.usedAt !== null || rec.cancelledAt !== null) {
-      throw new HttpError(409, "Ese código ya se usó o se canceló: genera otro en la app de Devi", { code: "claim_used" });
+      throw used();
     }
     if (rec.expiresAt <= now) {
       throw new HttpError(410, "Ese código caducó: genera otro en la app de Devi", { code: "claim_expired" });
@@ -80,7 +82,7 @@ export class ClaimsManager {
       });
     }
     if (!this.store.reserve(rec.code, now)) {
-      throw new HttpError(409, "Ese código ya se usó o se canceló: genera otro en la app de Devi", { code: "claim_used" });
+      throw used();
     }
     let delivery: SessionDelivery;
     try {
@@ -89,7 +91,7 @@ export class ClaimsManager {
       this.store.release(rec.code);
       throw e;
     }
-    this.store.markUsed(rec.code, session.id);
+    this.store.recordSession(rec.code, session.id);
     this.emit(rec, "used");
     return delivery;
   }
@@ -102,7 +104,9 @@ export class ClaimsManager {
   }
 
   private own(access: Access, code: string): ClaimRecord {
-    const rec = this.store.get(code.toUpperCase());
+    const canonical = ClaimCodeSchema.safeParse(code.toUpperCase());
+    if (!canonical.success) throw notFound();
+    const rec = this.store.get(canonical.data);
     if (!rec || rec.memberId !== access.memberId) throw notFound();
     return rec;
   }

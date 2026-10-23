@@ -98,6 +98,8 @@ describe("códigos de entrega", () => {
     const r = await t.redeem("dayan@dev", code, 100);
     expect(r.status).toBe(404);
     expect(r.data.code).toBe("claim_not_found");
+    await t.register("maria@dev");
+    expect((await t.redeem("maria@dev", code)).status).toBe(200); // el intento ajeno no lo gasta
   });
 
   test("no se crea para un elemento ajeno o cerrado", async () => {
@@ -131,7 +133,9 @@ describe("códigos de entrega", () => {
     const { code } = (await t.create("maria@dev", { type: "request", id: "abierta" })).data;
     expect((await t.call("maria@dev", "GET", "/api/v1/claims", undefined, { origin: null })).data).toHaveLength(1);
     expect((await t.call("dayan@dev", "DELETE", `/api/v1/claims/${code}`)).status).toBe(404);
+    expect((await t.call("maria@dev", "DELETE", "/api/v1/claims/no-vale")).data.code).toBe("claim_not_found");
     expect((await t.call("maria@dev", "DELETE", `/api/v1/claims/${code}`)).status).toBe(200);
+    expect(t.userEvents("m-maria").findLast((e) => e.type === "claim.updated").claim).toMatchObject({ code, status: "cancelled" });
     expect((await t.call("maria@dev", "GET", "/api/v1/claims")).data).toHaveLength(0);
     await t.register("maria@dev");
     expect((await t.redeem("maria@dev", code)).data.code).toBe("claim_used"); // cancelado = ya no vale

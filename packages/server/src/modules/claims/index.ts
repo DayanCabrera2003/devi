@@ -1,8 +1,10 @@
-import { PRESENCE } from "@devi/protocol";
 import type { DeviModule, ModuleContext } from "../../core/module";
 import { registerClaimRoutes } from "./routes";
 import { ClaimsManager } from "./service";
 import { ClaimsStore, claimsMigrations } from "./store";
+
+// Cada cuánto se avisa a la app de los códigos caducados: con 10 min de vida, 15 s de retraso en el aviso no se notan.
+const SWEEP_MS = 15_000;
 
 const managers = new WeakMap<ModuleContext, ClaimsManager>();
 
@@ -21,6 +23,6 @@ export const claimsModule: DeviModule = {
   onStart(ctx) {
     const claims = managers.get(ctx)!;
     claims.sweep();
-    ctx.timers.every(PRESENCE.sweepMs, () => claims.sweep());
+    ctx.timers.every(SWEEP_MS, () => claims.sweep());
   },
 };
