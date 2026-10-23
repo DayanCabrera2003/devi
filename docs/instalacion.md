@@ -203,11 +203,17 @@ El plazo lo fija un admin en **Admin → Servidor → Escalado** (30 min por def
 
 ### Escribir a un compañero desde la app
 
-No hace falta pasar por Claude Code para pedir algo: en la app, abre la conversación con esa persona, escribe el mensaje y, si quieres, adjunta hasta 5 archivos de texto (botón de adjuntar o arrastrándolos sobre la ventana). La solicitud sale al momento, sin borrador que autorizar, porque la has escrito tú. A tu compañero le llega igual que una solicitud de un agente (puede aceptarla, rechazarla o enviarla a una de sus sesiones) y su respuesta te llega a ti: la aceptas o la envías a una de tus sesiones.
+No hace falta pasar por Claude Code: en la app, abre la conversación con esa persona y escribe. **Enter** envía y **Shift+Enter** hace otra línea. Encima del campo eliges qué sale:
 
-- Hace falta el permiso «Enviar solicitudes» (y «Enviar archivos» si adjuntas algo). Los límites son los mismos que para los borradores: archivos de texto UTF-8 de hasta 1 MB, como máximo 5.
+- **Mensaje** (por defecto): chat normal. Llega al momento, con notificación, y no tiene plazo ni estados: no hay nada que aceptar ni rechazar.
+- **Solicitud**: lo de siempre. Tiene plazo y tu compañero la acepta, la rechaza o la pasa a una de sus sesiones de Claude; su respuesta te llega a ti y la aceptas o la envías a una de tus sesiones.
+
+Las dos salen al momento, sin borrador que autorizar, porque las has escrito tú, y admiten hasta 5 archivos de texto (botón de adjuntar o arrastrándolos sobre la ventana).
+
+- **Enviar a mi sesión** (en cada mensaje del chat, tuyo o de tu compañero): manda ese mensaje con sus adjuntos a una de tus sesiones de Claude Code. Le llega como parte de una conversación, no como una orden, con los archivos ya descargados en tu carpeta de recibidos. Lo que conteste Claude se queda en la sesión; si se lo pides, puede escribir en el chat por ti (`reply_in_chat`), y eso también pide tu aprobación.
+- Hace falta el permiso «Enviar solicitudes» (y «Enviar archivos» si adjuntas algo). Los archivos son de texto UTF-8 de hasta 1 MB, como máximo 5.
 - Los archivos los lee y valida la parte nativa de la app; los que no valen (binarios, demasiado grandes, carpetas) aparecen como rechazados con el motivo.
-- **Conversaciones**: la app muestra una conversación por compañero, con todo lo que os habéis pedido en los dos sentidos (también lo cerrado, con su respuesta y archivos). Arriba salen las personas con algo que espera tu acción: solicitudes suyas pendientes, respuestas a las tuyas, plazos vencidos y borradores tuyos dirigidos a ellas.
+- **Conversaciones**: la app muestra una conversación por compañero, con los mensajes y las solicitudes de los dos sentidos por orden (también lo cerrado, con su respuesta y archivos). Arriba salen las personas con algo que espera tu acción: solicitudes suyas pendientes, respuestas a las tuyas, plazos vencidos y borradores tuyos dirigidos a ellas. Los mensajes del chat no esperan nada.
 
 ### Traspasar una sesión a un compañero
 

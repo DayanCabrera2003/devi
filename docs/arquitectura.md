@@ -140,9 +140,10 @@ Módulos, en el orden en que se registran (`MODULES` en `packages/server/src/mai
 | `sessions` | Sesiones de Claude Code, estado trabajando/libre, presencia y bandeja de entregas. |
 | `files` | Validación, almacenamiento, descarga y retención de archivos. |
 | `requests` | Borradores, solicitudes, respuestas y plazos. |
+| `chat` | Mensajes del chat entre personas (sin plazo ni estados), sus adjuntos y «Enviar a mi sesión». Ofrece el servicio `chat` (último mensaje de una conversación). |
 | `knowledge` | Base de conocimiento del equipo: indexa con FTS5 las respuestas compartidas, búsqueda y retirada. |
 
-Los módulos no se importan entre sí: se comunican por el **bus** (`draft.discarded`, `request.closed`, `session.closed`, `request.shared`) y por **servicios** que se ofrecen en `ctx.services` (`team`, `settings`, `sessions`, `files`, `audit`, `prefs`).
+Los módulos no se importan entre sí: se comunican por el **bus** (`draft.discarded`, `request.closed`, `session.closed`, `request.shared`) y por **servicios** que se ofrecen en `ctx.services` (`team`, `settings`, `sessions`, `files`, `audit`, `prefs`, `chat`).
 
 ## Modelo de datos
 
@@ -219,6 +220,14 @@ Para atender una solicitud sin la app delante (p. ej. Claude Code en el móvil c
 - **Condiciones.** Las mismas que la aprobación en el chat de los envíos: el MCP solo manda `approval: "chat"` si su cliente es un Claude Code ≥ `MIN_CLAUDE_CODE_VERSION` (las dos herramientas llevan `anthropic/requiresUserInteraction`, así que el aviso de permisos sale en cada llamada), y el servidor exige además `chatApproval`. La sesión tiene que ser de B y estar viva, y la solicitud, `pending` (como el reenvío desde la app). `take` analiza mensaje, contexto y archivos con el mismo detector que las tarjetas de la app: con cualquier aviso (`409 injection`) no se trae y hay que revisarla en la app.
 
 Una solicitud escrita en la app entra directamente en `pending` (auditoría `request.sent_from_app`) y sigue el mismo ciclo; nada supone que el remitente tenga una sesión: su respuesta se acepta o se envía a cualquiera de sus sesiones.
+
+### Chat
+
+Un mensaje del chat (`chat_messages`) no tiene ciclo de vida: se crea y no cambia. Lo escribe una persona en la app (`POST /chat`, ruta humana, auditoría `chat.sent`) o su Claude con `reply_in_chat` (`POST /chat/from-session`, auditoría `chat.sent_from_session`), en este caso solo con `approval: "chat"`, `chatApproval` activo y desde una sesión viva de quien escribe; si no, `403 chat_approval_unavailable` y se escribe en la app (no hay borradores de chat). El MCP no lo manda si ve secretos sin confirmar o una posible inyección. Llega a las dos partes como `chat.message` y `conversation.updated`.
+
+- **Adjuntos**: en la tabla `files`, con `request_id` = id del mensaje y liberados al crearse, así que la retención (`fileRetentionDays`) cuenta desde el envío. Las dos partes los descargan.
+- **Enviar a mi sesión** (`POST /chat/:id/session`, humana): cualquiera de las dos partes, a una sesión suya viva que haya declarado `features: ["chat"]` (si no, `409 session_outdated`). Entrega `kind="chat"` con `meta.message_id`, encuadrada como «Mensaje del chat» aunque lo haya escrito la propia persona: en el chat es conversación, no instrucción. Los archivos van a `receivedDir/<message_id>/`. El mensaje no cambia; auditoría `chat.to_session`.
+- **Compatibilidad**: una app anterior ignora `chat.message` (no lo valida) y la auditoría le traduce `chat.*` y el objetivo `chat` a sus equivalentes (`AUDIT_FEATURES.chat`). Una app nueva contra un servidor anterior ve `404` en `GET /chat/:id` y sigue solo con solicitudes.
 
 ### Recorrido completo
 
